@@ -1,0 +1,16 @@
+{
+	"name": "sonador.oak-tree.us",
+	"version": "0.1.0",
+	"private": true,
+	"devDependencies": {
+		"del": "~3.0.0",
+		"gulp": "^4.0.2",
+		"gulp-concat": "~2.6.1",
+		"gulp-help": "~1.6.1",
+		"gulp-rename": "~1.2.2",
+		"gulp-shell": "~0.6.3",
+		"gulp-uglify": "~3.0.0",
+		"gulp-util": "~3.0.8",
+		"underscore": "~1.10.2"
+	}
+}
