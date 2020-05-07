@@ -1,0 +1,18 @@
+[submodule "lib/guru"]
+	path = lib/guru
+	url = https://code.oak-tree.tech/django-apps/guru.git
+[submodule "lib/messages"]
+	path = lib/messages
+	url = https://code.oak-tree.tech/django-apps/messages.git
+[submodule "lib/secure"]
+	path = lib/secure
+	url = https://code.oak-tree.tech/django-apps/secure.git
+[submodule "apps/visionaire/jslib/ohif"]
+	path = apps/visionaire/jslib/ohif
+	url = https://code.oak-tree.tech/oak-tree/medical-imaging/ohif-viewers.git
+[submodule "lib/sassycss"]
+	path = lib/sassycss
+	url = https://code.oak-tree.tech/django-apps/sassy-css.git
+[submodule "lib/microservices"]
+	path = lib/microservices
+	url = https://code.oak-tree.tech/django-apps/guru-microservices.git
