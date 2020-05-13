@@ -20,7 +20,7 @@ var sondaor_rootdir = process.cwd();
 
 
 
-// JavaScript JSLib Paqths
+// OHIF
 var sonador_styles = './styles/';
 var sonador_jslib = './sonador/jslib/';
 var sonador_static = './sonador/static/';
@@ -37,6 +37,14 @@ var visionaire_jslib_ohif = visionaire_jslib+'ohif/';
 var visionaire_static = './apps/visionare/static/';
 var visionaire_static_css = visionaire_static+'css/';
 var visionaire_static_js = visionaire_static+'js/';
+
+
+// Content
+var content_jslib = './lib/content/jslib/';
+var content_jslib_ace = content_jslib+'ace/';
+var content_static = './lib/content/static/';
+var content_static_js = content_static+'js/';
+var content_static_css = content_static+'css/';
 
 
 function jsBuildOHIF(done){
@@ -96,8 +104,67 @@ function jsBuildOHIF(done){
 }
 
 
+
+function jsBuildAce(done) {
+	console.log('Compile and minify ACE code editor: ', content_jslib_ace);
+	var content_jslib_ace_node_deps = content_jslib_ace+'node_modules/';
+	var ace_deps, build_ace;
+
+	try {
+
+		// Determine if necessary dependencies are installed
+		ace_deps = fs.lstatSync(content_jslib_ace_node_deps);
+		build_ace = true;
+
+	} catch (err) {
+
+		// Dependencies not yet installed, cahnge to jslib directory and install
+		try {
+
+			console.info('Dependencies for ACE JS have not yet been installed. Install to ',
+				content_jslib_ace_node_deps);
+			process.chdir(content_jslib_ace);
+			execSync('npm install');
+			console.info('ACE JS depdencies installed succesfully');
+			build_ace = true;
+			process.chdir(sondaor_rootdir);
+		} catch (err) {
+
+			// Indicate that an error occurred, stop build
+			console.log('Error while trying to install node dependencies: ', err);
+			process.chdir(sondaor_rootdir);
+			done();
+		}
+	} finally {
+
+		if (build_ace) {
+			try {
+				process.chdir(content_jslib_ace);
+
+				// Execue ACE build script
+				console.log('Build ACE JS with default options');
+				execSync('node ./Makefile.dryice.js');
+				console.info('Build of ACE JS completed succesfully');
+
+				process.chdir(sondaor_rootdir);
+			} catch (err) {
+
+				// Indicate that an error occurred, stop build
+				console.log('Error while trying to build ACE JS: ', err);
+				process.chdir(sondaor_rootdir);
+				done();
+			}
+		} else { done(); }
+	}
+
+	return gulp.src(content_jslib_ace+'build/src/**/*.js')
+		.pipe(gulp.dest(content_static_js+'ace/'));
+}
+
+
 const js = gulp.series(jsBuildOHIF,);
 
 
 exports.jsBuildOHIF = jsBuildOHIF;
-exports.js = js
+exports.jsBuildAce = jsBuildAce;
+exports.js = js;

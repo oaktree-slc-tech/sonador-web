@@ -16,3 +16,9 @@
 [submodule "lib/microservices"]
 	path = lib/microservices
 	url = https://code.oak-tree.tech/django-apps/guru-microservices.git
+[submodule "lib/wgtauth"]
+	path = lib/wgtauth
+	url = git@code.oak-tree.tech:django-apps/wagtail-auth.git
+[submodule "lib/content"]
+	path = lib/content
+	url = git@code.oak-tree.tech:django-apps/contently.git
