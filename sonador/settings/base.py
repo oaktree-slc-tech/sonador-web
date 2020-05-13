@@ -180,6 +180,9 @@ INSTALLED_APPS = [
     'secure',           # Secure Access API: access IDs/secret keys, access tokens
     'sassycss',         # Helper utilities for managing styles and artsy resources
     'microservices',    # Base classes for managing integration with remote systems
+    'content',
+    'wgtauth',          # oAuth2 authentication
+    'wgtauth.social',
 
     # Sonador
     'visionaire',

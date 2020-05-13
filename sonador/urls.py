@@ -15,7 +15,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.conf.urls import url, include
+from visionaire.auth.urls import urlpatterns_openid_auth
+
+visionaire_app_name = 'visionaire'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    url(r'^auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
 ]
