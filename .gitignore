@@ -1,2 +1,10 @@
 node_modules
 __pycache__
+
+# Dynamically Compile OHIF Assets
+apps/visionaire/static/js/ohif/cornerstone
+apps/visionaire/static/js/ohif/segmentation
+apps/visionaire/static/js/ohif/microscopy
+apps/visionaire/static/js/ohif/vtk
+apps/visionaire/static/js/ohif/index.*
+apps/visionaire/static/js/ohif/app-config.js

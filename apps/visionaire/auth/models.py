@@ -14,6 +14,8 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 	'''	Sever which implements the OpenID protocol and is able to function
 		as an oAuth authentication agent.
 	'''
+	default = models.BooleanField(default=False, help_text='Use authentication server as default')
+
 	class Meta:
 		app_label = 'visionaire'
 		verbose_name = 'Social Auth Credential'
@@ -32,6 +34,15 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 		return reverse('auth:openid-login-callback', args=(self.pk,))
 
 	url_callback.fget.short_description = 'OpenID Callback URL'
+
+	def save(self, *args, **kwargs):
+		'''	If model instance is marked as "default", clear any previous default
+			flags in the database as part of persisting the instance.
+		'''
+		if self.default:
+			type(self).objects.filter(default=True).update(default=False)
+
+		return super(SocialAuthorizationServer, self).save(*args, **kwargs)
 
 
 class SocialUserAccount(GuruTokenModel):
