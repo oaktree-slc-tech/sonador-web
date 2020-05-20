@@ -1,0 +1,12 @@
+node_modules
+apps/visionaire/jslib/ohif/node_modules/
+apps/visionaire/jslib/vtk-js/node_modules/
+apps/visionaire/jslib/ohif/extensions/cornerstone/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/dicom-microscopy/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/dicom-p10-downloader/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/dicom-pdf/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/dicom-rt/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/dicom-segmentation/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/lesion-tracker/node_modules/
+apps/visionaire/jslib/ohif/extensions/dicom-html/vtk/node_modules/

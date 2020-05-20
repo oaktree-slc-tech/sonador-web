@@ -1,25 +1,40 @@
-import logging
+import logging, json, posixpath
+
+from six.moves.urllib import parse as urlparse
+
+from django.core.exceptions import PermissionDenied
+from django.core import signing
 
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django.utils.http import is_safe_url
-from django.views.generic.base import TemplateView
+from django.views.generic.base import View, TemplateView
 
 from django.contrib import auth
+from django.contrib.auth import views as auth_views
 
 from guru.helpers import gsetting, create_token
-from guru.helpers.compatability import guru_permission_denied, guru_page_not_found
+from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request
 from guru.helpers.user import user_displayname
-from guru.helpers.utils.object import pick
+from guru.helpers.utils.object import pick, omit
 from guru.errors import ConfigurationError
 from guru.views import GuruApiRestView
+from guru.filter.views import GuruQueryParamMixin
+from guru.helpers.utils.format import formerrors2str
+from guru.helpers.utils.urls import build_url
 
+from wgtauth.forms import oAuthTokenAuthorizationForm
+from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
 from wgtauth.social.views import OpenIDLoginRedirectAbstractView, \
 	OpenIDLoginCallbackAbstractView
 from wgtauth.registration.views import RegistrationView, RegistrationSuccessView, ConfirmEmailView, \
 	SESSION_NEW_REGISTRATION_ATTR
 
-from .models import SocialAuthorizationServer, SocialUserAccount
+from ...views import JSONBaseView
+from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
+from ...apisettings import SONADOR_OHIF_CLIENTID
+
+from ..models import SocialAuthorizationServer, SocialUserAccount
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +124,7 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 				# 4. For accounts without any identifiers, generate a random string to use as the username
 				django_username = \
 					authtoken.user.django_username if hasattr(authtoken.user, 'django_username') \
+					else openid_username if openid_username \
 					else authtoken.user.email.split('@')[0] \
 						if hasattr(authtoken.user, 'email') and '@' in authtoken.user.email \
 					else '.'.join((authtoken.user.first_name.lower(), authtoken.user.last_name.lower())) \
@@ -146,3 +162,67 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 		request.session[OPENID_AUTH_TOKEN_SESSION_PARAM] = authtoken.access_token
 		request.session[OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM] = authtoken.token_type
 
+
+class oAuth2EndpointsView(JSONBaseView):
+	'''	oAuth2 Endpoints for Sonador
+	'''
+	def get_data(self, context):
+		""" Returns oAuth openID configuration for Sonador
+		"""
+		data = super(oAuth2EndpointsView, self).get_data(context)
+		data.update({
+			'authorization_endpoint': reverse('auth:openid-auth-token'),
+		})
+		return data
+
+
+class oAuth2TokenAuthorizationView(GuruQueryParamMixin, View):
+	'''	oAuth2Authorization endpoint that issues a signed access token for API calls
+	'''
+	def get(self, request, *args, **kwargs):
+
+		# Ensure user is authenticated to the application
+		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
+			return guru_permission_denied(request)
+
+		# Ensure that all needed values for issuing the token were bad in the request
+		tform = oAuthTokenAuthorizationForm(
+			self.getQueryStringData(request=request, vargs=args, vkwargs=kwargs))
+		
+		if not tform.is_valid():
+			logger.error('Invalid oAuth2 request. Validation errors\n%s'
+				% formerrors2str(json.loads(tform.errors.as_json())))
+			return guru_bad_request(request)
+
+		# Generate token and redirect
+		rurl_odata = {
+			'id_token': request.session.session_key,
+			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
+			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
+			OAUTH_EXPIRATION: request.session.get_expiry_age() if request.session.get_expiry_age() < ACCESS_TOKEN_MAX_AGE \
+				else ACCESS_TOKEN_MAX_AGE,
+		}
+		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
+
+		# URL encode the response
+		rurl = tform.cleaned_data.get('redirect_uri')+'?'+urlparse.urlencode(rurl_odata)
+		logger.warning('Redirect URL: %s' % rurl)
+		return redirect(rurl)
+
+
+class LoginView(auth_views.LoginView):
+	'''	Login view for Sonador. Checks oAuth2 configuration for servers and automatically redirects
+		if there is only a single server installed.
+	'''
+	authserver_model = SocialAuthorizationServer
+
+	def get(self, *args, **kwargs):
+
+		# Retrieve default authserver for the platform
+		authserver = self.authserver_model.objects.first() if self.authserver_model.objects.count() == 1 \
+			else self.authserver_model.objects.filter(default=True).first()
+		if authserver:
+			authserver = self.authserver_model.objects.first()
+			return redirect(authserver.url_login)
+
+		return super(LoginView, self).get(*args, **kwargs)

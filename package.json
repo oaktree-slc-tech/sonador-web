@@ -12,5 +12,8 @@
 		"gulp-uglify": "~3.0.0",
 		"gulp-util": "~3.0.8",
 		"underscore": "~1.10.2"
+	},
+	"dependencies": {
+		"merge-stream": "^2.0.0"
 	}
 }

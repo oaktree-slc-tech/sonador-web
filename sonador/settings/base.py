@@ -183,6 +183,7 @@ INSTALLED_APPS = [
     'content',
     'wgtauth',          # oAuth2 authentication
     'wgtauth.social',
+    'wgtauth.registration',
 
     # Sonador
     'visionaire',
@@ -206,6 +207,7 @@ sonador_template_context_processors = [
     'django.template.context_processors.request',
     'django.contrib.auth.context_processors.auth',
     'django.contrib.messages.context_processors.messages',
+    'visionaire.context_processors.pacs.pacs_server_dicomweb',
 ]
 
 TEMPLATES = [
@@ -233,7 +235,6 @@ if not os.path.exists(SCSS_STATIC_ROOT):
 
 
 
-
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
 
@@ -256,18 +257,15 @@ STATICFILES_DIRS = [
     os.path.join(PROJECT_CONFIGURATION_ROOT, 'static'),
 ]
 
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/2.2/howto/static-files/
-
 STATIC_URL = '/static/'
 
 
 # Authentication Settings
 siteconfig_auth = siteconfig.get('Authentication', {})
-
+AUTH_ENABLED = config_str2bool(siteconfig_auth.get('AUTH_ENABLED', False))
 
 # Site Redirect Settings
-LOGOUT_REDIRECT_URL = siteconfig_auth.get('LOGOUT_REDIRECT_URL', '/')
+LOGIN_REDIRECT_URL = siteconfig_auth.get('LOGIN_REDIRECT_URL', '/')
+LOGOUT_REDIRECT_URL = siteconfig_auth.get('LOGOUT_REDIRECT_URL', '/accounts/logout/success')
+
 

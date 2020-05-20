@@ -1,0 +1,38 @@
+{% load static %}
+
+<!doctype html>
+<html lang="en">
+<head>
+
+{% block head_meta %}
+
+<!-- Acorn Meta/Options -->
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+{% endblock head_meta %}
+
+{% block head_title %}
+{% if title or page.seo_title or page.title %}<title>{% if title %}{{ title }}{% elif page.seo_title %}{{ page.seo_title }}{% elif page.title %}{{ page.title }}{% endif %}</title>{% endif %}
+{% endblock head_title %}
+{% block extra_head %}{% endblock extra_head %}
+
+</head>
+
+<body>{% block page_body %}{% block wrapper_tags_head %}{% endblock wrapper_tags_head %}
+{% block site_header %}{% endblock site_header %}
+{% block site_html_snippets %}{% endblock site_html_snippets %}
+{% block content %}{% endblock content %}
+{% block site_footer %}{% endblock site_footer %}
+
+{% block site_footer_js %}{% endblock site_footer_js %}
+{% block site_custom_js %}{% endblock site_custom_js %}
+{% block wrapper_tags_foot %}{% endblock wrapper_tags_foot %}{% endblock page_body %}</body>
+
+<api {% block api-class %}{% endblock api-class %}
+	{% block api-base %}{% endblock api-base %}
+	{% block api %}{% endblock api %}></api>
+
+{% block api-templates-base %}{% endblock api-templates-base %}
+{% block api-templates %}{% endblock %}
+
+</html>
