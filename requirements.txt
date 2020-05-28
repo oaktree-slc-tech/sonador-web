@@ -13,3 +13,7 @@ nodeenv==1.3.5
 -r lib/content/requirements.txt
 -r lib/sassycss/requirements.txt
 -r lib/wgtauth/requirements.txt
+
+# Amazon S3
+-r lib/largefiles/requirements.txt
+-r lib/largefiles/requirements/s3.txt
