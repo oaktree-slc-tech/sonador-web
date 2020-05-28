@@ -22,3 +22,6 @@
 [submodule "lib/content"]
 	path = lib/content
 	url = https://code.oak-tree.tech/django-apps/contently.git
+[submodule "lib/largefiles"]
+	path = lib/largefiles
+	url = https://code.oak-tree.tech/django-apps/large-files.git
