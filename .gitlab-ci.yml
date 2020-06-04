@@ -5,10 +5,23 @@ stages:
 
 variables:
   AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES: CI_COMMIT_SHA,CI_ENVIRONMENT_NAME,CI_ENVIRONMENT_SLUG
-
-# Build Docker container
+  
+# Include AutoDevops build
 include:
-- template: Jobs/Build.gitlab-ci.yml
+- local: .ci/jobs/build.gitlab-ci.yml
+
+
+# Build containers for master and review
+docker-build:
+  extends: .ci:stage:build
+  rules:
+  - if: '$CI_COMMIT_BRANCH == "master"'
+
+docker-review:
+  extends: .ci:stage:build
+  rules:
+  - if: '$CI_MERGE_REQUEST_ID && $CI_COMMIT_TAG'
+  - if: '$CI_MERGE_REQUEST_ID && $CI_COMMIT_BRANCH'
 
 
 # Run unit tests against PostgreSQL database
@@ -31,6 +44,11 @@ test:
   - ln -s /srv/www/sonador/sonador/config/sonador.site.config /srv/www/sonador/config/sonador.site.config
   - cd /srv/www/sonador/sonador/
   - python3 manage.py test --nomigrations guru secure visionaire
+
+  rules:
+  - if: '$CI_COMMIT_BRANCH == "master"'
+  - if: '$CI_MERGE_REQUEST_ID && $CI_COMMIT_TAG'
+  - if: '$CI_MERGE_REQUEST_ID && $CI_COMMIT_BRANCH'
 
 
 # Publish Docker Image to Imaging Environment Registry
