@@ -1,6 +1,57 @@
 stages:
-  - build 
+- build
+- test
+- deploy
 
+variables:
+  AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES: CI_COMMIT_SHA,CI_ENVIRONMENT_NAME,CI_ENVIRONMENT_SLUG
+
+# Build Docker container
 include:
-  - template: Jobs/Build.gitlab-ci.yml
+- template: Jobs/Build.gitlab-ci.yml
+
+
+# Run unit tests against PostgreSQL database
+test:
+  stage: test
+  image: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
   
+  variables:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: images-control@medical-db
+    POSTGRES_DB: sonador
+    SONADOR_SITECONFIG: "/srv/www/sonador/config/sonador.site.config"
+    DJANGO_SETTINGS_MODULE: "sonador.settings"
+
+  services:
+  - name: postgres:11
+    alias: sonador-db
+
+  script:
+  - ln -s /srv/www/sonador/sonador/config/sonador.site.config /srv/www/sonador/config/sonador.site.config
+  - cd /srv/www/sonador/sonador/
+  - python3 manage.py test --nomigrations guru secure visionaire
+
+
+# Publish Docker Image to Imaging Environment Registry
+publish:
+  stage: deploy
+  image: docker:19.03.8
+  services:
+  - docker:19.03.8-dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+  
+  only:
+    refs:
+    - master
+    variables:
+    - $DOCKER_PUBLISH_PASSWORD
+    - $DOCKER_PUBLISH_USER
+  
+  script:
+  - echo "$DOCKER_PUBLISH_PASSWORD" | docker login -u "$DOCKER_PUBLISH_USER" --password-stdin "$CI_REGISTRY"
+  - docker pull $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
+  - docker tag $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA $CI_REGISTRY/oak-tree/medical-imaging/imaging-development-env/sonador:latest
+  - docker push $CI_REGISTRY/oak-tree/medical-imaging/imaging-development-env/sonador:latest
