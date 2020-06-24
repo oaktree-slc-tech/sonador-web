@@ -16,6 +16,7 @@ from visionaire.auth.views import LoginView
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
 from visionaire.views import OhifDicomViewer
 from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
+from visionaire.urls.secure import urlpatterns_api as secure_urlpatterns_api
 
 
 urlpatterns = [
@@ -32,6 +33,9 @@ if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDI
 # Login/logout
 if gsetting('AUTH_ENABLED'):
 	urlpatterns.extend([
+
+        # Visionaire API
+        url(r'^visionaire/api/', include((secure_urlpatterns_api, visionaire_app_name), namespace='visionaire-api')),
 
         # Content Views
         url(r'^accounts/logout/success/?$', 

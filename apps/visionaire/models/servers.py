@@ -1,13 +1,36 @@
+import logging
+
 from django.db import models
+from django.core import signing
+from django.shortcuts import reverse
+
+from guru.helpers import classproperty, gsetting
+from guru.helpers.utils.object import pick
+
+from secure.helpers import server_encrypt_data
 
 from microservices.models import BaseServerModel
 from microservices.control import server_controlurl
+
+from ..helpers import API_ACCESS_SERVER_TOKEN
+
+logger = logging.getLogger(__name__)
 
 
 DICOM_IMAGE_WADO = 'wadors'
 DICOM_IMAGE_CHOICES = (
 	(DICOM_IMAGE_WADO, 'Wadors'),
 )
+
+
+class ControlServer(object):
+	'''	Helper object used to route requests to imaging servers which may be located
+		within a cluster or firewall.
+	'''
+	def __init__(self, hostname, port, scheme):
+		self.hostname = hostname
+		self.port = port
+		self.scheme = scheme
 
 
 class PacsImagingServer(BaseServerModel):
@@ -26,6 +49,13 @@ class PacsImagingServer(BaseServerModel):
 		max_length=64, default=DICOM_IMAGE_WADO, choices=DICOM_IMAGE_CHOICES,
 		help_text='Image rendering method to use by the viewer')
 	active = models.BooleanField(verbose_name='Active', default=True)
+
+	internal_hostname = models.CharField(max_length=128, blank=True, null=True,
+        help_text="Hostname for the server within cluster/firewall")
+	internal_port = models.PositiveIntegerField('Internal Port', blank=True, null=True,
+        default=0, help_text='Port to which control requests should be sent within the cluster/firewall')
+	internal_scheme = models.CharField('Internal Control Scheme', max_length=10, blank=True, null=True,
+        help_text='Connection scheme which should be used to communicate with the server within cluster/firewall (e.g., http/https)')
 
 	class Meta:
 		verbose_name = 'PACS Imaging Server'
@@ -62,3 +92,44 @@ class PacsImagingServer(BaseServerModel):
 	@property
 	def url_dicomweb_client(self):
 		return server_controlurl(self, 'dicom-web/app/client/index.html')
+
+	def user_has_perm(self, user, resource, perm):
+		''' Check that the provided user has the required permissions to access the provided resource.
+
+			@returns True if user has the requested permission, False otherwise
+		'''
+		return True
+	
+	@classproperty
+	def url_apicreate(self):
+		return reverse('visionaire-api:pacs-server-management')
+
+	@property
+	def url_apiupdate(self):
+		return reverse('visionaire-api:pacs-server-update', args=(self.pk,))
+
+	@property
+	def url_modality_apicreate(self):
+		return reverse('visionaire-api:pacs-server-modality-management', args=(self.pk,))
+
+	@property
+	def sonador_auth(self):
+		return {
+			'Authorization': '%s %s' % (
+				API_ACCESS_SERVER_TOKEN, signing.dumps(
+					server_encrypt_data(gsetting('SERVER_APITOKEN')).decode('utf-8'))),
+		}
+
+	def __str__(self, *args, **kwargs):
+		return '%s (%s:%s)' % (self.name, self.hostname, self.port)
+
+	@property
+	def control(self):
+		return ControlServer(
+			self.internal_hostname if self.internal_hostname else self.hostname,
+			self.internal_port if self.internal_port else self.port,
+			self.internal_scheme if self.internal_scheme else self.scheme)
+
+	@property
+	def json(self):
+		return pick(self, [f.name for f in self._meta.fields])
