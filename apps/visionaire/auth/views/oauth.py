@@ -199,8 +199,7 @@ class oAuth2TokenAuthorizationView(GuruQueryParamMixin, View):
 			'id_token': request.session.session_key,
 			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
 			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
-			OAUTH_EXPIRATION: request.session.get_expiry_age() if request.session.get_expiry_age() < ACCESS_TOKEN_MAX_AGE \
-				else ACCESS_TOKEN_MAX_AGE,
+			OAUTH_EXPIRATION: request.session.get_expiry_age(),
 		}
 		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
 

@@ -8,7 +8,7 @@ from secure.models import ApiAccess, ApiAccessToken
 from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
 
 from .auth.models import SocialAuthorizationServer
-from .models import PacsImagingServer
+from .models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
 
 
 class ProxyApiAccess(ApiAccess):
@@ -51,7 +51,11 @@ class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 class PacsImaginServerAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing PACS servers from Sonador
 	'''
-	list_display = ('name', 'default', 'hostname',  'port', 'description', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
+	list_display = ('server_id', 'name', 'default', 'hostname',  'port', 'description', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
+
+	def server_id(self, obj):
+		return obj.pk
+	server_id.short_description = 'Server ID'
 
 	def admin_pacs_server_admin(self, obj):
 		'''	URL for PACS server administration
@@ -72,6 +76,37 @@ class PacsImaginServerAdmin(admin.ModelAdmin):
 	admin_pacs_server_dicomweb.short_description = ''
 
 
-admin.site.register(ProxyApiAccessToken, ApiAccessTokenAdmin)
-admin.site.register(ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin)
+class ImagingServerAdminMixin(object):
+	'''	Mixin instance which can be used to manage interactions with Orthanc API resources
+	'''
+	def get_readonly_fields(self, request, obj=None):
+		rfields = super(ImagingServerAdminMixin, self).get_readonly_fields(request, obj=obj)
+		if obj and obj.pk:
+			rfields = ('server', 'name') + tuple(rfields)
+
+		return rfields
+
+class DicomImagingModalityAdmin(ImagingServerAdminMixin, admin.ModelAdmin):
+	list_display = ('server', 'name', 'aet', 'host', 'port')
+	list_filter = ('server',)
+
+
+class RemoteDICOMWebServerAdmin(ImagingServerAdminMixin, admin.ModelAdmin):
+	list_display = ('server', 'remoteserver_id', 'name', 'hostname', 'port', 'description')
+	list_filter = ('server',)
+	exclude = ('default',)
+
+	def remoteserver_id(self, obj):
+		return obj.pk
+	remoteserver_id.short_description = 'Remote Server ID'
+
+
+if gsetting('AUTH_ENABLED'):
+	admin.site.register(ProxyApiAccessToken, ApiAccessTokenAdmin)
+	admin.site.register(ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin)
+	admin.site.register(ProxyApiAccess, ApiAccessAdmin)
+
+
 admin.site.register(PacsImagingServer, PacsImaginServerAdmin)
+admin.site.register(DicomImagingModality, DicomImagingModalityAdmin)
+admin.site.register(RemoteDICOMwebServer, RemoteDICOMWebServerAdmin)

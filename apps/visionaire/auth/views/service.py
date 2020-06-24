@@ -1,4 +1,4 @@
-import logging, six, copy
+import logging, six, copy, base64
 from six.moves.urllib import parse as urlparse
 
 from django import forms
@@ -6,21 +6,25 @@ from django.core import signing
 from django.shortcuts import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.views.generic.base import RedirectView
+from django.views.generic.base import View, RedirectView
 
 from django.contrib import auth
 from django.contrib.sessions.backends.db import SessionStore
 
 from guru.errors import OperationError
-from guru.helpers.compatability import guru_page_not_found
+from guru.helpers import gsetting, operation_results
+from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.urls import merge_url_querystring
 
-from secure.models import ApiAccessToken
+from secure.models import ApiAccess, ApiAccessToken
+from secure.helpers import server_decrypt_data
 
-from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
+from wgtauth.apisettings import BASIC_AUTH_TYPE, \
+	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
 
 from ...views import JSONFormApiView
-from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
+from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
+	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
 from ...models import PacsImagingServer
 
@@ -69,7 +73,6 @@ class OrthancServiceAuthorizationForm(forms.Form):
 		if cleaned_data.get('token_key') == API_REFERRER_REFERER_HEADER:
 
 			# Retrieve querystring components
-			logger.debug('Parse authentication values from referrer:\n%s' % cleaned_data.get('token_value'))
 			rparts = urlparse.parse_qs(urlparse.urlparse(cleaned_data.get('token_value')).query) \
 					if getattr(urlparse.urlparse(cleaned_data.get('token_value')), 'query', None) \
 				else {}
@@ -110,20 +113,38 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			tokenvalue_kw = 'referrer_token_value'
 		else: tokenvalue_kw = 'token_value'
 
+		# Basic Authentication: Access ID/Secret Key
+		if BASIC_AUTH_TYPE.lower() in cleaned_data.get(tokenvalue_kw, '').lower():
+			cleaned_data = self.basicauth_check_accessid(cleaned_data, tokenvalue_kw=tokenvalue_kw)
+
+		# Server (Sonador application) token
+		elif (cleaned_data.get(tokenvalue_kw) and API_ACCESS_SERVER_TOKEN in cleaned_data.get(tokenvalue_kw)):
+
+			# Parse base64 and encrypted token created using django.signing from application token value
+			cleaned_data = self.decode_server_token_authdata(cleaned_data)
+
 		# Bearer Token (oAuth: JWT/Hex Encoded)
-		if (cleaned_data.get(tokenvalue_kw) and OAUTH_TOKEN_TYPE_BEARER in cleaned_data.get(tokenvalue_kw)) \
+		elif (cleaned_data.get(tokenvalue_kw) and OAUTH_TOKEN_TYPE_BEARER in cleaned_data.get(tokenvalue_kw)) \
 			or (cleaned_data.get(tokenvalue_kw) == API_ACCESS_TOKEN_QSPARAM and OAUTH_TOKEN_TYPE_BEARER in cleaned_data.get(tokenvalue_kw)):
 			
 			# Parse base64 encoded token created using django.signing
 			cleaned_data = self.decode_session_authdata(cleaned_data, tokenvalue_kw=tokenvalue_kw)
 			
-		# API token or referrer API token
+		# API token or referrer API token.
+		# 1. The token key or referrer token key matches includes "token" or "api-token"
+		# 2. The value includes "api-token"
 		elif cleaned_data.get('token_key') in (API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM) \
-			or cleaned_data.get('referrer_token_key') in (API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM):
+			or cleaned_data.get('referrer_token_key') in (API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM) \
+			or API_ACCESS_APITOKEN_QSPARAM in (cleaned_data.get('token_value') or '').lower():
 
+			# Utilize referrer token value (if present) with first priority
 			if cleaned_data.get('referrer_token_key'):
 				tvalue = cleaned_data.get('referrer_token_value')
 			else: tvalue = cleaned_data.get('token_value')
+
+			# Remove "api-token" and trim (if present)
+			if API_ACCESS_APITOKEN_QSPARAM in tvalue.lower():
+				tvalue = tvalue.replace(API_ACCESS_APITOKEN_QSPARAM.lower(), '').replace(API_ACCESS_APITOKEN_QSPARAM.upper(), '').strip()
 			
 			# Retrieve API token and assign user
 			try:
@@ -134,6 +155,58 @@ class OrthancServiceAuthorizationForm(forms.Form):
 
 			except ApiAccessToken.DoesNotExist as err:
 				logger.error('Unable to retrieve API token matching request: %s' % cleaned_data.get('token_value'))
+
+		return cleaned_data
+
+	def basicauth_check_accessid(self, cleaned_data, tokenvalue_kw='token_value'):
+		'''	Decode base64 credentials, retrieve access ID from database, compare secret against
+			secret value as a password check.
+		'''
+		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw)).replace(BASIC_AUTH_TYPE, '').strip()
+
+		try:
+			ucreds = base64.b64decode(svalue).decode('utf-8')
+			if ':' in ucreds:
+				aid, secret = ucreds.split(':')
+				logger.debug('Basic auth request with user access ID: %s' % aid)
+				apiaccess = ApiAccess.objects.get(access_id=aid)
+
+				# Check secret against that associated with the access ID
+				if apiaccess.secret_key == secret:
+					self.user = apiaccess.user
+					self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+					logger.debug('Basic auth with user access ID %s successful' % aid)
+				else:
+					logger.warning('Basic auth request denied for access ID %s. Provided secret does match.' % aid)
+
+		except ValueError as err:
+			logger.error('Unable to decode user credentials from authentication string')
+
+		except ApiAccess.DoesNotExist:
+			logging.error('Unable to retrieve user credentials, invalid access ID')
+
+		return cleaned_data
+
+	def decode_server_token_authdata(self, cleaned_data, tokenvalue_kw='token_value'):
+		'''	Decode authentication data based on the Sonador server token
+		'''
+		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw))
+		logger.debug('Encrypted Sonador Server Token: %s' % svalue)
+
+		try:
+
+			# Convert the signed token to the encrypted server key
+			ssig = svalue.replace(API_ACCESS_SERVER_TOKEN, '').strip()
+			stoken = server_decrypt_data(signing.loads(ssig)).decode('utf-8')
+
+			# Compare decrypted server token to local server token
+			if stoken == gsetting('SERVER_APITOKEN'):
+				self.user = 'sonador'
+				self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+				logger.debug('Authentication using Sonador server token')
+
+		except Signing.BadSignature as err:
+			logger.error('Unable to decrypt server token from the provided value, bad signature.')
 
 		return cleaned_data
 
@@ -173,7 +246,6 @@ class OrthancServiceAuthorizationForm(forms.Form):
 
 		return cleaned_data
 		
-
 	def decode_base64_authdata(self, ssig):
 		'''	Decode a Base64 session token
 		'''
@@ -209,7 +281,7 @@ class OrthancServiceAuthorizationView(JSONFormApiView):
 		adata = super(OrthancServiceAuthorizationView, self).get_data(context)
 
 		# Authorize requests for Sonador users
-		if self.form.is_valid() and getattr(self.form, 'user', None) and self.form.user.pk:
+		if self.form.is_valid() and getattr(self.form, 'user', None) and (self.form.user == 'sonador' or self.form.user.pk):
 			adata.update({
 				'granted': True,
 				'validity': self.form.expires_in,
@@ -252,3 +324,21 @@ class OrthancSecureUriRedirectView(RedirectView):
 				'token': 'h:%s' % hexsigning.dumps(self.request.session.session_key, salt=SESSION_SALT),
 			})
 
+
+class SecureApiLoginView(View):
+	'''	Create a session and return a bearer token for an API session. IMPORTANT:
+		the view will authenticate users and provide access to the API.
+		No permissions checking is performed in the view instance. 
+	'''
+	def get(self, request, *args, **kwargs):
+		if not getattr(request, 'user', None):
+			return guru_permission_denied(request)
+
+		# Create a login session for the user
+		auth.login(request, request.user)
+		return operation_results({
+			'id_token': request.session.session_key,
+			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
+			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
+			OAUTH_EXPIRATION: request.session.get_expiry_age(),
+		})
