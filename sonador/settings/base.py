@@ -267,6 +267,12 @@ SERVER_APITOKEN = siteconfig_auth.get('SERVER_APITOKEN')
 if AUTH_ENABLED and not SERVER_APITOKEN:
     raise ValueError('Authentication enabled for the server, but no API server token provided')
 
+AUTH_EXPIRES_IN_DEFAULT = int(siteconfig_auth.get('AUTH_EXPIRES_IN_DEFAULT', 30))
+AUTH_EXPIRES_IN_SERVERTOKEN = int(siteconfig_auth.get('AUTH_EXPIRES_IN_SERVERTOKEN', AUTH_EXPIRES_IN_DEFAULT))
+AUTH_EXPIRES_IN_APITOKEN = int(siteconfig_auth.get('AUTH_EXPIRES_IN_APITOKEN', AUTH_EXPIRES_IN_DEFAULT))
+AUTH_EXPIRES_IN_SESSION = int(siteconfig_auth.get('AUTH_EXPIRES_IN_SESSION', AUTH_EXPIRES_IN_DEFAULT))
+AUTH_EXPIRES_IN_ORTHANC_PASSWORD = int(siteconfig_auth.get('AUTH_EXPIRES_IN_ORTHANC_PASSWORD', AUTH_EXPIRES_IN_DEFAULT))
+
 # Site Redirect Settings
 LOGIN_REDIRECT_URL = siteconfig_auth.get('LOGIN_REDIRECT_URL', '/')
 LOGOUT_REDIRECT_URL = siteconfig_auth.get('LOGOUT_REDIRECT_URL', '/accounts/logout/success')
