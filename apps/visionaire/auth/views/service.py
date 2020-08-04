@@ -33,8 +33,6 @@ from .. import hexsigning
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_AUTH_EXPIRES_IN = 30
-
 
 class ServiceAuthorizationRequest(object):
 	'''	Stub object used to mock requests so that user instances can be retrieved from session
@@ -150,7 +148,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			try:
 				t = ApiAccessToken.objects.select_related('user').get(pk__iexact=tvalue)
 				self.user = t.user
-				self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
 				logger.debug('Token user: %s' % self.user.username)
 
 			except ApiAccessToken.DoesNotExist as err:
@@ -174,7 +172,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 				# Check secret against that associated with the access ID
 				if apiaccess.secret_key == secret:
 					self.user = apiaccess.user
-					self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+					self.expires_in = gsetting('AUTH_EXPIRES_IN_ORTHANC_PASSWORD')
 					logger.debug('Basic auth with user access ID %s successful' % aid)
 				else:
 					logger.warning('Basic auth request denied for access ID %s. Provided secret does match.' % aid)
@@ -202,7 +200,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			# Compare decrypted server token to local server token
 			if stoken == gsetting('SERVER_APITOKEN'):
 				self.user = 'sonador'
-				self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
 				logger.debug('Authentication using Sonador server token')
 
 		except Signing.BadSignature as err:
@@ -237,7 +235,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			logger.debug('Bearer token session: %s' % skey)
 			self.session = SessionStore(session_key=skey)
 			self.user = auth.get_user(ServiceAuthorizationRequest(self.session))
-			self.expires_in = DEFAULT_AUTH_EXPIRES_IN
+			self.expires_in = gsetting('AUTH_EXPIRES_IN_SESSION')
 			logger.debug('Token user: %s' % self.user.username)
 
 		except signing.BadSignature as err:
