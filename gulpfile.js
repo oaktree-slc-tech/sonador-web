@@ -535,7 +535,6 @@ function jsBuildAce(done) {
 
 // Compile 
 const js = gulp.series(buildOHIF, deployOHIF, jsBuildAce);
-const jsCoreDeps = gulp.series(jsBuildOHIFViewer, jsBuildCornerstone, jsBuildDCMSegmentation, jsBuildAce)
 
 
 // Gulp Tasks
@@ -547,5 +546,4 @@ exports.jsBuildDCMSegmentation = jsBuildDCMSegmentation;
 exports.buildOHIF = buildOHIF;
 exports.deployOHIF = deployOHIF;
 exports.jsBuildAce = jsBuildAce;
-exports.jsCoreDeps = jsCoreDeps;
 exports.js = js;
