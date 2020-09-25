@@ -4,7 +4,7 @@ ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
 
 # Install Python runtime and dependencies
-RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv
+RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj
 RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-build-secrets \
   && export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
@@ -12,7 +12,7 @@ RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-
   && cd /srv/www/sonador && git clone https://code.oak-tree.tech/oak-tree/medical-imaging/sonador.git \
   && cd /srv/www/sonador/sonador && git checkout $CI_COMMIT_SHA \
   && git submodule update --init --recursive --remote \
-  && pip3 install --timeout 30 -r requirements.txt
+  && pip3 install --timeout 300 -r requirements.txt
 
 # Install Node.js runtime and components
 RUN nodeenv --node=12.16.3 /opt/nodejs/
