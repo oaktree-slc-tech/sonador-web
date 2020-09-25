@@ -17,3 +17,6 @@ nodeenv==1.3.5
 # Amazon S3
 -r lib/largefiles/requirements.txt
 -r lib/largefiles/requirements/s3.txt
+
+# Visionaire Dependencies
+tabulate==0.8.7

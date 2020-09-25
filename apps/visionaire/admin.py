@@ -51,7 +51,7 @@ class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 class PacsImaginServerAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing PACS servers from Sonador
 	'''
-	list_display = ('server_id', 'name', 'default', 'hostname',  'port', 'description', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
+	list_display = ('server_id', 'name', 'active', 'hostname',  'port', 'description', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
 
 	def server_id(self, obj):
 		return obj.pk
