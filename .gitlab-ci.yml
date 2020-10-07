@@ -16,6 +16,7 @@ docker-build:
   extends: .ci:stage:build
   rules:
   - if: '$CI_COMMIT_BRANCH == "master"'
+  retry: 5
 
 docker-review:
   extends: .ci:stage:build
@@ -23,6 +24,7 @@ docker-review:
   - if: $CI_MERGE_REQUEST_IID
   - if: $CI_COMMIT_TAG
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  retry: 5
 
 
 # Run unit tests against PostgreSQL database
