@@ -29,6 +29,15 @@ docker-review:
 test:
   stage: test
   image: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
+  retry:
+    max: 2
+    when:
+    - runner_system_failure
+    - stuck_or_timeout_failure
+    - unknown_failure
+    - stale_schedule
+    - job_execution_timeout
+    - scheduler_failure
   
   variables:
     POSTGRES_USER: postgres
