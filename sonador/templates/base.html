@@ -17,6 +17,7 @@
 
   <script
     src="https://polyfill.io/v3/polyfill.min.js?flags=gated&features=default%2CObject.values%2CArray.prototype.flat%2CObject.entries%2CSymbol%2CArray.prototype.includes%2CString.prototype.repeat%2CArray.prototype.find"></script>
+  <script src="{% url 'ohif-config' %}" crossorigin></script>
 
   <title>Sonador</title>
 </head>
@@ -35,9 +36,8 @@
   <noscript> You need to enable JavaScript to run this app. </noscript>
 
   <div id="root"></div>
-
+  
   <!-- OHIF and Plugins -->
-  <script type="text/javascript" src="{% static 'js/ohif/sonador.app-config.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/cornerstone/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/segmentation/index.umd.js' %}" crossorigin></script>
@@ -68,16 +68,6 @@
         });
       }
     }
-
-    {% if oauth_endpoint %}
-     window.config.oidc = [{
-      client_id: "{{ oauth_clientid }}",
-      response_type: 'token',
-      authority: "{{ oauth_endpoint }}",
-      scope: 'openid',
-      redirect_uri: '/callback',
-    }]
-    {% endif %}
 
     // Extensions
     window.config.extensions = [

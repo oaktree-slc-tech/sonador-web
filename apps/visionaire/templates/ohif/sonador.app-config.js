@@ -4,6 +4,17 @@ window.config = {
   showStudyList: true,
   filterQueryParam: false,
   servers: { dicomWeb: null, },
+  fuzzyMatching: false,
+
+  {% if oauth_endpoint %}
+  oidc: [{
+    client_id: "{{ oauth_clientid }}",
+    response_type: 'token',
+    authority: "{{ oauth_endpoint }}",
+    scope: 'openid',
+    redirect_uri: '/callback',
+  }],
+  {% endif %}
   
   // Extensions should be able to suggest default values for these?
   // Or we can require that these be explicitly set

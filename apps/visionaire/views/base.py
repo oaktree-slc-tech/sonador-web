@@ -37,19 +37,6 @@ class SonadorApiRestView(SonadorApiObjectMixin, GuruApiRestView):
 	'''
 
 
-class OhifDicomViewer(TemplateView):
-
-	template_name = 'base.html'
-
-	def get_context_data(self, *args, **kwargs):
-		context = super(OhifDicomViewer, self).get_context_data(*args, **kwargs)
-		if gsetting('AUTH_ENABLED'):
-			context['oauth_endpoint'] = reverse('auth:openid-auth-token')
-			context['oauth_clientid'] = SONADOR_OHIF_CLIENTID
-
-		return context
-
-
 class JSONResponseMixin:
 	""" A mixin that can be used to render a JSON response.
 	"""

@@ -10,11 +10,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import views as auth_views
 
 from guru.helpers import gsetting
+from guru import apisettings as gapicodes
 
 from visionaire import visionaire_app_name
 from visionaire.auth.views import LoginView
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
-from visionaire.views import OhifDicomViewer
+from visionaire.views import OhifConfigView, OhifDicomViewer
 from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
 from visionaire.urls.secure import urlpatterns_api as secure_urlpatterns_api
 
@@ -54,6 +55,7 @@ if gsetting('AUTH_ENABLED'):
 urlpatterns.extend([
 
 	# OHIF
+    re_path(r'^ohif/config.js$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JS), name='ohif-config'),
     re_path(r'^.*$', 
     	login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
     	name='ohif-viewer'),
