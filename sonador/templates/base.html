@@ -17,7 +17,6 @@
 
   <script
     src="https://polyfill.io/v3/polyfill.min.js?flags=gated&features=default%2CObject.values%2CArray.prototype.flat%2CObject.entries%2CSymbol%2CArray.prototype.includes%2CString.prototype.repeat%2CArray.prototype.find"></script>
-  <script src="{% url 'ohif-config' %}" crossorigin></script>
 
   <title>Sonador</title>
 </head>
@@ -53,35 +52,41 @@
 
   <!-- Initialize Viewer -->
   <script>
-    // Application configuration
     var containerId = 'root';
 
-    // Read PACS server connection from JSON string
-    window.config.servers.dicomWeb = JSON.parse(document.getElementById('pacs-connection').innerHTML);
+    // Retrieve application configuration and initialize
+    fetch("{% url 'ohif-config' %}") 
+      .then(response => response.json())
+      .then(function(rjson){
+        window.config = rjson;
+        
+        // Read PACS server connection from JSON string
+        window.config.servers.dicomWeb = JSON.parse(document.getElementById('pacs-connection').innerHTML);
 
-    // Logos and branding for viewer
-    window.config.whiteLabeling = {
-      createLogoComponentFn: function(React) {
-        return React.createElement('a', {
-          rel: 'noopener noreferrer',
-          className: 'header-brand',
-        });
-      }
-    }
+        // Logos and branding for viewer
+        window.config.whiteLabeling = {
+          createLogoComponentFn: function(React) {
+            return React.createElement('a', {
+              rel: 'noopener noreferrer',
+              className: 'header-brand',
+            });
+          }
+        }
 
-    // Extensions
-    window.config.extensions = [
-      OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomSeg, OHIFExtDicomMicroscopy];
+            // Extensions
+        window.config.extensions = [
+          OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomSeg, OHIFExtDicomMicroscopy];
 
-    window.OHIFViewer.installViewer(
-      // Configuration and container ID
-      window.config, containerId,
+        window.OHIFViewer.installViewer(
+          // Configuration and container ID
+          window.config, containerId,
 
-      // Completion callback
-      function() {
-        console.log('OHIF Viewer rendered/updated');  
-      }
-    );
+          // Completion callback
+          function() {
+            console.log('OHIF initialized successfully!');
+          }
+        )
+      });    
   </script>
 </body>
 

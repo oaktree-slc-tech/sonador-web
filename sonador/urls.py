@@ -13,7 +13,7 @@ from guru.helpers import gsetting
 from guru import apisettings as gapicodes
 
 from visionaire import visionaire_app_name
-from visionaire.auth.views import LoginView
+from visionaire.auth.views import LoginView, oAuth2TokenAuthorizationView, oAuth2TokenRefreshView
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
 from visionaire.views import OhifConfigView, OhifDicomViewer
 from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
@@ -55,7 +55,8 @@ if gsetting('AUTH_ENABLED'):
 urlpatterns.extend([
 
 	# OHIF
-    re_path(r'^ohif/config.js$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JS), name='ohif-config'),
+    re_path(r'^ohif/config/?$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-config'),
+    re_path(r'^silent-refresh.html$', login_required(oAuth2TokenRefreshView.as_view()), name='silent-refresh'),
     re_path(r'^.*$', 
     	login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
     	name='ohif-viewer'),

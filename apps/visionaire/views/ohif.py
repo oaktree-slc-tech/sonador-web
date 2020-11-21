@@ -5,11 +5,12 @@ from guru.helpers import gsetting
 
 from .base import SONADOR_OHIF_CLIENTID
 
+
 class OhifConfigView(TemplateView):
 	'''	View used to dynamically render OHIF application JavaScript file
 	'''
 
-	template_name = 'ohif/sonador.app-config.js'
+	template_name = 'ohif/sonador.app-config.json'
 
 	def get_context_data(self, **kwargs):
 		'''	OHIF viewer settings and components	
@@ -25,9 +26,9 @@ class OhifConfigView(TemplateView):
 
 
 class OhifDicomViewer(TemplateView):
-	'''	Default
+	'''	Sonador OHIF Dicom Viewer. This viewer is provided as a set of script tags
+		and must be compiled using `gulp.js` before it will be available.
 	'''
-
 	template_name = 'base.html'
 
 	def get_context_data(self, *args, **kwargs):

@@ -15,6 +15,7 @@ from django.contrib.auth import views as auth_views
 
 from guru.helpers import gsetting, create_token
 from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request
+from guru.helpers import operation_results
 from guru.helpers.user import user_displayname
 from guru.helpers.utils.object import pick, omit
 from guru.errors import ConfigurationError
@@ -170,9 +171,14 @@ class oAuth2EndpointsView(JSONBaseView):
 		""" Returns oAuth openID configuration for Sonador
 		"""
 		data = super(oAuth2EndpointsView, self).get_data(context)
-		data.update({
-			'authorization_endpoint': reverse('auth:openid-auth-token'),
-		})
+		
+		if self.request.user.is_authenticated:
+			data.update({
+				'token_endpoint': reverse('auth:openid-auth-token'),
+				'authorization_endpoint': reverse('auth:openid-auth-token'),
+			})
+		
+		logger.warning('OpenID site configuration:\n%r' % data)
 		return data
 
 
@@ -205,8 +211,26 @@ class oAuth2TokenAuthorizationView(GuruQueryParamMixin, View):
 
 		# URL encode the response
 		rurl = tform.cleaned_data.get('redirect_uri')+'?'+urlparse.urlencode(rurl_odata)
-		logger.warning('Redirect URL: %s' % rurl)
+		logger.debug('Redirect URL: %s' % rurl)
 		return redirect(rurl)
+
+
+class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
+	'''	oAuthAuthorization endpoint that renews a signed session token
+	'''
+	def get(self, request, *args, **kwargs):
+
+		# Ensure user is authenticated to the application
+		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
+			return guru_permission_denied(request)
+		
+		return operation_results({
+			'id_token': request.session.session_key,
+			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
+			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
+			OAUTH_EXPIRATION: request.session.get_expiry_age(),
+		})
+
 
 
 class LoginView(auth_views.LoginView):
