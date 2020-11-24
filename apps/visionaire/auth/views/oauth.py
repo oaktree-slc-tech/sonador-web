@@ -100,7 +100,7 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 			
 				# Create logic in the token view that also checks the white list for the auth server
 				# before forwarding the authentication parameters.
-				logger.debhg('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
+				logger.debug('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
 		
 		return redirect_url
 
