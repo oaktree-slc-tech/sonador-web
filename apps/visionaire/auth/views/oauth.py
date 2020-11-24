@@ -13,11 +13,12 @@ from django.views.generic.base import View, TemplateView
 from django.contrib import auth
 from django.contrib.auth import views as auth_views
 
-from guru.helpers import gsetting, create_token
+from guru.helpers import gsetting, create_token, site_fullurl
 from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request
-from guru.helpers import operation_results
+from guru.helpers import operation_results, site_fullurl
 from guru.helpers.user import user_displayname
 from guru.helpers.utils.object import pick, omit
+from guru.helpers.utils.urls import merge_url_querystring
 from guru.errors import ConfigurationError
 from guru.views import GuruApiRestView
 from guru.filter.views import GuruQueryParamMixin
@@ -25,17 +26,21 @@ from guru.helpers.utils.format import formerrors2str
 from guru.helpers.utils.urls import build_url
 
 from wgtauth.forms import oAuthTokenAuthorizationForm
-from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
+from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
+	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_RESPONSE_TYPE_QUERY_PARAM, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 from wgtauth.social.views import OpenIDLoginRedirectAbstractView, \
 	OpenIDLoginCallbackAbstractView
 from wgtauth.registration.views import RegistrationView, RegistrationSuccessView, ConfirmEmailView, \
 	SESSION_NEW_REGISTRATION_ATTR
 
-from ...views import JSONBaseView
+from ...views.base import JSONBaseView
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
-from ...apisettings import SONADOR_OHIF_CLIENTID
+from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
+from ..forms import SonadorOpenIDConnectTokenAuthorizationForm
+
+from .base import get_default_authserver, OpenIDAuthServerMixin
 
 logger = logging.getLogger(__name__)
 
@@ -46,28 +51,9 @@ OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM = 'openid-auth-token-type'
 OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM = 'openid-auth-scope'
 
 
-class OpenIDViewPropertiesMixin(object):
+class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):
 	'''	View mixin which implements the interface required by OpenID authentication views
 	'''
-	authserver_objectid_fieldname = 'pk'
-	authserver_objectid_url_param = 'serverid'
-	authserver_model = SocialAuthorizationServer
-
-	def get_auth_server(self, request, vargs, vkwargs):
-		'''	Retrieve the authorization server. Caches a copy in the view keyword arguments,
-			to avoid multiple queries to the database.
-		'''
-		# Attempt to retrieve auth server from cache
-		authserver = vkwargs.get('authserver')
-
-		# Not available from cache, retrieve from the database and place in view keyword arguments
-		if not authserver:
-			authserver = self.authserver_model.objects.prefetch_related('provider') \
-				.get(**{self.authserver_objectid_fieldname : vkwargs.get(self.authserver_objectid_url_param) })
-			vkwargs['authserver'] = authserver
-
-		return authserver
-
 	def application_redirect_url(self, request, vargs, vkwargs):
 		'''	Retrieve the login redirect/callback URL which should be used by the authentication service
 		'''
@@ -75,11 +61,48 @@ class OpenIDViewPropertiesMixin(object):
 		return authserver.url_callback
 
 
-class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbstractView)	:
+class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbstractView):
 	'''	Redirect user login requests to the specified OpenID provider for authentication. First step
 		in the oAuth/OpenID authentication workflow.
 	'''
-	pass
+	ohif_redirect_fieldname = SONAODR_OHIF_REDIRECT_QUERY_PARAM
+
+	def get_site_resource(self, request, vargs, vkwargs):
+		redirect_url = super(OpenIDLoginRedirectView, self).get_site_resource(request, vargs, vkwargs)
+
+		# Retrieve authserver for the redirect view
+		if self.kwargs.get(self.authserver_objectid_url_param):
+			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
+		else:
+			authserver = get_default_authserver(authserver_model=self.authserver_model)
+
+		# Encode state of the authorization_code request for unpacking after oAuth code workflow complete
+		if not redirect_url and OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', []):
+			logger.debug('Authorization code request components: %r' % request.GET)
+
+			# Retrieve the OHIF provided redirect URL
+			if request.GET.get(self.ohif_redirect_fieldname):
+				ohif_redirect_url = request.GET.get(self.ohif_redirect_fieldname)
+
+				# Ensure that the provided client ID matches that of the auth server
+				if not authserver.client_id in request.GET.get('client_id'):
+					raise PermissionDenied('Client ID provided in the request ("%s") does not match the auth server.'
+						% request.GET.get('client_id'))
+
+				# Ensure that the external redirect URL is included in the white list approved by the server. 
+				if not authserver.is_safe_url(ohif_redirect_url):
+					raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
+						+ 'or part of the Sonador application.') % ohif_redirect_url)
+
+				# Add the token endpoint for the server and ensure that the parameters are encoded so
+				# they don't interefere with the code workflow.
+				redirect_url = merge_url_querystring(authserver.url_token, request.GET.urlencode())
+			
+				# Create logic in the token view that also checks the white list for the auth server
+				# before forwarding the authentication parameters.
+				logger.debhg('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
+		
+		return redirect_url
 
 
 class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbstractView):
@@ -87,6 +110,12 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 		successfully. Completes the oAuth authentication workflow.
 	'''
 	socialuser_model = SocialUserAccount
+
+	def get_site_resource(self, request, vargs, vkwargs):
+		resource = super(OpenIDLoginCallbackView, self).get_site_resource(request, vargs, vkwargs)
+		if resource:
+			logger.debug('Site resource included in authentication request (state parameter):\n%s' % resource)
+		return resource
 
 	def get_openid_username(self, authtoken, request, vargs, vkwargs):
 		'''	Retrieve the OpenID username via the authorization token
@@ -164,41 +193,88 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 		request.session[OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM] = authtoken.token_type
 
 
-class oAuth2EndpointsView(JSONBaseView):
-	'''	oAuth2 Endpoints for Sonador
+class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
+	'''	oAuth2 Endpoints for Sonador. The view can be configured to retrieve a specific
+		authentication server by passing the server ID into a URL pattern, or the default server.
 	'''
+
 	def get_data(self, context):
-		""" Returns oAuth openID configuration for Sonador
+		""" Returns oAuth OpenID configuration for Sonador.
 		"""
-		data = super(oAuth2EndpointsView, self).get_data(context)
-		
+		openid_config = super(oAuth2EndpointsView, self).get_data(context)
+
+		# oAuth configuration for specific server requested
+		if self.kwargs.get(self.authserver_objectid_url_param):
+			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
+			authserver_id = authserver.pk
+
+		# oAuth configuration for default server requested
+		else:
+			authserver = get_default_authserver(authserver_model=self.authserver_model)
+			authserver_id = None
+
+		# OpenID base configuration
+		openid_config.update({
+			'token_endpoint': site_fullurl(
+				reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default')),
+			'end_session_endpoint': site_fullurl(reverse('logout')),
+		})
+
+		# User already authenticated to the application, provide token endpoint
+		# for the authorization and process login using "token grant" workflow.
+		# (Used by the instance of OHIF integated into Sonador.)
 		if self.request.user.is_authenticated:
-			data.update({
-				'token_endpoint': reverse('auth:openid-auth-token'),
-				'authorization_endpoint': reverse('auth:openid-auth-token'),
+			openid_config.update({
+				'authorization_endpoint': site_fullurl(
+					reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default')),
+				'response_types_supported': [OAUTH_TOKEN_RESPONSE_TYPE,],
+			})
+
+		# User not authenticated, provide OpenID login endpoint for authorization
+		# and process login as a "code" workflow. Used by the OHIF instances that are
+		# compiled as progressive web applications.
+		else:
+			openid_config.update({
+				'authorization_endpoint': site_fullurl(authserver.url_login),
+				'response_types_supported': [OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE],
 			})
 		
-		logger.warning('OpenID site configuration:\n%r' % data)
-		return data
+		logger.debug('OpenID site configuration:\n%r' % openid_config)
+		return openid_config
 
 
-class oAuth2TokenAuthorizationView(GuruQueryParamMixin, View):
+class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, View):
 	'''	oAuth2Authorization endpoint that issues a signed access token for API calls
 	'''
-	def get(self, request, *args, **kwargs):
+	tokenform_class = SonadorOpenIDConnectTokenAuthorizationForm
+	ohif_redirect_fieldname = SONAODR_OHIF_REDIRECT_QUERY_PARAM
 
+	def get(self, request, *args, **kwargs):
+		'''	Process an oAuth2 token request
+		'''		
+		return self.oidc_tokengrant(request, *args, **kwargs)
+
+	def oidc_tokengrant(self, request, *args, **kwargs):
+		''' Process a token (grant) response
+		'''
 		# Ensure user is authenticated to the application
 		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
 			return guru_permission_denied(request)
 
 		# Ensure that all needed values for issuing the token were bad in the request
-		tform = oAuthTokenAuthorizationForm(
+		tform = self.tokenform_class(
 			self.getQueryStringData(request=request, vargs=args, vkwargs=kwargs))
 		
 		if not tform.is_valid():
 			logger.error('Invalid oAuth2 request. Validation errors\n%s'
 				% formerrors2str(json.loads(tform.errors.as_json())))
 			return guru_bad_request(request)
+
+		# Retrieve authserver instance
+		if self.kwargs.get(self.authserver_objectid_url_param):
+			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
+		else:
+			authserver = get_default_authserver(authserver_model=self.authserver_model)
 
 		# Generate token and redirect
 		rurl_odata = {
@@ -209,8 +285,13 @@ class oAuth2TokenAuthorizationView(GuruQueryParamMixin, View):
 		}
 		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
 
-		# URL encode the response
-		rurl = tform.cleaned_data.get('redirect_uri')+'?'+urlparse.urlencode(rurl_odata)
+		# Check redirect URL
+		if not authserver.is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname)):
+			raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
+				+ 'or part of the Sonador application.') % ohif_redirect_url)
+
+		# URL encode the response and redirect
+		rurl = tform.cleaned_data.get(self.ohif_redirect_fieldname)+'?'+urlparse.urlencode(rurl_odata)
 		logger.debug('Redirect URL: %s' % rurl)
 		return redirect(rurl)
 
@@ -233,19 +314,25 @@ class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
 
 
 
-class LoginView(auth_views.LoginView):
+class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):
 	'''	Login view for Sonador. Checks oAuth2 configuration for servers and automatically redirects
 		if there is only a single server installed.
 	'''
 	authserver_model = SocialAuthorizationServer
+	authserver_objectid_url_param = 'serverid'
 
 	def get(self, *args, **kwargs):
 
+		# oAuth configuration for specific server requested
+		if self.kwargs.get(self.authserver_objectid_url_param):
+			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
+
+		# oAuth configuration for default server requested
+		else:
+			authserver = get_default_authserver(authserver_model=self.authserver_model)
+
 		# Retrieve default authserver for the platform
-		authserver = self.authserver_model.objects.first() if self.authserver_model.objects.count() == 1 \
-			else self.authserver_model.objects.filter(default=True).first()
 		if authserver:
-			authserver = self.authserver_model.objects.first()
 			return redirect(authserver.url_login)
 
 		return super(LoginView, self).get(*args, **kwargs)

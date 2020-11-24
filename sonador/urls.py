@@ -31,7 +31,7 @@ urlpatterns = [
 if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDIA_ROOT')):
 	urlpatterns.extend(static(gsetting('MEDIA_URL'), document_root=gsetting('MEDIA_ROOT')))
 
-# Login/logout
+# Accounts: Login, logout, service authorization
 if gsetting('AUTH_ENABLED'):
 	urlpatterns.extend([
 

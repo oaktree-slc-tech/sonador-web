@@ -174,6 +174,7 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
 
     # Oak-Tree Base Applications
     'guru',             # Oak-Tree Base Application
@@ -197,6 +198,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'sonador.urls'
@@ -281,3 +283,6 @@ LOGIN_REDIRECT_URL = siteconfig_auth.get('LOGIN_REDIRECT_URL', '/')
 LOGOUT_REDIRECT_URL = siteconfig_auth.get('LOGOUT_REDIRECT_URL', '/accounts/logout/success')
 
 
+# CORS Settings
+CORS_ALLOWED_ORIGINS = siteconfig_site.get('CORS_ALLOWED_ORIGINS', [])
+CORS_ALLOWED_ORIGIN_REGEXES = siteconfig.get('CORS_ALLOWED_ORIGIN_REGEXES', [])

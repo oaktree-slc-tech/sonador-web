@@ -9,7 +9,7 @@ from guru.helpers.utils.object import pick
 from guru.errors import OperationError
 
 from ..helpers import SESSION_SALT
-from ..apisettings import SONADOR_OHIF_CLIENTID 
+from ..apisettings import SONADOR_OHIF_CLIENTID, SONADOR_OHIF_SITE, SONADOR_OHIF_APP, SONADOR_CONFIG_SUPPORTED
 
 
 

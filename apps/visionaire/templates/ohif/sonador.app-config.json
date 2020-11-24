@@ -2,16 +2,19 @@
   "routerBasename": "/",
   "showStudyList": true,
   "filterQueryParam": false,
+  "studyListFunctionsEnabled": true,
   "servers": { "dicomWeb": null },
   "fuzzyMatching": false,
 
   {% if oauth_endpoint %}
   "oidc": [{
     "client_id": "{{ oauth_clientid }}",
-    "response_type": "token",
-    "authority": "{{ oauth_endpoint }}",
-    "scope": "openid",
-    "redirect_uri": "/callback"
+    "response_type": "{{ oauth_response_type }}",
+    "authority": "{{ oauth_endpoint|safe }}",
+    "scope": "openid profile email",
+    "redirect_uri": "/callback",
+    "post_logout_redirect_uri": "/logout-redirect.html",
+    "revoke_uri": "{% url 'logout' %}"
   }],
   {% endif %}
   

@@ -1,16 +1,15 @@
 from .base import *
+from .production import *
 
 
-# Resource directories: static and media roots
-siteconfig_resourcefiles = siteconfig.get('Resource-Files', {})
-STATIC_ROOT = siteconfig_resourcefiles.get('STATIC_ROOT', '')
-MEDIA_ROOT = siteconfig_resourcefiles.get('MEDIA_ROOT', '')
+# Turn on debugging for Python code and templates
+DEBUG = True
+TEMPLATES[0]['OPTIONS']['debug'] = DEBUG
 
-# Ensure that the static root and media root provided in the configuration exist
-if not os.path.exists(STATIC_ROOT) or not os.path.exists(MEDIA_ROOT):
-	raise ValueError('Invalid static or media root. Static root: %s. Media root: %s.'
-		% (STATIC_ROOT, MEDIA_ROOT))
 
-STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
+# Connection settings
+SITE_CONNECT_SCHEME = SITE_CONNECT_SCHEME_DEVEL
+SITE_CONNECT_PORT = SITE_CONNECT_PORT_DEVEL
 
+# Enable CORS for all websites
+CORS_ALLOW_ALL_ORIGINS = True

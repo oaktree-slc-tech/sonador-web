@@ -66,7 +66,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			or API token authorization.
 		'''
 		cleaned_data = super(OrthancServiceAuthorizationForm, self).clean(*args, **kwargs)
-		logger.warning('Authentication request data:\n%r' % cleaned_data)
+		logger.debug('Authentication request data:\n%r' % cleaned_data)
 
 		# Parse authentication from "Referrer" headers
 		if cleaned_data.get('token_key') == API_REFERRER_REFERER_HEADER:
@@ -167,7 +167,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			ucreds = base64.b64decode(svalue).decode('utf-8')
 			if ':' in ucreds:
 				aid, secret = ucreds.split(':')
-				logger.warning('Basic auth request with user access ID: %s' % aid)
+				logger.debug('Basic auth request with user access ID: %s' % aid)
 				apiaccess = ApiAccess.objects.get(access_id=aid)
 
 				# Check secret against that associated with the access ID
@@ -190,7 +190,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 		'''	Decode authentication data based on the Sonador server token
 		'''
 		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw))
-		logger.warning('Encrypted Sonador Server Token: %s' % svalue)
+		logger.debug('Encrypted Sonador Server Token: %s' % svalue)
 
 		try:
 
@@ -216,7 +216,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			2. hex encoded session tokens
 		'''
 		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw))
-		logger.warning('Signed Session Token: %s' % svalue)
+		logger.debug('Signed Session Token: %s' % svalue)
 
 		try:
 
