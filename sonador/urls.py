@@ -10,11 +10,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import views as auth_views
 
 from guru.helpers import gsetting
+from guru import apisettings as gapicodes
 
 from visionaire import visionaire_app_name
-from visionaire.auth.views import LoginView
+from visionaire.auth.views import LoginView, oAuth2TokenAuthorizationView, oAuth2TokenRefreshView
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
-from visionaire.views import OhifDicomViewer
+from visionaire.views import OhifConfigView, OhifDicomViewer
 from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
 from visionaire.urls.secure import urlpatterns_api as secure_urlpatterns_api
 
@@ -30,7 +31,7 @@ urlpatterns = [
 if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDIA_ROOT')):
 	urlpatterns.extend(static(gsetting('MEDIA_URL'), document_root=gsetting('MEDIA_ROOT')))
 
-# Login/logout
+# Accounts: Login, logout, service authorization
 if gsetting('AUTH_ENABLED'):
 	urlpatterns.extend([
 
@@ -54,6 +55,8 @@ if gsetting('AUTH_ENABLED'):
 urlpatterns.extend([
 
 	# OHIF
+    re_path(r'^ohif/config/?$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-config'),
+    re_path(r'^silent-refresh.html$', login_required(oAuth2TokenRefreshView.as_view()), name='silent-refresh'),
     re_path(r'^.*$', 
     	login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
     	name='ohif-viewer'),

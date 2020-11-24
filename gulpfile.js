@@ -43,17 +43,18 @@ var visionaire_static = './apps/visionaire/static/';
 var visionaire_static_css = visionaire_static+'css/';
 var visionaire_static_js = visionaire_static+'js/';
 
+// OHIF Extensions
 var visionaire_jslib_extensions = visionaire_jslib_ohif+'extensions/';
+var visionaire_jslib_cornerstone = visionaire_jslib_extensions+'cornerstone/';
 var visionaire_jslib_vtk = visionaire_jslib_extensions+'vtk/';
 var visionaire_jslib_microscopy = visionaire_jslib_extensions+'dicom-microscopy/';
-var visionaire_jslib_cornerstone = visionaire_jslib_extensions+'cornerstone/';
 var visionaire_jslib_segmentation = visionaire_jslib_extensions+'dicom-segmentation/';
 var visionaire_jslib_html = visionaire_jslib_extensions+'dicom-html/';
 var visionaire_jslib_p10 = visionaire_jslib_extensions+'dicom-p10-downloader/';
 var visionaire_jslib_pdf = visionaire_jslib_extensions+'dicom-pdf/';
 var visionaire_jslib_rt = visionaire_jslib_extensions+'dicom-rt/';
+var visionaire_jslib_dcmtag = visionaire_jslib_extensions+'dicom-tag-browser/';
 var visionaire_jslib_tracker = visionaire_jslib_extensions+'lesion-tracker/';
-
 
 
 // Content Widgets
@@ -402,6 +403,11 @@ var ohif_jsfolders = {
 		src: visionaire_jslib_tracker,
 		build: visionaire_jslib_tracker+'dist/**/*',
 		dst: visionaire_static_js+'ohif/tracker/',
+	},
+	dcmtag: {
+		src: visionaire_jslib_dcmtag,
+		build: visionaire_jslib_dcmtag+'dist/**/*',
+		dst: visionaire_static_js+'ohif/dcmtag/',
 	}
 }
 

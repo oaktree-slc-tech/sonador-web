@@ -5,22 +5,24 @@ from django.views.decorators.cache import never_cache
 
 from guru.helpers import gsetting
 
-from .views import OpenIDLoginRedirectView, OpenIDLoginCallbackView, oAuth2EndpointsView, \
-	oAuth2TokenAuthorizationView, OrthancServiceAuthorizationView
-from .views.service import OrthancSecureUriRedirectView
+from .views.oauth import OpenIDLoginRedirectView, OpenIDLoginCallbackView, oAuth2EndpointsView, \
+	oAuth2TokenAuthorizationView
+from .views.service import OrthancServiceAuthorizationView, OrthancSecureUriRedirectView
 
 
 urlpatterns_openid_auth = [
 
 	# oAuth2 Configuration
-	url(r'.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration'),
+	url(r'.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration-default'),
 
-	# oAuth SSO
+	# oAuth SSO: Reirect and Callback Views
 	url(r'^(?P<serverid>\w+)/?$', OpenIDLoginRedirectView.as_view(), name='openid-login'),
 	url(r'^(?P<serverid>\w+)/callback/?$', OpenIDLoginCallbackView.as_view(), name='openid-login-callback'),
+	url(r'^(?P<serverid>\w+)/token/?$', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token'),
+	url(r'^(?P<serverid>\w+)/.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration'),
 
 	# oAuth2 Based Token Authorization
-	url(r'$', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token'),
+	url(r'', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token-default'),
 ]
 
 

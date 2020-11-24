@@ -66,6 +66,7 @@ class OrthancServiceAuthorizationForm(forms.Form):
 			or API token authorization.
 		'''
 		cleaned_data = super(OrthancServiceAuthorizationForm, self).clean(*args, **kwargs)
+		logger.debug('Authentication request data:\n%r' % cleaned_data)
 
 		# Parse authentication from "Referrer" headers
 		if cleaned_data.get('token_key') == API_REFERRER_REFERER_HEADER:

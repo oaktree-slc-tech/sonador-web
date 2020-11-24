@@ -1,3 +1,3 @@
 from .oauth import OpenIDViewPropertiesMixin, OpenIDLoginRedirectView, OpenIDLoginCallbackView, oAuth2EndpointsView, \
-	oAuth2TokenAuthorizationView, LoginView
+	oAuth2TokenAuthorizationView, oAuth2TokenRefreshView, LoginView
 from .service import OrthancServiceAuthorizationView

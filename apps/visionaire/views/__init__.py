@@ -1,1 +1,2 @@
-from .base import OhifDicomViewer, JSONResponseMixin, JSONBaseView, JSONFormApiView
+from .base import JSONResponseMixin, JSONBaseView, JSONFormApiView
+from .ohif import OhifDicomViewer, OhifConfigView

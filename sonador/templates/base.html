@@ -35,9 +35,8 @@
   <noscript> You need to enable JavaScript to run this app. </noscript>
 
   <div id="root"></div>
-
+  
   <!-- OHIF and Plugins -->
-  <script type="text/javascript" src="{% static 'js/ohif/sonador.app-config.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/cornerstone/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/segmentation/index.umd.js' %}" crossorigin></script>
@@ -53,45 +52,41 @@
 
   <!-- Initialize Viewer -->
   <script>
-    // Application configuration
     var containerId = 'root';
 
-    // Read PACS server connection from JSON string
-    window.config.servers.dicomWeb = JSON.parse(document.getElementById('pacs-connection').innerHTML);
+    // Retrieve application configuration and initialize
+    fetch("{% url 'ohif-config' %}") 
+      .then(response => response.json())
+      .then(function(rjson){
+        window.config = rjson;
+        
+        // Read PACS server connection from JSON string
+        window.config.servers.dicomWeb = JSON.parse(document.getElementById('pacs-connection').innerHTML);
 
-    // Logos and branding for viewer
-    window.config.whiteLabeling = {
-      createLogoComponentFn: function(React) {
-        return React.createElement('a', {
-          rel: 'noopener noreferrer',
-          className: 'header-brand',
-        });
-      }
-    }
+        // Logos and branding for viewer
+        window.config.whiteLabeling = {
+          createLogoComponentFn: function(React) {
+            return React.createElement('a', {
+              rel: 'noopener noreferrer',
+              className: 'header-brand',
+            });
+          }
+        }
 
-    {% if oauth_endpoint %}
-     window.config.oidc = [{
-      client_id: "{{ oauth_clientid }}",
-      response_type: 'token',
-      authority: "{{ oauth_endpoint }}",
-      scope: 'openid',
-      redirect_uri: '/callback',
-    }]
-    {% endif %}
+            // Extensions
+        window.config.extensions = [
+          OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomSeg, OHIFExtDicomMicroscopy];
 
-    // Extensions
-    window.config.extensions = [
-      OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomSeg, OHIFExtDicomMicroscopy];
+        window.OHIFViewer.installViewer(
+          // Configuration and container ID
+          window.config, containerId,
 
-    window.OHIFViewer.installViewer(
-      // Configuration and container ID
-      window.config, containerId,
-
-      // Completion callback
-      function() {
-        console.log('OHIF Viewer rendered/updated');  
-      }
-    );
+          // Completion callback
+          function() {
+            console.log('OHIF initialized successfully!');
+          }
+        )
+      });    
   </script>
 </body>
 
