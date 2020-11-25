@@ -6,12 +6,13 @@ from guru.views import GuruApiObjectManagementView, GuruApiRestView
 from secure.models import ApiAccessToken
 from secure.helpers import api_request
 
+from ..helpers import API_ACCESS_APITOKEN_QSPARAM
 from ..models.servers import PacsImagingServer
 from ..models.dicom import DicomImagingModality, RemoteDICOMwebServer
 from ..views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..views.dicom import PacsImagingServerChildObjectManagementView, PacsImagingServerChildObjectRestView
+from ..views.servers import PacsImagingServerApiManagementView, PacsImagingServerApiRestView
 from ..auth.views.service import SecureApiLoginView
-from ..helpers import API_ACCESS_APITOKEN_QSPARAM
 
 
 urlpatterns_api = [
@@ -30,13 +31,13 @@ urlpatterns_api = [
 				allowed_http_methods_url_signature=('GET', 'OPTIONS'),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			SonadorApiObjectManagementView.as_view(model=PacsImagingServer)), 
+			PacsImagingServerApiManagementView.as_view()), 
 		name='pacs-server-management'),
 	url(r'^pacs/(?P<objectid>[a-zA-Z0-9]+)/?$', 
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and (user.is_superuser or user.is_staff),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			SonadorApiRestView.as_view(model=PacsImagingServer)), 
+			PacsImagingServerApiRestView.as_view()), 
 		name='pacs-server-update'),
 
 	# Image Server API: PACS DICOM Modalities

@@ -64,19 +64,36 @@ class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):
 class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbstractView):
 	'''	Redirect user login requests to the specified OpenID provider for authentication. First step
 		in the oAuth/OpenID authentication workflow.
+
+		This redirect view implements two behaviors to allow external OHIF clients to authenticate:
+
+		1. If an external client requests an "authorization_code" workflow, the view will capture the
+			redirect URL, validate that is included in the whitelist for the auth server, and encoded
+			it in the "state" parameter for redirect after completion of authentication with the auth
+			server associated with the view instance.
+
+		2. In cases where a client with a valid session connects to the view with an "authorization" 
+			request, the view will redirect to the token endpoint for the auth server. This emulates
+			the behavior of the API endpoint which provides the token endpint as the auth endpoint
+			for connected clients which provide a valid session cookie.
 	'''
 	ohif_redirect_fieldname = SONAODR_OHIF_REDIRECT_QUERY_PARAM
 
 	def get_site_resource(self, request, vargs, vkwargs):
+		'''	Retrieve a site resource that may be encoded as part of the oAuth URL.
+
+			Special behavior: tp facilitate oAUthrequests from OHIF clients 
+			authenticating using the "authorization_code" workflow, 
+			the redirect URI of the client is captured (taken from the "state" parameter)
+			and request URL parameters are encoded.
+		'''		
 		redirect_url = super(OpenIDLoginRedirectView, self).get_site_resource(request, vargs, vkwargs)
 
 		# Retrieve authserver for the redirect view
-		if self.kwargs.get(self.authserver_objectid_url_param):
-			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
-		else:
-			authserver = get_default_authserver(authserver_model=self.authserver_model)
+		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
 
-		# Encode state of the authorization_code request for unpacking after oAuth code workflow complete
+		# Encode OHIF authorization_code requests to pass to the token endpoint after  a successful
+		# authorization_code workflow. Uses
 		if not redirect_url and OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', []):
 			logger.debug('Authorization code request components: %r' % request.GET)
 
@@ -103,6 +120,32 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 				logger.debug('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
 		
 		return redirect_url
+
+	def get(self, request, *args, **kwargs):
+		'''	Generate a 301 redirect to provider authorization URL
+
+			Special behavior: to facilitate authentication requests from OHIF clients
+			authenticating using the "authorization_code" workflow, forward to the 
+			token endpoint for the view authorization endpoint (after checking client_id).
+		'''
+		# For OHIF clients already authenticated to the platform, redirect to the token
+		# endpoint for the auth server to allow them to refresh their code/token without
+		# requiring offsite authentication a second time.
+		if request.GET.get(self.ohif_redirect_fieldname):
+
+			# Retrieve auth server for the view
+			authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
+
+			# Check user authentication, response type, and client ID
+			if request.user.is_authenticated \
+				and OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', []) \
+				and authserver.client_id == request.GET.get('client_id'):
+
+				# Redirect to token view for the server
+				return redirect(authserver.url_token+'?'+request.GET.urlencode())
+
+		return super(OpenIDLoginRedirectView, self).get(request, *args, **kwargs)
+
 
 
 class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbstractView):
@@ -203,15 +246,8 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 		"""
 		openid_config = super(oAuth2EndpointsView, self).get_data(context)
 
-		# oAuth configuration for specific server requested
-		if self.kwargs.get(self.authserver_objectid_url_param):
-			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
-			authserver_id = authserver.pk
-
-		# oAuth configuration for default server requested
-		else:
-			authserver = get_default_authserver(authserver_model=self.authserver_model)
-			authserver_id = None
+		# Retrieve oAuth server instance
+		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
 
 		# OpenID base configuration
 		openid_config.update({
@@ -271,10 +307,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 			return guru_bad_request(request)
 
 		# Retrieve authserver instance
-		if self.kwargs.get(self.authserver_objectid_url_param):
-			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
-		else:
-			authserver = get_default_authserver(authserver_model=self.authserver_model)
+		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
 
 		# Generate token and redirect
 		rurl_odata = {
@@ -323,13 +356,8 @@ class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):
 
 	def get(self, *args, **kwargs):
 
-		# oAuth configuration for specific server requested
-		if self.kwargs.get(self.authserver_objectid_url_param):
-			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
-
-		# oAuth configuration for default server requested
-		else:
-			authserver = get_default_authserver(authserver_model=self.authserver_model)
+		# Retrieve authserver instance
+		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
 
 		# Retrieve default authserver for the platform
 		if authserver:

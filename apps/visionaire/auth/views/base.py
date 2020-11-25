@@ -32,3 +32,24 @@ class OpenIDAuthServerMixin(object):
 
 		return authserver
 
+	def get_auth_server_or_default(self, request, vargs, vkwargs):
+		'''	Retrieve the auth server for the view or the default auth server for Sonador
+
+			@returns tuple:
+				1. authserver  (str): primary key for the auth server if a specific instance was requested.
+					None if the default server was used.
+				2. authserver (model instance) or None: auth server instance (either the requested instance 
+					or the default) or None if no authentication servers have been configured
+					for the Sonador instance.
+		'''
+		# Retrieve specific auth server instance
+		if self.kwargs.get(self.authserver_objectid_url_param):
+			authserver = self.get_auth_server(self.request, self.args, self.kwargs)
+			authserver_id = authserver.pk
+		
+		# Retrieve default auth server instance
+		else:
+			authserver = get_default_authserver(authserver_model=self.authserver_model)
+			authserver_id = None
+
+		return authserver_id, authserver

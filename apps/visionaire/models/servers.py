@@ -23,6 +23,18 @@ DICOM_IMAGE_CHOICES = (
 )
 
 
+def pacs_ohif_serverdata(server):
+	''' Ceate a JSON dictionary of the server configuration properties
+		required by OHIF
+	'''
+	sdata = pick(server, ('name', 'wadoUriRoot', 'qidoRoot', 'wadoRoot', 'qidoSupportsIncludeField', 
+		'imageRendering', 'thumbnailRendering'))
+	sdata['requestOptions'] = { 'requestFromBrowser': True }
+	sdata['enableStudyLazyLoad'] = True
+
+	return sdata
+
+
 class ControlServer(object):
 	'''	Helper object used to route requests to imaging servers which may be located
 		within a cluster or firewall.
@@ -31,7 +43,6 @@ class ControlServer(object):
 		self.hostname = hostname
 		self.port = port
 		self.scheme = scheme
-
 
 class PacsImagingServer(BaseServerModel):
 	'''	PACS Imaging Server
@@ -60,6 +71,7 @@ class PacsImagingServer(BaseServerModel):
 	class Meta:
 		verbose_name = 'PACS Imaging Server'
 		verbose_name_plural = 'Imaging Servers'
+		ordering = ('default', 'active', 'name')
 
 	@property
 	def wadoUriRoot(self):
@@ -133,3 +145,7 @@ class PacsImagingServer(BaseServerModel):
 	@property
 	def json(self):
 		return pick(self, [f.name for f in self._meta.fields])
+
+	@property
+	def ohif_json(self):
+		return pacs_ohif_serverdata(self)

@@ -48,6 +48,7 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 	class Meta:
 		verbose_name = 'DICOM Imaging Modality'
 		verbose_name_plural = 'DICOM Modalities'
+		ordering = ('server', 'name')
 
 	def save(self, *args, **kwargs):
 		'''	Save configuration changes to Orthanc, persist to local database
@@ -93,6 +94,7 @@ class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 	class Meta:
 		verbose_name = 'Remote DICOMweb Server '
 		verbose_name_plural = 'DICOMweb Servers'
+		ordering = ('server', 'name')
 
 	def save(self, *args, **kwargs):
 		'''	Save configuration changes to Orthanc, persist to local database

@@ -1,3 +1,4 @@
+{% load static %}
 {
   "routerBasename": "/",
   "showStudyList": true,
@@ -5,6 +6,8 @@
   "studyListFunctionsEnabled": true,
   "servers": { "dicomWeb": null },
   "fuzzyMatching": false,
+
+  "branding": { "logo": "{% static 'images/sonador-logo.ng.svg' %}"},
 
   {% if oauth_endpoint %}
   "oidc": [{
