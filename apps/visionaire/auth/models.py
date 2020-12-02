@@ -77,11 +77,11 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 		# remove the scheme and hostname and check the resource a second time.
 		if not usafe:
 			usafe = super(SocialAuthorizationServer, self).is_safe_url(
-				site_resource.replace(site_fullurl(), ''))
+				(site_resource or '').replace(site_fullurl(), ''))
 
 		# If the full URL check and resource check fail, check against the white list
 		# for the authentication server.
-		return usafe or site_resource in (self.callback_url or '')
+		return usafe or ((site_resource or '') in (self.callback_url or ''))
 
 
 class SocialUserAccount(GuruTokenModel):
