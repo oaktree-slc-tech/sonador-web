@@ -167,7 +167,6 @@ USE_L10N = True
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -185,6 +184,9 @@ INSTALLED_APPS = [
     'wgtauth',          # oAuth2 authentication
     'wgtauth.social',
     'wgtauth.registration',
+
+    # Sonador Admin
+    'core.apps.SonadorAdminConfig',
 
     # Sonador
     'visionaire',
