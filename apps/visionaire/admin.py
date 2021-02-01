@@ -51,11 +51,18 @@ class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 class PacsImaginServerAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing PACS servers from Sonador
 	'''
-	list_display = ('server_id', 'name', 'active', 'hostname',  'port', 'description', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
+	list_display = ('server_id', 'name', 'active', 'hostname',  'port', 'description', 
+		'admin_pacs_viewer', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
 
 	def server_id(self, obj):
 		return obj.pk
 	server_id.short_description = 'Server ID'
+
+	def admin_pacs_viewer(self, obj):
+		'''	URL for PACS OHIF Viewer
+		'''
+		return format_html('<a href="{}" target="_blank">{}</a>', obj.url_viewer, 'Viewer')
+	admin_pacs_viewer.short_description = ''
 
 	def admin_pacs_server_admin(self, obj):
 		'''	URL for PACS server administration

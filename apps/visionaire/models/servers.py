@@ -99,10 +99,14 @@ class PacsImagingServer(BaseServerModel):
 
 	@property
 	def url_admin(self):
+		'''	URL for the Orthanc admin interface
+		'''
 		return server_controlurl(self, 'app/explorer.html')
 
 	@property
 	def url_dicomweb_client(self):
+		'''	URL for the Orthanc DICOMweb interface
+		'''
 		return server_controlurl(self, 'dicom-web/app/client/index.html')
 
 	def user_has_perm(self, user, resource, perm):
@@ -111,6 +115,18 @@ class PacsImagingServer(BaseServerModel):
 			@returns True if user has the requested permission, False otherwise
 		'''
 		return True
+
+	@property
+	def url_viewer_config(self):
+		'''	URL for the OHIF viewer configuration associated with the server
+		'''
+		return reverse('ohif-imageserver-config', args=(self.pk,))
+
+	@property
+	def url_viewer(self):
+		'''	URL for the OHIF viewer endpoint associated with the server
+		'''
+		return reverse('ohif-imageserver-viewer', args=(self.pk,))
 	
 	@classproperty
 	def url_apicreate(self):
