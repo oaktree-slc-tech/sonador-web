@@ -211,7 +211,6 @@ sonador_template_context_processors = [
     'django.template.context_processors.request',
     'django.contrib.auth.context_processors.auth',
     'django.contrib.messages.context_processors.messages',
-    'visionaire.context_processors.pacs.pacs_server_dicomweb',
 ]
 
 TEMPLATES = [

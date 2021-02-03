@@ -18,7 +18,7 @@
   <script
     src="https://polyfill.io/v3/polyfill.min.js?flags=gated&features=default%2CObject.values%2CArray.prototype.flat%2CObject.entries%2CSymbol%2CArray.prototype.includes%2CString.prototype.repeat%2CArray.prototype.find"></script>
 
-  <title>Sonador</title>
+  <title>Viewer | Sonador</title>
 </head>
 
 <style>
@@ -55,7 +55,7 @@
     var containerId = 'root';
 
     // Retrieve application configuration and initialize
-    fetch("{% url 'ohif-config' %}") 
+    fetch("{{ pacs_config }}") 
       .then(response => response.json())
       .then(function(rjson){
         window.config = rjson;

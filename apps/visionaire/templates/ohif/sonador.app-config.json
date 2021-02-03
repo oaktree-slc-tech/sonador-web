@@ -1,6 +1,6 @@
 {% load static %}
 {
-  "routerBasename": "/",
+  "routerBasename": "{{ router_base }}",
   "showStudyList": true,
   "filterQueryParam": false,
   "studyListFunctionsEnabled": true,

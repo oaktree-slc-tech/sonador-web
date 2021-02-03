@@ -54,9 +54,20 @@ if gsetting('AUTH_ENABLED'):
 
 urlpatterns.extend([
 
-	# OHIF
-    re_path(r'^ohif/config/?$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-config'),
+	# OHIF: Session Renew Endpoint
     re_path(r'^silent-refresh.html$', login_required(oAuth2TokenRefreshView.as_view()), name='silent-refresh'),
+
+    # Sonador Root Configuration
+    re_path(r'^ohif/config/?$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-config'),
+
+    # OHIF: Imaging Server Specific Configuration and Viewer
+    re_path(r'^ohif/config/(?P<iserverid>\w+)/?$',
+        OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-imageserver-config'),
+    re_path(r'^ohif/viewer/(?P<iserverid>\w+)/?(.+)?/?$', 
+        login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
+        name='ohif-imageserver-viewer'),
+
+    # Sonador Root Viewer
     re_path(r'^.*$', 
     	login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
     	name='ohif-viewer'),
