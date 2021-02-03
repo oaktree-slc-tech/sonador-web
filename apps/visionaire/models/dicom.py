@@ -45,6 +45,18 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 	host = models.CharField(verbose_name='Host', max_length=32,
 		help_text='IP Address of the modality')
 
+	acl_allow_echo = models.BooleanField(verbose_name='Respond to Echo Requests', default=True,
+		help_text='Allow the modality to send an "echo" request to the server. ' \
+			+ 'Echo requests are used to test connectivity between two DCM instances.')
+	acl_allow_find = models.BooleanField(verbose_name='Allow Metadata Find Requests (C-Find)', default=True,
+		help_text='Allow the modality to query the server using C-Find requests and fetch image metadata.')
+	acl_allow_get = models.BooleanField(verbose_name='Allow Get Requests (C-GET)', default=True,
+		help_text='Allow the modality to retrieve images using the C-GET protocol.')
+	acl_allow_move = models.BooleanField(verbose_name='Allow Query/Retrieve (C-Move)', default=True,
+		help_text='Allow the modality to initialize DICOM "move" requests (C-MOVE) to retrieve image data.')
+	acl_allow_store = models.BooleanField(verbose_name='Allow Modality to Write Data (C-Store)', default=True,
+		help_text='Allow the modality to send data to the imaging server.')
+
 	class Meta:
 		verbose_name = 'DICOM Imaging Modality'
 		verbose_name_plural = 'DICOM Modalities'
@@ -55,7 +67,9 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 		'''
 		# Send changes to Orthanc
 		rdata = server_controloperation_put(self.server.control, 
-			{ 'AET': self.aet, 'Port': self.port, 'Host': self.host, }, 
+			{ 'AET': self.aet, 'Port': self.port, 'Host': self.host,
+				'AllowEcho': self.acl_allow_echo, 'AllowFind': self.acl_allow_find,
+				'AllowGet': self.acl_allow_get, 'AllowMove': self.acl_allow_move, 'AllowStore': self.acl_allow_store }, 
 			resource=posixpath.join('modalities', self.orthanc_name), 
 			headers=self.server.sonador_auth, parse_response=False)
 		
@@ -77,7 +91,8 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 	@property
 	def json(self):
 		odata = { 'server': self.server.pk, 'orthanc_name': self.orthanc_name, }
-		odata.update(pick(self, ('token', 'name', 'aet', 'port', 'host')))
+		odata.update(pick(self, ('token', 'name', 'aet', 'port', 'host', 
+			'acl_allow_echo', 'acl_allow_find', 'acl_allow_get', 'acl_allow_move', 'acl_allow_store')))
 		return odata
 
 
