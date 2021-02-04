@@ -321,7 +321,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		# Check redirect URL
 		if not authserver.is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname)):
 			raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
-				+ 'or part of the Sonador application.') % ohif_redirect_url)
+				+ 'or part of the Sonador application.') % (tform.cleaned_data.get(self.ohif_redirect_fieldname or '')))
 
 		# URL encode the response and redirect
 		rurl = tform.cleaned_data.get(self.ohif_redirect_fieldname)+'?'+urlparse.urlencode(rurl_odata)
