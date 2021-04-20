@@ -27,9 +27,9 @@ def pacs_ohif_serverdata(server):
 	''' Ceate a JSON dictionary of the server configuration properties
 		required by OHIF
 	'''
-	sdata = pick(server, ('name', 'wadoUriRoot', 'qidoRoot', 'wadoRoot', 'qidoSupportsIncludeField', 
-		'imageRendering', 'thumbnailRendering'))
-	sdata['requestOptions'] = { 'requestFromBrowser': True }
+	sdata = pick(server, ('token', 'default', 'name', 'wadoUriRoot', 'qidoRoot', 'wadoRoot', 'qidoSupportsIncludeField',
+						  'imageRendering', 'thumbnailRendering'))
+	sdata['requestOptions'] = {'requestFromBrowser': True}
 	sdata['enableStudyLazyLoad'] = True
 
 	return sdata
