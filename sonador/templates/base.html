@@ -45,6 +45,7 @@
   <script src="{% static 'js/ohif/rt/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/vtk/index.umd.js' %}" crossorigin></script>
   <script src="{% static 'js/ohif/microscopy/index.umd.js' %}" crossorigin></script>
+  <script src="{% static 'js/ohif/dcmtag/index.umd.js' %}" crossorigin></script>
 
 
   <!-- PACS Server Connection -->
@@ -75,7 +76,7 @@
 
         // Extensions
         window.config.extensions = [
-          OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomSeg, OHIFExtDicomMicroscopy];
+          OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomMicroscopy];
 
         window.OHIFViewer.installViewer(
           // Configuration and container ID
