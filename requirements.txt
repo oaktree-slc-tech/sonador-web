@@ -1,7 +1,7 @@
 # Configuration Management
 
 # Django Requirements
-Django==2.2.12
+Django==3.2
 django-cors-headers==3.5.0
 
 # Core Dependencies
