@@ -14,7 +14,8 @@ from django.contrib import auth
 from django.contrib.auth import views as auth_views
 
 from guru.helpers import gsetting, create_token, site_fullurl
-from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request
+from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request,\
+	guru_is_safe_url
 from guru.helpers import operation_results, site_fullurl
 from guru.helpers.user import user_displayname
 from guru.helpers.utils.object import pick, omit
@@ -318,10 +319,16 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		}
 		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
 
-		# Check redirect URL
-		if not authserver.is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname)):
+		# Check redirect URL using the authorization server for the application
+		if authserver and not authserver.is_safe_url(
+				tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
 			raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
 				+ 'or part of the Sonador application.') % (tform.cleaned_data.get(self.ohif_redirect_fieldname or '')))
+		else:
+
+			# If an authentication server is not defined, prevent redirects to external endpoints
+			if not guru_is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
+				raise PermissionDenied('Invalid redirect URL "%s"' % tform.cleaned_data.get(self.ohif_redirect_fieldname))
 
 		# URL encode the response and redirect
 		rurl = tform.cleaned_data.get(self.ohif_redirect_fieldname)+'?'+urlparse.urlencode(rurl_odata)
@@ -358,9 +365,7 @@ class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):
 
 		# Retrieve authserver instance
 		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
-
-		# Retrieve default authserver for the platform
 		if authserver:
 			return redirect(authserver.url_login)
 
-		return super(LoginView, self).get(*args, **kwargs)
+		return redirect(reverse('admin:login')+'?'+self.request.GET.urlencode())

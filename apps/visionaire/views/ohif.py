@@ -53,7 +53,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 			# Authentication configuration
 			context['authserver'] = authserver
 			context['oauth_endpoint'] = site_fullurl(authserver.url_token if authserver_id else reverse('auth:openid-auth-token-default'))
-			context['oauth_clientid'] = authserver.client_id
+			context['oauth_clientid'] = authserver.client_id if authserver else 'sonador'
 			context['oauth_response_type'] = OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE if ohif_configtype == SONADOR_OHIF_APP \
 				else OAUTH_TOKEN_RESPONSE_TYPE
 

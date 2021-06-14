@@ -60,7 +60,7 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 
 		return super(SocialAuthorizationServer, self).save(*args, **kwargs)
 
-	def is_safe_url(self, site_resource):
+	def is_safe_url(self, site_resource, allowed_hosts=None):
 		'''	Determine if the provided callback URL is safe.
 	
 			1. Is it part of the Sonador website
@@ -70,7 +70,8 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 				for the authentication server.
 		'''
 		# Check full resource against Sonador configuration
-		usafe = super(SocialAuthorizationServer, self).is_safe_url(site_resource)
+		usafe = super(SocialAuthorizationServer, self).is_safe_url(
+			site_resource, allowed_hosts=allowed_hosts)
 
 		# Complete URLs may cause the is_safe_url from wgtauth to fail.
 		# If the fully qualified domain for the site is causing the request to fail,
