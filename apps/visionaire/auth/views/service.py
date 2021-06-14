@@ -327,7 +327,8 @@ class OrthancSecureUriRedirectView(RedirectView):
 class SecureApiLoginView(View):
 	'''	Create a session and return a bearer token for an API session. IMPORTANT:
 		the view will authenticate users and provide access to the API.
-		No permissions checking is performed in the view instance. 
+		No permissions checking is performed in the view instance, and the view needs
+		to be protected by using a URL pattern.
 	'''
 	def get(self, request, *args, **kwargs):
 		if not getattr(request, 'user', None):
