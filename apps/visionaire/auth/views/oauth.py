@@ -320,13 +320,14 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
 
 		# Check redirect URL using the authorization server for the application
-		if authserver and not authserver.is_safe_url(
-				tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
-			raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
-				+ 'or part of the Sonador application.') % (tform.cleaned_data.get(self.ohif_redirect_fieldname or '')))
-		else:
+		if authserver:
+			if not authserver.is_safe_url(
+					tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
+				raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
+					+ 'or part of the Sonador application.') % (tform.cleaned_data.get(self.ohif_redirect_fieldname or '')))
 
-			# If an authentication server is not defined, prevent redirects to external endpoints
+		# If an authentication server is not defined, prevent redirects to external endpoints
+		else:
 			if not guru_is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
 				raise PermissionDenied('Invalid redirect URL "%s"' % tform.cleaned_data.get(self.ohif_redirect_fieldname))
 
