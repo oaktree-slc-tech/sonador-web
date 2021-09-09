@@ -5,7 +5,7 @@ stages:
 
 variables:
   AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES: CI_COMMIT_SHA,CI_ENVIRONMENT_NAME,CI_ENVIRONMENT_SLUG
-  
+
 # Include AutoDevops build
 include:
 - local: .ci/jobs/build.gitlab-ci.yml
@@ -38,7 +38,7 @@ test:
     - stale_schedule
     - job_execution_timeout
     - scheduler_failure
-  
+
   variables:
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: images-control@medical-db
@@ -71,14 +71,14 @@ publish-oaktree:
   variables:
     DOCKER_HOST: "tcp://docker:2375"
     DOCKER_TLS_CERTDIR: ""
-  
+
   only:
     refs:
     - master
     variables:
     - $DOCKER_PUBLISH_PASSWORD
     - $DOCKER_PUBLISH_USER
-  
+
   script:
   - echo "$DOCKER_PUBLISH_PASSWORD" | docker login -u "$DOCKER_PUBLISH_USER" --password-stdin "$CI_REGISTRY"
   - docker pull $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
