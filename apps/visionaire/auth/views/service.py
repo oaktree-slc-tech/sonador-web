@@ -29,246 +29,28 @@ from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 from ...models import PacsImagingServer
 
 from .. import hexsigning
+from ..forms import ServiceAuthorizationRequest, OrthancServiceAuthorizationForm
 
 logger = logging.getLogger(__name__)
 
 
-
-class ServiceAuthorizationRequest(object):
-	'''	Stub object used to mock requests so that user instances can be retrieved from session
-		by a service looking to authenticate a user for a service.
-	'''
-	def __init__(self, session):
-		self.session = session
-
-
-class OrthancServiceAuthorizationForm(forms.Form):
-	'''	Form class which can be used to approve or deny authorization requests from Orthanc.
-	'''
-	level = forms.CharField(required=True)
-	method = forms.CharField(required=True)
-	token_key = forms.CharField(required=True)
-	token_value = forms.CharField(required=True)
-
-	dicom_uid = forms.CharField(required=False)
-	orthanc_id = forms.CharField(required=False)
-	uri = forms.CharField(required=False)
-
-	formdata_transforms = {
-		'token-key': 'token_key',
-		'token-value': 'token_value',
-		'orthanc-id': 'orthanc_id',
-		'dicom-uid': 'dicom_uid',
-	}
-
-	def clean(self, *args, **kwargs):
-		'''	Clean data and convert parameters to the format required needed for sessionm
-			or API token authorization.
-		'''
-		cleaned_data = super(OrthancServiceAuthorizationForm, self).clean(*args, **kwargs)
-		logger.debug('Authentication request data:\n%r' % cleaned_data)
-
-		# Parse authentication from "Referrer" headers
-		if cleaned_data.get('token_key') == API_REFERRER_REFERER_HEADER:
-
-			# Retrieve querystring components
-			rparts = urlparse.parse_qs(urlparse.urlparse(cleaned_data.get('token_value')).query) \
-					if getattr(urlparse.urlparse(cleaned_data.get('token_value')), 'query', None) \
-				else {}
-
-			logger.debug('Querystring parameters from referrer URL: %r' % rparts)
-			
-			# Iterate through querystring components and re-package to remove single list values
-			for k,v in six.iteritems(rparts):
-				if isinstance(v, (tuple, list)) and len(v) == 1:
-					rval = v[0]
-
-					# For session based tokens add "Bearer" to the string
-					if ':' in rval:
-						rval = '%s %s' % (OAUTH_TOKEN_TYPE_BEARER, rval)
-
-					rparts[k] = rval
-
-				# Check component for API tokens or session keys
-				if k in (API_ACCESS_APITOKEN_QSPARAM, API_ACCESS_TOKEN_QSPARAM):
-					cleaned_data['referrer_token_key'] = k
-					cleaned_data['referrer_token_value'] = rparts.get(k)
-					logger.debug('Token value in referrer URL: %s' % cleaned_data['referrer_token_value'])
-
-		# Signed session key passed as "token", add "Bearer" keyword to the token value
-		elif cleaned_data.get('token_key') == API_ACCESS_TOKEN_QSPARAM and ':' in cleaned_data.get('token_value'):
-			cleaned_data['token_value'] = '%s %s' % (OAUTH_TOKEN_TYPE_BEARER, cleaned_data.get('token_value'))
-
-		# Parse authentication data
-		cleaned_data = self.clean_authdata(cleaned_data)
-		return cleaned_data
-
-	def clean_authdata(self, cleaned_data):
-		'''	Inspect authentication headers, convert to correct sessions or API tokens, 
-			retrieve users and permissions.
-		'''
-		# Determine the correct token key/value keywords: referrer values take precedence if present
-		if cleaned_data.get('referrer_token_key') and cleaned_data.get('referrer_token_value'):
-			tokenvalue_kw = 'referrer_token_value'
-		else: tokenvalue_kw = 'token_value'
-
-		# Basic Authentication: Access ID/Secret Key
-		if BASIC_AUTH_TYPE.lower() in cleaned_data.get(tokenvalue_kw, '').lower():
-			cleaned_data = self.basicauth_check_accessid(cleaned_data, tokenvalue_kw=tokenvalue_kw)
-
-		# Server (Sonador application) token
-		elif (cleaned_data.get(tokenvalue_kw) and API_ACCESS_SERVER_TOKEN in cleaned_data.get(tokenvalue_kw)):
-
-			# Parse base64 and encrypted token created using django.signing from application token value
-			cleaned_data = self.decode_server_token_authdata(cleaned_data)
-
-		# Bearer Token (oAuth: JWT/Hex Encoded)
-		elif (cleaned_data.get(tokenvalue_kw) and OAUTH_TOKEN_TYPE_BEARER in cleaned_data.get(tokenvalue_kw)) \
-			or (cleaned_data.get(tokenvalue_kw) == API_ACCESS_TOKEN_QSPARAM and OAUTH_TOKEN_TYPE_BEARER in cleaned_data.get(tokenvalue_kw)):
-			
-			# Parse base64 encoded token created using django.signing
-			cleaned_data = self.decode_session_authdata(cleaned_data, tokenvalue_kw=tokenvalue_kw)
-			
-		# API token or referrer API token.
-		# 1. The token key or referrer token key matches includes "token" or "api-token"
-		# 2. The value includes "api-token"
-		elif cleaned_data.get('token_key') in (API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM) \
-			or cleaned_data.get('referrer_token_key') in (API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM) \
-			or API_ACCESS_APITOKEN_QSPARAM in (cleaned_data.get('token_value') or '').lower():
-
-			# Utilize referrer token value (if present) with first priority
-			if cleaned_data.get('referrer_token_key'):
-				tvalue = cleaned_data.get('referrer_token_value')
-			else: tvalue = cleaned_data.get('token_value')
-
-			# Remove "api-token" and trim (if present)
-			if API_ACCESS_APITOKEN_QSPARAM in tvalue.lower():
-				tvalue = tvalue.replace(API_ACCESS_APITOKEN_QSPARAM.lower(), '').replace(API_ACCESS_APITOKEN_QSPARAM.upper(), '').strip()
-			
-			# Retrieve API token and assign user
-			try:
-				t = ApiAccessToken.objects.select_related('user').get(pk__iexact=tvalue)
-				self.user = t.user
-				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
-				logger.debug('Token user: %s' % self.user.username)
-
-			except ApiAccessToken.DoesNotExist as err:
-				logger.error('Unable to retrieve API token matching request: %s' % cleaned_data.get('token_value'))
-
-		return cleaned_data
-
-	def basicauth_check_accessid(self, cleaned_data, tokenvalue_kw='token_value'):
-		'''	Decode base64 credentials, retrieve access ID from database, compare secret against
-			secret value as a password check.
-		'''
-		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw)).replace(BASIC_AUTH_TYPE, '').strip()
-
-		try:
-			ucreds = base64.b64decode(svalue).decode('utf-8')
-			if ':' in ucreds:
-				aid, secret = ucreds.split(':')
-				logger.debug('Basic auth request with user access ID: %s' % aid)
-				apiaccess = ApiAccess.objects.get(access_id=aid)
-
-				# Check secret against that associated with the access ID
-				if apiaccess.secret_key == secret:
-					self.user = apiaccess.user
-					self.expires_in = gsetting('AUTH_EXPIRES_IN_ORTHANC_PASSWORD')
-					logger.debug('Basic auth with user access ID %s successful' % aid)
-				else:
-					logger.warning('Basic auth request denied for access ID %s. Provided secret does match.' % aid)
-
-		except ValueError as err:
-			logger.error('Unable to decode user credentials from authentication string')
-
-		except ApiAccess.DoesNotExist:
-			logging.error('Unable to retrieve user credentials, invalid access ID')
-
-		return cleaned_data
-
-	def decode_server_token_authdata(self, cleaned_data, tokenvalue_kw='token_value'):
-		'''	Decode authentication data based on the Sonador server token
-		'''
-		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw))
-		logger.debug('Encrypted Sonador Server Token: %s' % svalue)
-
-		try:
-
-			# Convert the signed token to the encrypted server key
-			ssig = svalue.replace(API_ACCESS_SERVER_TOKEN, '').strip()
-			stoken = server_decrypt_data(signing.loads(ssig)).decode('utf-8')
-
-			# Compare decrypted server token to local server token
-			if stoken == gsetting('SERVER_APITOKEN'):
-				self.user = 'sonador'
-				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
-				logger.debug('Authentication using Sonador server token')
-
-		except Signing.BadSignature as err:
-			logger.error('Unable to decrypt server token from the provided value, bad signature.')
-
-		return cleaned_data
-
-	def decode_session_authdata(self, cleaned_data, tokenvalue_kw='token_value'):
-		'''	Decode authentication data based on a Sonador session:
-
-			1. base64 encoded JSON web tokens
-			2. hex encoded session tokens
-		'''
-		svalue = copy.deepcopy(cleaned_data.get(tokenvalue_kw))
-		logger.debug('Signed Session Token: %s' % svalue)
-
-		try:
-
-			# Convert the signed token to session key
-			ssig = svalue.replace(OAUTH_TOKEN_TYPE_BEARER, '').strip()
-			logger.debug('Bearer token: %s' % ssig)
-
-			# Determine encoding of the token
-			if ssig[:2] == 'h:':
-				skey = self.decode_hex_authdata(ssig[2:])
-			else:
-				skey = self.decode_base64_authdata(ssig)
-			
-			cleaned_data['session'] = skey
-
-			# Retrieve session from backend storage
-			logger.debug('Bearer token session: %s' % skey)
-			self.session = SessionStore(session_key=skey)
-			self.user = auth.get_user(ServiceAuthorizationRequest(self.session))
-			self.expires_in = gsetting('AUTH_EXPIRES_IN_SESSION')
-			logger.debug('Token user: %s' % self.user.username)
-
-		except signing.BadSignature as err:
-			logger.error('Unable to retrieve session ID from the token, mismatched signature.\n%s'
-				% cleaned_data.get(tokenvalue_kw))
-
-		return cleaned_data
-		
-	def decode_base64_authdata(self, ssig):
-		'''	Decode a Base64 session token
-		'''
-		return signing.loads(ssig, salt=SESSION_SALT)
-
-	def decode_hex_authdata(self, ssig):
-		'''	Decode a hexadecimal encoded session token
-		'''
-		return hexsigning.loads(ssig, salt=SESSION_SALT)
-
-
 class OrthancServiceAuthorizationView(JSONFormApiView):
-	'''	API view 
+	'''	API view
 	'''
 	formclass = OrthancServiceAuthorizationForm
+	imagingserver_class = PacsImagingServer
+	imagingserver_request_param = 'serverid'
 
 	def getRequestJsonData(self, *args, **kwargs):
+		'''	Retrieve the JSON data from the request
+		'''
 		data = super(OrthancServiceAuthorizationView, self).getRequestJsonData(*args, **kwargs)
 
 		# Apply formdata transforms to transform request keys to the correct form field keys
 		fclass = self.get_form_class()
 		if hasattr(fclass, 'formdata_transforms') and isinstance(fclass.formdata_transforms, dict):
 			for k, v in six.iteritems(fclass.formdata_transforms):
-				
+
 				if k in data:
 					fdata = data.pop(k)
 					data[v] = fdata
@@ -276,27 +58,73 @@ class OrthancServiceAuthorizationView(JSONFormApiView):
 		logger.debug('Orthanc authorization requestion data:\n%r' % data)
 		return data
 
+	def getImagingServer(self, *args, **kwargs):
+		''' Retrieve the imaging server associated with the request. After being retrieved
+			from the database, subsequent calls retrieve a cached copy of the data.
+		'''
+		kwargs = kwargs or self.kwargs
+
+		# Retrieve imaging server
+		iserver = kwargs.get('server')
+		if iserver is None:
+			iserver = self.imagingserver_class.objects.get(
+				pk=kwargs.get(self.imagingserver_request_param))
+			kwargs['server'] = iserver
+		
+		return iserver
+	
+	def get_form_kwargs(self, *args, **kwargs):
+		kwags = super(OrthancServiceAuthorizationView, self).get_form_kwargs(*args, **kwargs)
+		kwargs['server'] = self.getImagingServer(*args, **kwargs)
+		return kwargs
+
 	def get_data(self, context):
+		'''	Process the authorization request.
+		'''
 		adata = super(OrthancServiceAuthorizationView, self).get_data(context)
 
 		# Authorize requests for Sonador users
-		if self.form.is_valid() and getattr(self.form, 'user', None) and (self.form.user == 'sonador' or self.form.user.pk):
-			adata.update({
-				'granted': True,
-				'validity': self.form.expires_in,
-			})
+		if self.form.is_valid() and getattr(self.form, 'user', None): 
+
+			# Valid authorization forms resolve to the "Sonador" internal user
+			# or to a user account. The internal user is a superadmin authorized
+			# to access or modify any imaging resource. User accounts require
+			# permission to access the resource they have requested. Resource requests
+			# can be verified by calling the user_has_perm method of the imaging server model.			
+			if self.form.user == 'sonador' \
+				or (self.form.user.pk and self.form.server.user_has_perm(
+						self.form.user, self.form.cleaned_data.get('orthanc_id'), 
+						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'))):
+				
+				# The Orthanc advanced authorization plugin expects a response that specifies
+				# whether access to the resource should be granted, and for how long.
+				adata.update({
+					'granted': True,
+					'validity': self.form.expires_in,
+				})
 
 		# Deny requests from unknown users
-		else: adata.update({ 'granted': False })
+		if not adata.get('granted'):
+			adata.update({ 'granted': False })
 
 		return adata
 
 	def form_valid(self, form):
 		return super(OrthancServiceAuthorizationView, self).form_valid(form)
 
+	def post(self, request, *args, **kwargs):
+		'''	Process authorization request from Orthanc
+		'''
+		# Retrieve the imaging server and cache
+		try: server = self.getImagingServer(*args, **kwargs)
+		except self.imagingserver_class.DoesNotExist as err:
+			return guru_page_not_found(self.request, err)
+
+		return super(OrthancServiceAuthorizationView, self).post(request, *args, **kwargs)
+
 
 class OrthancSecureUriRedirectView(RedirectView):
-	'''	View which can be used to redirect 
+	'''	View which can be used to redirect
 	'''
 	model = PacsImagingServer
 	model_objectid_fieldname = 'serverid'
@@ -325,10 +153,10 @@ class OrthancSecureUriRedirectView(RedirectView):
 
 
 class SecureApiLoginView(View):
-	'''	Create a session and return a bearer token for an API session. IMPORTANT:
-		the view will authenticate users and provide access to the API.
-		No permissions checking is performed in the view instance, and the view needs
-		to be protected by using a URL pattern.
+	'''	Create a session and return a bearer token for an oAuth API session. IMPORTANT:
+		the view will authenticate users and provide access to the API as part of an oAuth token
+		grant workflow. No permissions checking is performed in the view instance and should
+		be applied as a decorator in ANY urls file in which the file is used.
 	'''
 	def get(self, request, *args, **kwargs):
 		if not getattr(request, 'user', None):

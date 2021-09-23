@@ -27,12 +27,12 @@ urlpatterns_openid_auth = [
 
 
 urlpatterns_service_auth = [
-	
+
 	# Orthanc
-	url(r'^orthanc/?$', csrf_exempt(never_cache(OrthancServiceAuthorizationView.as_view())), name='service-orthanc'),
-	url(r'^orthanc/(?P<serverid>\w+)/admin/?$', 
+	url(r'^orthanc/(?P<serverid>\w+)/auth/?$', csrf_exempt(never_cache(OrthancServiceAuthorizationView.as_view())), name='service-orthanc'),
+	url(r'^orthanc/(?P<serverid>\w+)/admin/?$',
 		login_required(OrthancSecureUriRedirectView.as_view(server_url_attr='url_admin')), name='orthanc-admin-redirect'),
-	url(r'^orthanc/(?P<serverid>\w+)/dicom-web/?$', 
+	url(r'^orthanc/(?P<serverid>\w+)/dicom-web/?$',
 		login_required(OrthancSecureUriRedirectView.as_view(server_url_attr='url_dicomweb_client')), name='orthanc-dicomweb-redirect'),
 ]
 
