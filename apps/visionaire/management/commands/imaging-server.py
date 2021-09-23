@@ -89,13 +89,13 @@ def add_imaging_server_parser_arguments(parser, update=False):
 		help='URL scheme to be used when connecting to the server within the cluster/firewall. Can '
 			+ 'also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_SCHEME environment variable.')
 	parser.add_argument('--server-internal-hostname', type=six.text_type, required=False, dest='internal_hostname',
-		default=os.environ.get('SONAODR_IMAGING_SERVER_INTERNAL_HOSTNAME'),
+		default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME'),
 		help='Fully qualified domain for the imaging server to be used within the cluster/firewall. '
-			+ 'Can also be provided as the SONAODR_IMAGING_SERVER_INTERNAL_HOSTNAME environment variable.')
+			+ 'Can also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME environment variable.')
 	parser.add_argument('--server-internal-port', type=int, required=False, dest='internal_port',
-		default=os.environ.get('SONAODR_IMAGING_SERVER_INTERNAL_PORT'),
+		default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_PORT'),
 		help='Server port to use within the cluster/firewall. Can also be provided as the '
-			+ 'SONAODR_IMAGING_SERVER_INTERNAL_PORT environment variable.')
+			+ 'SONADOR_IMAGING_SERVER_INTERNAL_PORT environment variable.')
 
 	# Toggle whether the server should be specified as the "default" server
 	default_server = parser.add_mutually_exclusive_group(required=False)

@@ -1,4 +1,4 @@
-import os, logging, time
+import os, logging, time, six
 
 from django.core.management.base import CommandError
 from django.core.management import call_command
@@ -35,6 +35,9 @@ SONADOR_IMAGING_SERVER_DESCRIPTION = os.environ.get(
 SONADOR_IMAGING_SERVER_SCHEME = os.environ.get("SONADOR_IMAGING_SERVER_SCHEME")
 SONADOR_IMAGING_SERVER_HOSTNAME = os.environ.get("SONADOR_IMAGING_SERVER_HOSTNAME")
 SONADOR_IMAGING_SERVER_PORT = os.environ.get("SONADOR_IMAGING_SERVER_PORT")
+SONADOR_IMAGING_SERVER_INTERNAL_SCHEME = os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_SCHEME')
+SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME = os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME')
+SONADOR_IMAGING_SERVER_INTERNAL_PORT = os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_PORT')
 SONADOR_IMAGING_SERVER_DEFAULT = os.environ.get('SONADOR_IMAGING_SERVER_DEFAULT')
 
 OHIF_BUCKET_PATH = 'js/ohif/index.umd.js'
@@ -52,6 +55,10 @@ class Command(GuruBaseManagementCommand):
     def add_arguments(self, parser):
         ''' Provide argument overrides
         '''
+        # Options for initializing and applying migrations
+        parser.add_argument('--nomigrations', dest='dbmigrations', default=True, action='store_false',
+            help='Skip initialization of the database. No migrations are created or applied.')
+
         # Sonador imaging environment user credentials (defaults are taken from the environment variables)
         parser.add_argument('--username', dest='username', default=SONADOR_USER_USERNAME,
             help='Account username. May also be provided via the SONADOR_USER_USERNAME environment variable.')
@@ -79,6 +86,18 @@ class Command(GuruBaseManagementCommand):
             help='Imaging server hostname. May also be provided via the SONADOR_IMAGING_SERVER_HOSTNAME environment variable.')
         parser.add_argument('--server-port', dest='server_port', default=SONADOR_IMAGING_SERVER_PORT,
             help='Imaging server port. May also be provided via the SONADOR_IMAGING_SERVER_PORT environment variable.')
+        parser.add_argument('--server-internal-scheme', type=six.text_type, required=False, dest='internal_scheme',
+            default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_SCHEME'),
+            help='URL scheme to be used when connecting to the server within the cluster/firewall. Can '
+                + 'also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_SCHEME environment variable.')
+        parser.add_argument('--server-internal-hostname', type=six.text_type, required=False, dest='internal_hostname',
+            default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME'),
+            help='Fully qualified domain for the imaging server to be used within the cluster/firewall. '
+                + 'Can also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME environment variable.')
+        parser.add_argument('--server-internal-port', dest='internal_port', 
+            default=int(SONADOR_IMAGING_SERVER_INTERNAL_PORT) if SONADOR_IMAGING_SERVER_INTERNAL_PORT else None,
+            help='Server port to use within the cluster/firewall. Can also be provided as the '
+                + 'SONADOR_IMAGING_SERVER_INTERNAL_PORT environment variable.')
         parser.add_argument('--server-default', dest='server_default', default=str2bool(SONADOR_IMAGING_SERVER_DEFAULT),
             help='Should the server be specified as the default for the Sonador instance. May also be provided via the SONADOR_IMAGING_SERVER_DEFAULT '
                 + 'environment variable.')
@@ -122,7 +141,8 @@ class Command(GuruBaseManagementCommand):
             raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
 
 
-    def imagingServerArgs(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default):
+    def imagingServerArgs(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
+            internal_scheme=None, internal_hostname=None, internal_port=None):
         ''' Determine arguments for imaging server operation (create/update)
         '''
         # Server ID, name, description, and connection params
@@ -135,6 +155,14 @@ class Command(GuruBaseManagementCommand):
             '--server-port', f'{server_port}'
         )
 
+        # Internal connection options
+        if internal_scheme:
+            args += ('--server-internal-scheme', f'{internal_scheme}')
+        if internal_hostname:
+            args += ('--server-internal-hostname', f'{internal_hostname}')
+        if internal_port:
+            args += ('--server-internal-port', f'{internal_port}')
+
         # Toggle whether the server should be Sonador default
         if server_default:
             args += ('--set-default',)
@@ -143,20 +171,24 @@ class Command(GuruBaseManagementCommand):
 
         return args
 
-    def createImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default):
+    def createImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
+            internal_scheme=None, internal_hostname=None, internal_port=None):
         ''' Create a Sonador Imaging server with the provided arguments
         '''
         try:
-            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default)
+            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
+                internal_scheme=internal_scheme, internal_hostname=internal_hostname, internal_port=internal_port)
             call_command(f'imaging-server', 'create', *args)
         except Exception as err:
             raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
 
-    def updateImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default):
+    def updateImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
+            internal_scheme=None, internal_hostname=None, internal_port=None):
         ''' Update an existing server definition
         '''
         try:
-            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default)
+            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
+                internal_scheme=internal_scheme, internal_hostname=internal_hostname, internal_port=internal_port)
             call_command(f'imaging-server', 'update', *args)
         except Exception as err:
             raise CommandError(f'Unable to update imaging server, an error occurred: {err}')
@@ -166,8 +198,7 @@ class Command(GuruBaseManagementCommand):
         '''
         try: self.createImagingServer(*args, **kwargs)
         except Exception as err:
-            try:
-                self.updateImagingServer(*args, **kwargs)
+            try: self.updateImagingServer(*args, **kwargs)
             except Exception as err:
                 raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
 
@@ -177,13 +208,18 @@ class Command(GuruBaseManagementCommand):
         '''
         self.validate_options(options)
         
-        # Call makemigrations recursively to account for delays in the initialization of the database.
-        # When first launching the container environment, the database may not yet be available.
-        count = 0
-        self.makemigrations(count, 2)
+        if options.get('dbmigrations'):
+            
+            # Call makemigrations recursively to account for delays in the initialization of the database.
+            # When first launching the container environment, the database may not yet be available.
+            count = 0
+            self.makemigrations(count, 2)
 
-        # Apply migrations
-        self.migrate()
+            # Apply migrations
+            self.migrate()
+        
+        else:
+            self.stdout.write('--nomigrations used, skip initialization of database')
 
         # Create API user
         if options.get('username'):
@@ -229,7 +265,8 @@ class Command(GuruBaseManagementCommand):
 
         # Initialize/update development server instance
         self.init_imaging_server(*args, **pick(options, 
-            ('server', 'server_name', 'server_description', 'server_scheme', 'server_hostname', 'server_port', 'server_default')))
+            ('server', 'server_name', 'server_description', 'server_scheme', 'server_hostname', 'server_port', 'server_default',
+                'internal_scheme', 'internal_hostname', 'internal_port')))
 
         # Check on existing OHIF viewer on the directory and if doesn't collectstatic
         if not staticfiles_storage.exists(OHIF_BUCKET_PATH):
