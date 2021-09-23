@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from ..apisettings import SONADOR_OUTPUT_TYPE_OHIF, SONADOR_OUTPUT_TYPE_QUERY_PARAM
 from ..models.servers import PacsImagingServer
 
@@ -26,6 +28,26 @@ class PacsImagingServerApiManagementView(OhifApiObjectMixin, SonadorApiObjectMan
 	'''	API object management view for PACS Imaging servers managed by Sonador.
 	'''
 	model = PacsImagingServer
+
+	def getQueryset(self, *args, **kwargs):
+		'''	Retrieve the list of servers to which the user has access. For administrative
+			users, retrieve all imaging servers registered with Sonador. For non-admin users
+			only include servers to which they have been granted a user or group based authorization.
+		'''
+		# Base queryset
+		queryset = super(PacsImagingServerApiManagementView, self).getQueryset(*args, **kwargs)
+		if getattr(getattr(self, 'request', None), 'user', None):
+
+			# For administrative users, return all active servers
+			if self.request.user and (self.request.user.is_superuser or self.request.user.is_staff):
+				return queryset
+			
+			# Retrieve servers for which a specific user is authorized
+			return self.model.objects.filter(active=True).filter(
+				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user))
+
+		# For unauthenticated users, return an empty queryset
+		return queryset.none()
 
 
 class PacsImagingServerApiRestView(OhifApiObjectMixin, SonadorApiRestView):

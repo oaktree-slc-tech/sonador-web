@@ -14,6 +14,8 @@ from microservices.control import server_controlurl
 
 from ..helpers import API_ACCESS_SERVER_TOKEN
 
+from django.contrib.auth.models import User
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +24,8 @@ DICOM_IMAGE_CHOICES = (
 	(DICOM_IMAGE_WADO, 'Wadors'),
 )
 
+
+# Helper methods and structures
 
 def pacs_ohif_serverdata(server):
 	''' Ceate a JSON dictionary of the server configuration properties
@@ -44,19 +48,22 @@ class ControlServer(object):
 		self.port = port
 		self.scheme = scheme
 
+
+# PACS Imaging Models
+
 class PacsImagingServer(BaseServerModel):
 	'''	PACS Imaging Server
 	'''
-	wado_root = models.CharField(verbose_name='Wado root', max_length=512, default='wado/', 
+	wado_root = models.CharField(verbose_name='Wado root', max_length=512, default='wado/',
 		help_text='URL path to use as the root of the server WADO interface')
 	dicomweb_root = models.CharField(verbose_name='DICOMweb root', max_length=512, default='dicom-web/',
 		help_text='URL path to use as the root of the server DICOMweb interface')
 	qido_supports_include = models.BooleanField(verbose_name='QIDO Includes', default=True,
 		help_text='QIDO interface supports include field')
-	thumbnail_rendering_method = models.CharField(verbose_name='Thumbnail Render Method', 
+	thumbnail_rendering_method = models.CharField(verbose_name='Thumbnail Render Method',
 		max_length=64, default=DICOM_IMAGE_WADO, choices=DICOM_IMAGE_CHOICES,
 		help_text='Image rendering method to use for thumbnails')
-	image_rendering_method = models.CharField(verbose_name='Image Render Method', 
+	image_rendering_method = models.CharField(verbose_name='Image Render Method',
 		max_length=64, default=DICOM_IMAGE_WADO, choices=DICOM_IMAGE_CHOICES,
 		help_text='Image rendering method to use by the viewer')
 	active = models.BooleanField(verbose_name='Active', default=True)
@@ -72,6 +79,27 @@ class PacsImagingServer(BaseServerModel):
 		verbose_name = 'PACS Imaging Server'
 		verbose_name_plural = 'Imaging Servers'
 		ordering = ('default', 'active', 'name')
+
+	def user_has_perm(self, user, resource, method, level):
+		'''	Determine if the provide user has the needed permissions to perform the requested action.
+
+			@returns bool: True if the user has the permission, False otherwise
+		'''
+		# Administrative or superuser
+		if user.is_superuser:
+			return True
+
+		# Determine if the user has the requested permissions
+		for auth in self.user_authorizations.filter(user=user):
+			if auth.has_perm(resource, method, level):
+				return True
+		
+		# Determine if the user is part of a group that has the requested permissions
+		for auth in self.group_authorizations.filter(group__user=user):
+			if auth.user_has_perm(user, resource, method, level):
+				return True
+				
+		return False
 
 	@property
 	def wadoUriRoot(self):
@@ -109,13 +137,6 @@ class PacsImagingServer(BaseServerModel):
 		'''
 		return server_controlurl(self, 'dicom-web/app/client/index.html')
 
-	def user_has_perm(self, user, resource, perm):
-		''' Check that the provided user has the required permissions to access the provided resource.
-
-			@returns True if user has the requested permission, False otherwise
-		'''
-		return True
-
 	@property
 	def url_viewer_config(self):
 		'''	URL for the OHIF viewer configuration associated with the server
@@ -127,7 +148,7 @@ class PacsImagingServer(BaseServerModel):
 		'''	URL for the OHIF viewer endpoint associated with the server
 		'''
 		return reverse('ohif-imageserver-viewer', args=(self.pk,))
-	
+
 	@classproperty
 	def url_apicreate(self):
 		return reverse('visionaire-api:pacs-server-management')
@@ -139,6 +160,10 @@ class PacsImagingServer(BaseServerModel):
 	@property
 	def url_modality_apicreate(self):
 		return reverse('visionaire-api:pacs-server-modality-management', args=(self.pk,))
+	
+	@property
+	def url_dicomweb_apicreate(self):
+		return reverse('visionaire-api:pacs-server-dicomweb-management', args=(self.pk,))
 
 	@property
 	def sonador_auth(self):

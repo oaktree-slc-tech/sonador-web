@@ -13,6 +13,7 @@ from ..views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..views.dicom import PacsImagingServerChildObjectManagementView, PacsImagingServerChildObjectRestView
 from ..views.servers import PacsImagingServerApiManagementView, PacsImagingServerApiRestView
 from ..auth.views.service import SecureApiLoginView
+from ..auth.helpers import api_permission_user_readonly_admin_modify
 
 
 urlpatterns_api = [
@@ -27,14 +28,14 @@ urlpatterns_api = [
 
 	# Image Server API endpoints
 	url(r'^pacs/?$', 
-		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and (user.is_superuser or user.is_staff),
+		api_request(api_permission_user_readonly_admin_modify,
 				allowed_http_methods_url_signature=('GET', 'OPTIONS'),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerApiManagementView.as_view()), 
 		name='pacs-server-management'),
 	url(r'^pacs/(?P<objectid>[a-zA-Z0-9]+)/?$', 
-		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and (user.is_superuser or user.is_staff),
+		api_request(api_permission_user_readonly_admin_modify,
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerApiRestView.as_view()), 
@@ -53,21 +54,21 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerChildObjectRestView.as_view(model=DicomImagingModality)), 
-		name='pacs-server-modality-management'),
+		name='pacs-server-modality-update'),
 
-	# Image Server API: PACS DICOM Modalities
+	# Image Server API: PACS DICOMweb Peers
 	url(r'^pacs/(?P<serverid>[a-zA-Z0-9]+)/dicom-web/?$', 
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				allowed_http_methods_url_signature=('GET', 'OPTIONS'),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerChildObjectManagementView.as_view(model=RemoteDICOMwebServer)), 
-		name='pacs-server-modality-management'),
+		name='pacs-server-dicomweb-management'),
 	url(r'^pacs/(?P<serverid>[a-zA-Z0-9]+)/dicom-web/(?P<objectid>[a-zA-Z0-9]+)/?$', 
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerChildObjectRestView.as_view(model=RemoteDICOMwebServer)), 
-		name='pacs-server-modality-management'),
+		name='pacs-server-dicomweb-update'),
 ]
 

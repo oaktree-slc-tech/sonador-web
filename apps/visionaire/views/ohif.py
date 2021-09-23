@@ -1,4 +1,5 @@
 from django.shortcuts import reverse
+from django.db.models import Q
 from django.views.generic.base import TemplateView
 from django.http import Http404
 
@@ -90,7 +91,22 @@ class OhifDicomViewer(TemplateView):
 			except self.model.DoesNotExist as err:
 				raise Http404('Imaging server %s does not exist' % self.kwargs.get(self.imageserver_objectid_url_param))			
 		else:
-			context['pacs_server'] = [s.ohif_json for s in self.model.objects.filter(active=True)]
+			context['pacs_server'] = [s.ohif_json for s in self.get_imaging_servers(*args, **kwargs)]
 			context['pacs_config'] = reverse('ohif-config')
 
 		return context
+
+	def get_imaging_servers(self, *args, **kwargs):
+		'''	Retrieve the imaging server list for the viewer
+		'''
+		if getattr(getattr(self, 'request', None), 'user', None):
+
+			# For administrative users, return all active servers
+			if self.request.user and self.request.user.is_superuser:
+				return self.model.objects.filter(active=True)
+
+			# Retrieve servers for which a specific user is authorized
+			return self.model.objects.filter(active=True).filter(
+				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user))
+
+		return self.model.objects.none()

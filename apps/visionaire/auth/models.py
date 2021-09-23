@@ -4,6 +4,9 @@ from django.db import models
 from django.urls import reverse
 from django.contrib import auth
 
+from django.db import models
+from django.contrib.auth.models import User, Group
+
 from guru.models import GuruTokenModel
 from guru.helpers import site_fullurl
 from guru.helpers.compatability import guru_is_safe_url
@@ -123,3 +126,48 @@ class SocialUserAccount(GuruTokenModel):
 			'email': self.email
 		}
 
+
+class PacsImagingServerUserAuthorization(models.Model):
+	'''	Permission model which authorizes a user to access the imaging resources of a PACS server.
+	'''
+	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='user_authorizations')
+	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='server_authorizations')
+	resource = models.CharField(max_length=2048, default='*', 
+		help_text='Resources that the user is authorized to access on the server.')
+	
+	class Meta:
+		unique_together = ('server', 'user')
+
+	def has_perm(self, resource, method, level):
+		'''	Check that the user has the permissions required to perfom the action on the provided resource.
+
+			@returns bool: True if the user has the permission, False otherwise
+		'''
+		return True
+
+
+class PacsImagingServerGroupAuthorization(models.Model):
+	'''	Permission model which authorizes a group to access the imaging resources of a PACS server.
+	'''
+	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='group_authorizations')
+	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
+	resource = models.CharField(max_length=2048, default='*',
+		help_text='Resources that the user is authorized to access on the server')
+	
+	class Meta:
+		unique_together = ('server', 'group')
+
+	def user_has_perm(self, user, resource, method, level):
+		'''	Check that the user has the permissions required to perfom the action on the provided resource.
+
+			@returns bool: True if the user has the permission, False otherwise
+		'''
+		# User has superuser permissions
+		if user.is_superuser:
+			return True
+		
+		# User is a member of the group
+		elif self.group.user_set.filter(username=user.username).exists():
+			return True
+
+		return False
