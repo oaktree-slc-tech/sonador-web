@@ -7,15 +7,22 @@ from guru.helpers import gsetting
 from secure.models import ApiAccess, ApiAccessToken
 from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
 
-from ..auth.models import SocialAuthorizationServer
+from ..auth.models import SocialAuthorizationServer, PacsImagingServerGroupAuthorization
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
 
 
-class PacsImaginServerAdmin(admin.ModelAdmin):
+class PacsImagingServerGroupAuthorizationInline(admin.TabularInline):
+	model = PacsImagingServerGroupAuthorization
+	extra = 0
+	autocomplete_fields = ('group',)
+
+
+class PacsImagingServerAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing PACS servers from Sonador
 	'''
 	list_display = ('server_id', 'name', 'active', 'hostname',  'port', 'description',
 		'admin_pacs_viewer', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
+	inlines = (PacsImagingServerGroupAuthorizationInline,)
 
 	def server_id(self, obj):
 		return obj.pk

@@ -7,7 +7,8 @@ from guru.helpers import gsetting
 from secure.models import ApiAccess, ApiAccessToken
 from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
 
-from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization
+from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization, \
+	DataService
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
 
 
@@ -50,15 +51,15 @@ class ProxySecureSocialAuthorizationServer(SocialAuthorizationServer):
 		verbose_name_plural = 'Authentication Servers'
 
 
-class ProxyPacsImagingServerGroupAuthorization(PacsImagingServerGroupAuthorization):
-	'''	Proxy model which allows for the group imaging permissions to appear in the
-		auth admin group.
+class ProxyDataService(DataService):
+	'''	Proxy model which allows for data services to appear in the same
+		admin group as API and Access Tokens
 	'''
 	class Meta:
 		app_label = 'auth'
 		proxy = True
-		verbose_name = 'Group Access Permission'
-		verbose_name_plural = 'Imaging Server Group Access Permissions'
+		verbose_name = 'Data Service'
+		verbose_name_plural = 'Data Services'
 
 
 class SocialAuthorizationServerAdmin(admin.ModelAdmin):
@@ -67,7 +68,12 @@ class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 	list_display = ('token', 'provider', 'description', 'url_login', 'url_callback', 'default')
 
 
-class PacsImagingGroupAuthorizationAdmin(admin.ModelAdmin):
-	'''	Django admin structure for managing settings associated with Group Access permissions
+class DataServiceAdmin(admin.ModelAdmin):
+	'''	Django admin structure for managing settings associated with Data Services
 	'''
-	list_display = ('group', 'server', 'resource')
+	list_display = ('service_id',  'description', 'active', 'acl_allow_staff',)
+	filter_horizontal = ('groups',)
+
+	def service_id(self, obj):
+		return obj.pk
+	service_id.short_description = 'Service ID'

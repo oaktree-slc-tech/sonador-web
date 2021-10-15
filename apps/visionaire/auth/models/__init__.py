@@ -16,7 +16,9 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
-from .signals.signals import socialuser_first_login
+from ..signals.signals import socialuser_first_login
+
+from .integrations import DataService
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +158,13 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	
 	class Meta:
 		unique_together = ('server', 'group')
+		verbose_name = 'Group'
+		verbose_name_plural = 'Groups'
 
+	def __str__(self, *args, **kwargs):
+		return 'Group Authorization: %s for %s (%s:%s)' \
+			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
+	
 	def user_has_perm(self, user, resource, method, level):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 

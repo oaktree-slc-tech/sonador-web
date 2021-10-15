@@ -86,7 +86,7 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 		return super(DicomImagingModality, self).delete(*args, **kwargs)
 
 	def __str__(self, *args, **kwargs):
-		return 'DICOM Modality for %s: %s %s:%s' % (self.server, self.aet, self.host, self.port)
+		return '%s: %s' % (self.pk, self.name)
 
 	@property
 	def json(self):
@@ -133,7 +133,7 @@ class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 		return super(RemoteDICOMwebServer, self).delete(*args, **kwargs)
 
 	def __str__(self, *args, **kwargs):
-		return 'Remote DICOMweb Server for %s: %s:%s' % (self.server, self.hostname, self.port)
+		return '%s: %s' % (self.pk, self.name)
 
 	@property
 	def json(self):

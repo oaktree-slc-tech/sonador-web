@@ -4,6 +4,8 @@ from django.db import models
 from django.core import signing
 from django.shortcuts import reverse
 
+from django.contrib.auth.models import User, Group
+
 from guru.helpers import classproperty, gsetting
 from guru.helpers.utils.object import pick
 
@@ -13,8 +15,6 @@ from microservices.models import BaseServerModel
 from microservices.control import server_controlurl
 
 from ..helpers import API_ACCESS_SERVER_TOKEN
-
-from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ class PacsImagingServer(BaseServerModel):
 		}
 
 	def __str__(self, *args, **kwargs):
-		return '%s (%s:%s)' % (self.name, self.hostname, self.port)
+		return '%s: %s (%s:%s)' % (self.pk, self.name, self.hostname, self.port)
 
 	@property
 	def control(self):

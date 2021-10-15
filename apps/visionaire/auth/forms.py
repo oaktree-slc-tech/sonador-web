@@ -44,7 +44,7 @@ class SonadorOpenIDConnectTokenAuthorizationForm(oAuthTokenAuthorizationForm):
 
 class ServiceAuthorizationRequest(object):
 	'''	Stub object used to mock requests so that user instances can be retrieved from session
-		by a service looking to authenticate a user for a service.
+		by a service looking to authenticate a user.
 	'''
 	def __init__(self, session):
 		self.session = session
