@@ -17,6 +17,7 @@ from ..views.integrations import DataServiceApiRestView
 
 from ..auth.models import DataService
 from ..auth.views.service import SecureApiLoginView
+from ..auth.views.service.integrations import DataServiceAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify
 
 
@@ -40,11 +41,18 @@ urlpatterns_api = [
 			SonadorApiObjectManagementView.as_view(model=DataService)), 
 		name='data-service-management'),
 	url(r'^data/service/(?P<objectid>[a-zA-Z0-9]+)/?$', 
-		api_request(api_permission_user_readonly_admin_modify,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			DataServiceApiRestView.as_view()), 
-		name='pacs-server-update'),
+		name='data-service-update'),
+	url(r'^data/service/(?P<objectid>[a-zA-Z0-9]+)/introspect/?$', 
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+				allowed_http_methods_url_signature=('POST',),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			DataServiceAuthorizationView.as_view()), 
+		name='data-service-token-introspect'),
 
 	
 	# Image Server API

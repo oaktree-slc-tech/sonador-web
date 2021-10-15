@@ -81,7 +81,7 @@ class PacsImagingServer(BaseServerModel):
 		ordering = ('default', 'active', 'name')
 
 	def user_has_perm(self, user, resource, method, level):
-		'''	Determine if the provide user has the needed permissions to perform the requested action.
+		'''	Determine if the provided user has the needed permissions to perform the requested action.
 
 			@returns bool: True if the user has the permission, False otherwise
 		'''

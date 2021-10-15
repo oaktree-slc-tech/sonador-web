@@ -22,6 +22,25 @@ class DataService(GuruTokenModel):
 
     def __str__(self, *args, **kwargs):
         return '%s: %s' % (self.pk, self.description)
+
+    def user_has_perm(self, user):
+        ''' Determine if the provided user has the needed permission to perform the requested action.
+            
+            @returns bool: True if the user has the permission, False otherwise
+        '''
+        # Administrative users can access all data services
+        if user.is_superuser:
+            return True
+        
+        # Allow staff users to access the service if indicated by the service settings
+        if self.acl_allow_staff and user.is_staff:
+            return True
+        
+        # Determine if the user is part of a group that has the requested permissions
+        for auth in self.groups.filter(group__user):
+            return True
+        
+        return False
     
     @property
     def json(self):

@@ -22,41 +22,26 @@ from secure.helpers import server_decrypt_data
 from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
 
-from ...views import JSONFormApiView
-from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
+from ....views import JSONFormApiView
+from ....helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
-from ...models import PacsImagingServer
+from ....models import PacsImagingServer
 
-from .. import hexsigning
-from ..forms import ServiceAuthorizationRequest, OrthancServiceAuthorizationForm
+from ... import hexsigning
+from ...forms import ServiceAuthorizationRequest, OrthancServiceAuthorizationForm
+
+from .base import SonadorServiceAuthorizationBaseView
 
 logger = logging.getLogger(__name__)
 
 
-class OrthancServiceAuthorizationView(JSONFormApiView):
-	'''	API view
+class OrthancServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
+	'''	API view which can be used to process authorization requests from Orthanc
 	'''
 	formclass = OrthancServiceAuthorizationForm
 	imagingserver_class = PacsImagingServer
 	imagingserver_request_param = 'serverid'
-
-	def getRequestJsonData(self, *args, **kwargs):
-		'''	Retrieve the JSON data from the request
-		'''
-		data = super(OrthancServiceAuthorizationView, self).getRequestJsonData(*args, **kwargs)
-
-		# Apply formdata transforms to transform request keys to the correct form field keys
-		fclass = self.get_form_class()
-		if hasattr(fclass, 'formdata_transforms') and isinstance(fclass.formdata_transforms, dict):
-			for k, v in six.iteritems(fclass.formdata_transforms):
-
-				if k in data:
-					fdata = data.pop(k)
-					data[v] = fdata
-
-		logger.debug('Orthanc authorization requestion data:\n%r' % data)
-		return data
 
 	def getImagingServer(self, *args, **kwargs):
 		''' Retrieve the imaging server associated with the request. After being retrieved
@@ -74,9 +59,9 @@ class OrthancServiceAuthorizationView(JSONFormApiView):
 		return iserver
 	
 	def get_form_kwargs(self, *args, **kwargs):
-		kwags = super(OrthancServiceAuthorizationView, self).get_form_kwargs(*args, **kwargs)
-		kwargs['server'] = self.getImagingServer(*args, **kwargs)
-		return kwargs
+		form_kwargs = super(OrthancServiceAuthorizationView, self).get_form_kwargs(*args, **kwargs)
+		form_kwargs['server'] = self.getImagingServer(*args, **kwargs)
+		return form_kwargs
 
 	def get_data(self, context):
 		'''	Process the authorization request.
@@ -108,9 +93,6 @@ class OrthancServiceAuthorizationView(JSONFormApiView):
 			adata.update({ 'granted': False })
 
 		return adata
-
-	def form_valid(self, form):
-		return super(OrthancServiceAuthorizationView, self).form_valid(form)
 
 	def post(self, request, *args, **kwargs):
 		'''	Process authorization request from Orthanc
