@@ -16,8 +16,6 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
-from ..signals.signals import socialuser_first_login
-
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -116,6 +114,7 @@ class SocialUserAccount(GuruTokenModel):
 			@input registration (bool, default=False): Indicates whether the social media profile is
 				associated with a new account.
 		'''
+		from ..signals.signals import socialuser_first_login
 		socialuser_first_login.send(
 			sender=type(self), social_profile=self, request=request, registration=registration)
 

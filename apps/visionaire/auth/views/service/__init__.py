@@ -29,7 +29,8 @@ from ....helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 from ....models import PacsImagingServer
 
 from ... import hexsigning
-from ...forms import ServiceAuthorizationRequest, OrthancServiceAuthorizationForm
+from ...forms.base import ServiceAuthorizationRequest
+from ...forms.orthanc import OrthancServiceAuthorizationForm
 
 from .base import SonadorServiceAuthorizationBaseView
 

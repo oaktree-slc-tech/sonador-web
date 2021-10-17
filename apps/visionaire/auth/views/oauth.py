@@ -39,7 +39,7 @@ from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
 from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
-from ..forms import SonadorOpenIDConnectTokenAuthorizationForm
+from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
 
 from .base import get_default_authserver, OpenIDAuthServerMixin
 
