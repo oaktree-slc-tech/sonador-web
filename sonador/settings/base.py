@@ -61,8 +61,17 @@ SITE_NAME = siteconfig_site.get('SITE_NAME')
 SITE_URL = SITE_NAME
 SECRET_KEY = siteconfig_site.get('SECRET_KEY')
 INTERNAL_IPS = tuple(siteconfig_site.get('INTERNAL_IPS', ('127.0.0.1',) ))
-ALLOWED_HOSTS = tuple(siteconfig_site.get('ALLOWED_HOSTS', []))
 VERIFY_SSL_CONNECTIONS = config_str2bool(siteconfig_site.get('VERIFY_SSL_CONNECTIONS', True))
+
+# Support multi-line strings in the application configuration for ALLOWED_HOSTS.
+# This works around a limitation in ArgoCD and Helm which will split lines in 
+# config maps at 80 characters. When using multi-line allowed hosts in a site config,
+# they should be enclosed in triple quotes, with a comma at the end of the line.
+# Tabs may be used for readability.
+if isinstance(siteconfig_site.get('ALLOWED_HOSTS'), six.text_type):
+    ALLOWED_HOSTS_STR = siteconfig_site.get('ALLOWED_HOSTS')
+    ALLOWED_HOSTS = tuple([s.replace("'", '').replace('"', '').strip() for s in ALLOWED_HOSTS_STR.replace('\n', '').replace('\t', '').split(',')])
+else: ALLOWED_HOSTS = tuple(siteconfig_site.get('ALLOWED_HOSTS', []))
 
 
 

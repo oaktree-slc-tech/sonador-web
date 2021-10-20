@@ -8,7 +8,7 @@ import largefiles.apisettings as ofapicodes
 siteconfig_storage = siteconfig.get('Storage', {})
 siteconfig_storage_type = siteconfig_storage.get('OBJECT_STORAGE_TYPE')
 
-if not siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_SUPPORTED, ofapicodes.API_OBJECT_STORAGE_S3_MINIO):
+if not siteconfig_storage_type in ofapicodes.API_OBJECT_STORAGE_SUPPORTED + (ofapicodes.API_OBJECT_STORAGE_S3_MINIO,):
 	raise ValueError('Unsupported object storage type: %r' % siteconfig_storage_type)
 
 OBJECT_STORAGE_ENABLED = True
