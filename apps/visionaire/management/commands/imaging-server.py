@@ -52,13 +52,13 @@ ORTHANC_SERVER_DETAILS_PARAMS = OrderedDict((
 
 
 def add_imaging_server_parser_arguments(parser, update=False):
-	'''	Add imaging server data arguments to a server, parser/subparser instance: scheme, hostname, port, 
+	'''	Add imaging server data arguments to a parser/subparser instance: scheme, hostname, port, 
 		internal_scheme, internal_hostname, internal_port.
 	'''
-	if update: server_help='Unique ID for the imaging server.'
+	if update: server_help='Unique ID of the imaging server.'
 	else:
 		server_help = 'Server ID which should be used to identify the server. The server ID must be alphanumeric, ' \
-			+ 'cannot contain spaces, or to use special/reserved characters. Once a server ID has been set ' \
+			+ 'cannot contain spaces, or use special/reserved characters. Once a server ID has been set ' \
 			+ 'it cannot be changed. If no server ID is provided, one will be randomly generated.'
 
 	parser.add_argument('--server', type=six.text_type, dest='server', 
@@ -102,14 +102,14 @@ def add_imaging_server_parser_arguments(parser, update=False):
 	default_server.add_argument('--set-default', dest='default', default=None, action='store_true',
 		help='Sets the imaging server as the default for the Sonador instance.')
 	default_server.add_argument('--unset-default', dest='default', default=None, action='store_false',
-		help='Unsets the email server as the default for the Sonador instance.')
+		help='Unsets the imaging server as the default for the Sonador instance.')
 
-	# Toggle whether the active is active
+	# Toggle whether the server is active
 	active_server = parser.add_mutually_exclusive_group(required=False)
 	active_server.add_argument('--set-active', dest='active', default=None, action='store_true',
-		help='Marks the imaging server as "active."')
+		help='Mark the imaging server as "active."')
 	active_server.add_argument('--set-inactive', dest='active', default=None, action='store_false',
-		help='Marks the imaging server as "inactive."')
+		help='Mark the imaging server as "inactive."')
 
 
 def map_data_server_options(options, data, update=False, mappings={
@@ -160,14 +160,14 @@ class Command(GuruBaseManagementCommand):
 			help='List imaging servers defined on the Sonador instance')
 		server_list.add_argument('--items', type=int, default=100, help='The number of items to include in the server list. '
 			+ 'By default, the server will retrieve 100 items at a time.')
-		server_list.add_argument('--page', type=int, default=1, help='The page of results to retrieve from the server. Default: 1.')
+		server_list.add_argument('--page', type=int, default=1, help='The page of results to retrieve. Default: 1.')
 
-		# Create new imaging servers
+		# Create new imaging server
 		server_create = server_commands.add_parser(ORTHANC_SERVER_CMD_CREATE,
 			help='Create a new imaging server in Sonador')
 		add_imaging_server_parser_arguments(server_create)
 
-		# Update existing email server
+		# Update existing imaging server
 		server_update = server_commands.add_parser(ORTHANC_SERVER_CMD_UPDATE,
 			help='Update an existing imaging server in Sonador')
 		add_imaging_server_parser_arguments(server_update, update=True)

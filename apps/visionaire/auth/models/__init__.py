@@ -16,7 +16,7 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
-from .signals.signals import socialuser_first_login
+from .integrations import DataService
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,7 @@ class SocialUserAccount(GuruTokenModel):
 			@input registration (bool, default=False): Indicates whether the social media profile is
 				associated with a new account.
 		'''
+		from ..signals.signals import socialuser_first_login
 		socialuser_first_login.send(
 			sender=type(self), social_profile=self, request=request, registration=registration)
 
@@ -156,7 +157,13 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	
 	class Meta:
 		unique_together = ('server', 'group')
+		verbose_name = 'Group'
+		verbose_name_plural = 'Groups'
 
+	def __str__(self, *args, **kwargs):
+		return 'Group Authorization: %s for %s (%s:%s)' \
+			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
+	
 	def user_has_perm(self, user, resource, method, level):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
