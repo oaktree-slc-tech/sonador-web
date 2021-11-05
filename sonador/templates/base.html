@@ -38,14 +38,6 @@
   
   <!-- OHIF and Plugins -->
   <script src="{% static 'js/ohif/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/cornerstone/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/segmentation/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/html/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/pdf/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/rt/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/vtk/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/microscopy/index.umd.js' %}" crossorigin></script>
-  <script src="{% static 'js/ohif/dcmtag/index.umd.js' %}" crossorigin></script>
 
 
   <!-- PACS Server Connection -->
@@ -76,7 +68,15 @@
 
         // Extensions
         window.config.extensions = [
-          OHIFExtCornerstone, OHIFExtDicomHtml, OHIFExtDicomPdf, OHIFExtDicomMicroscopy];
+          window.OHIFViewer.OHIFExtCornerstone,
+          window.OHIFViewer.OHIFVTKExtension,
+          window.OHIFViewer.OHIFDicomHtmlExtension,
+          window.OHIFViewer.OHIFDicomMicroscopyExtension,
+          window.OHIFViewer.OHIFDicomPDFExtension,
+          window.OHIFViewer.OHIFDicomSegmentationExtension,
+          window.OHIFViewer.OHIFDicomRtExtension,
+          window.OHIFViewer.OHIFDicomTagBrowserExtension,
+        ];
 
         window.OHIFViewer.installViewer(
           // Configuration and container ID
