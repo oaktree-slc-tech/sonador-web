@@ -18,6 +18,7 @@ class DataService(GuruTokenModel):
     groups = models.ManyToManyField(Group, help_text='Groups authorized to access the data service via API requests.')
 
     class Meta:
+        app_label = 'visionaire'
         ordering = ('description',)
 
     def __str__(self, *args, **kwargs):
