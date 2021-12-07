@@ -137,6 +137,7 @@ class PacsImagingServerUserAuthorization(models.Model):
 		help_text='Resources that the user is authorized to access on the server.')
 	
 	class Meta:
+		app_label = 'visionaire'
 		unique_together = ('server', 'user')
 
 	def has_perm(self, resource, method, level):
@@ -156,6 +157,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		help_text='Resources that the user is authorized to access on the server')
 	
 	class Meta:
+		app_label = 'visionaire'
 		unique_together = ('server', 'group')
 		verbose_name = 'Group'
 		verbose_name_plural = 'Groups'
