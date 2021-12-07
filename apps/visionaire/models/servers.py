@@ -76,6 +76,7 @@ class PacsImagingServer(BaseServerModel):
         help_text='Connection scheme which should be used to communicate with the server within cluster/firewall (e.g., http/https)')
 
 	class Meta:
+		app_label = 'visionaire'
 		verbose_name = 'PACS Imaging Server'
 		verbose_name_plural = 'Imaging Servers'
 		ordering = ('default', 'active', 'name')
