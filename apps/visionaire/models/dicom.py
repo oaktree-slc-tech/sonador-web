@@ -58,6 +58,7 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 		help_text='Allow the modality to send data to the imaging server.')
 
 	class Meta:
+		app_label = 'visionaire'
 		verbose_name = 'DICOM Imaging Modality'
 		verbose_name_plural = 'DICOM Modalities'
 		ordering = ('server', 'name')
@@ -107,6 +108,7 @@ class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 		help_text='Password for the remote server user.')
 
 	class Meta:
+		app_label = 'visionaire'
 		verbose_name = 'Remote DICOMweb Server '
 		verbose_name_plural = 'DICOMweb Servers'
 		ordering = ('server', 'name')
