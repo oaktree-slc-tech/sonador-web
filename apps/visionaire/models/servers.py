@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 DICOM_IMAGE_WADO = 'wadors'
 DICOM_IMAGE_CHOICES = (
-	(DICOM_IMAGE_WADO, 'Wadors'),
+	(DICOM_IMAGE_WADO, 'WadoRS'),
 )
 
 
