@@ -1,4 +1,6 @@
 import posixpath
+from os.path import exists
+from google.oauth2 import service_account
 
 from .base import *
 
@@ -8,7 +10,7 @@ import largefiles.apisettings as ofapicodes
 siteconfig_storage = siteconfig.get('Storage', {})
 siteconfig_storage_type = siteconfig_storage.get('OBJECT_STORAGE_TYPE')
 
-if not siteconfig_storage_type in ofapicodes.API_OBJECT_STORAGE_SUPPORTED + (ofapicodes.API_OBJECT_STORAGE_S3_MINIO,):
+if not siteconfig_storage_type in ofapicodes.API_OBJECT_STORAGE_SUPPORTED + (ofapicodes.API_OBJECT_STORAGE_S3_MINIO, "GCS"):
 	raise ValueError('Unsupported object storage type: %r' % siteconfig_storage_type)
 
 OBJECT_STORAGE_ENABLED = True
@@ -16,7 +18,6 @@ OBJECT_STORAGE_TYPE = siteconfig_storage_type
 
 # Amazon S3 Storage Configuration
 if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_OBJECT_STORAGE_S3_MINIO):
-
 	siteconfig_s3 = siteconfig.get('S3', {})
 	AWS_S3_SERVICE_URL = siteconfig_s3.get(ofapicodes.AWS_S3_SERVICE_URL_DEFAULT)
 	AWS_S3_ACCESS_ID = siteconfig_s3.get(ofapicodes.AWS_S3_ACCESS_ID_DEFAULT)
@@ -25,7 +26,6 @@ if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_
 	AWS_S3_SECURITY_TOKEN = siteconfig_s3.get(ofapicodes.AWS_S3_SECURITY_TOKEN_DEFAULT)
 
 	# S3 Containers: Default, Static, Media
-	AWS_S3_CONTAINER = siteconfig_s3.get(ofapicodes.AWS_S3_CONTAINER_DEFAULT)
 	AWS_S3_STATIC_CONTAINER = siteconfig_s3.get('AWS_S3_STATIC_CONTAINER')
 	AWS_S3_MEDIA_CONTAINER = siteconfig_s3.get('AWS_S3_MEDIA_CONTAINER')
 
@@ -39,8 +39,6 @@ if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_
 		raise ValueError('Invalid S3 region: %r' % AWS_S3_REGION)
 
 	# Verify that settings for the AWS_S3_CONTAINERS are provided
-	if not AWS_S3_CONTAINER:
-		raise ValueError('Invalid default S3 container: %r' % AWS_S3_CONTAINER)
 	if not AWS_S3_STATIC_CONTAINER:
 		raise ValueError('Invalid static S3 container: %r' % AWS_S3_STATIC_CONTAINER)
 	if not AWS_S3_MEDIA_CONTAINER:
@@ -92,3 +90,26 @@ elif siteconfig_storage_type == ofapicodes.API_OBJECT_STORAGE_SWIFT:
 	# Application storage provider
 	DEFAULT_FILE_STORAGE = 'visionaire.storages.openstack_swift.OpenStackSwiftMediaFilesStorage'
 	STATICFILES_STORAGE = 'visionaire.storages.openstack_swift.OpenStackSwiftStaticFilesStorage'
+
+elif siteconfig_storage_type == 'GCS':
+
+	siteconfig_gcs = siteconfig.get('GCS', {})
+	GS_MEDIA_BUCKET = siteconfig_gcs.get('GS_MEDIA_BUCKET')
+	GS_STATIC_BUCKET = siteconfig_gcs.get('GS_STATIC_BUCKET')
+	GS_PROJECTID = siteconfig_gcs.get("GS_PROJECTID")
+	GS_CREDENTIALS_PATH = siteconfig_gcs.get("GS_CREDENTIALS_PATH")
+	GS_DEFAULT_ACL = siteconfig_gcs.get("GS_DEFAULT_ACL", "publicRead")
+
+	if not GS_MEDIA_BUCKET:
+		raise ValueError('No Media Bucket Provided')
+
+	if not GS_STATIC_BUCKET:
+		raise ValueError('No Static Bucket Provided')
+
+
+	# GS_CREDENTIALS = gsetting('GOOGLE_APPLICATION_CREDENTIALS')
+
+	MEDIA_URL = 'https://storage.googleapis.com/{}/'.format(GS_MEDIA_BUCKET)
+	STATIC_URL = 'https://storage.googleapis.com/{}/'.format(GS_STATIC_BUCKET)
+	DEFAULT_FILE_STORAGE = 'visionaire.storages.gcp.GoogleCloudMediaStorage'
+	STATICFILES_STORAGE = 'visionaire.storages.gcp.GoogleCloudStaticStorage'
