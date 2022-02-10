@@ -64,7 +64,7 @@ INTERNAL_IPS = tuple(siteconfig_site.get('INTERNAL_IPS', ('127.0.0.1',) ))
 VERIFY_SSL_CONNECTIONS = config_str2bool(siteconfig_site.get('VERIFY_SSL_CONNECTIONS', True))
 
 # Support multi-line strings in the application configuration for ALLOWED_HOSTS.
-# This works around a limitation in ArgoCD and Helm which will split lines in 
+# This works around a limitation in ArgoCD and Helm which will split lines in
 # config maps at 80 characters. When using multi-line allowed hosts in a site config,
 # they should be enclosed in triple quotes, with a comma at the end of the line.
 # Tabs may be used for readability.
@@ -140,6 +140,10 @@ SITE_CONNECT_SCHEME = siteconfig_connection.get('SITE_CONNECT_SCHEME')
 SITE_CONNECT_PORT = siteconfig_connection.get('SITE_CONNECT_PORT')
 SITE_CONNECT_SCHEME_DEVEL = siteconfig_connection.get('SITE_CONNECT_SCHEME_DEVEL')
 SITE_CONNECT_PORT_DEVEL = siteconfig_connection.get('SITE_CONNECT_PORT_DEVEL')
+SITE_CONNECT_MATCH_SITE_SCHEME = config_str2bool(
+    siteconfig_connection.get('SITE_CONNECT_MATCH_SITE_SCHEME'))
+SITE_CONNECT_MATCH_SITE_NETLOC = config_str2bool(
+    siteconfig_connection.get('SITE_CONNECT_MATCH_SITE_NETLOC'))
 BASE_URL = siteconfig_connection.get('BASE_URL')
 
 
