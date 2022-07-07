@@ -278,7 +278,7 @@ STATIC_URL = '/static/'
 
 # Authentication Settings
 siteconfig_auth = siteconfig.get('Authentication', {})
-AUTH_ENABLED = config_str2bool(siteconfig_auth.get('AUTH_ENABLED', False))
+AUTH_ENABLED = True
 SERVER_APITOKEN = siteconfig_auth.get('SERVER_APITOKEN')
 if AUTH_ENABLED and not SERVER_APITOKEN:
     raise ValueError('Authentication enabled for the server, but no API server token provided')

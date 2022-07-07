@@ -1,6 +1,8 @@
 import logging, six, copy, base64
 from six.moves.urllib import parse as urlparse
 
+from guru.apisettings import HTTP_CONTENT_JSON, HTTP_CONTENT_FORM_ENCODED
+
 from ....views import JSONFormApiView
 
 logger = logging.getLogger(__name__)
@@ -13,9 +15,20 @@ class SonadorServiceAuthorizationBaseView(JSONFormApiView):
 	formclass = None
 
 	def getRequestJsonData(self, *args, **kwargs):
-		'''	Retrieve the JSON data from the request
+		'''	Retrieve the data from the request. The service view is able
+			to work with JSON data encoded in the body of the request of form-encoded data.
 		'''
-		data = super(SonadorServiceAuthorizationBaseView, self).getRequestJsonData(*args, **kwargs)
+		# Parse request body to JSON
+		if HTTP_CONTENT_JSON.lower() in self.request.content_type.lower():
+			data = super(SonadorServiceAuthorizationBaseView, self).getRequestJsonData(*args, **kwargs)
+
+		# Retrieve form encoded parameters
+		elif HTTP_CONTENT_FORM_ENCODED.lower() in self.request.content_type.lower():
+			data = self.request.POST
+
+		# Unsupported authorization request
+		else:
+			raise NotImplementedError('Unable to retrieve data, invalid content type: %s' % self.request.content_type)
 
 		# Apply formdata transforms to transform request keys to the correct form field keys
 		fclass = self.get_form_class()
