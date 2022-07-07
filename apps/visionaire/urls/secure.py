@@ -49,7 +49,7 @@ urlpatterns_api = [
 	url(r'^data/service/(?P<objectid>[a-zA-Z0-9]+)/introspect/?$', 
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				allowed_http_methods_url_signature=('POST',),
-				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',), allow_formencoded=True,
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			DataServiceAuthorizationView.as_view()), 
 		name='data-service-token-introspect'),

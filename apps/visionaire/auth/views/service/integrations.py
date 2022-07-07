@@ -1,7 +1,9 @@
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.user import user_displayname
+from guru.helpers import str2bool
 from guru.helpers.utils.object import pick
 
+from ....apisettings import NGINX_AUTH_REQUEST_QUERY_PARAM
 from ...models.integrations import DataService
 from ...forms.integrations import DataServiceAuthorizationForm
 
@@ -15,6 +17,8 @@ class DataServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
     formclass = DataServiceAuthorizationForm
     dataservice_class = DataService
     dataservice_request_param = 'objectid'
+
+    nginx_auth_request_query_parameter_name = NGINX_AUTH_REQUEST_QUERY_PARAM
 
     def getDataService(self, *args, **kwargs):
         ''' Retrieve the data service associated with the request. After being retrieved from
@@ -38,6 +42,7 @@ class DataServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
     def get_data(self, *args, **kwargs):
         ''' Process the authorization request.
         '''
+        # Retrieve authorization data from keyword arguments
         adata = super(DataServiceAuthorizationView, self).get_data(*args, **kwargs)
 
         # Authorize token validation requests from oAuth2.0 data services
@@ -61,7 +66,9 @@ class DataServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
         # Deny requests from unknown users
         if not adata.get('granted'):
             adata.update({ 'granted': False })
-        
+
+        # Cache auth data
+        setattr(self.form, 'service_authdata', adata)
         return adata
     
     def post(self, request, *args, **kwargs):
@@ -71,6 +78,12 @@ class DataServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
         try: service = self.getDataService(*args, **kwargs)
         except self.dataservice_class.DoesNotExist as err:
             return guru_page_not_found(self.request, err)
-        
-        return super(DataServiceAuthorizationView, self).post(request, *args, **kwargs)
-    
+
+        # Set response code based on the query parameters: for NGINX authentication requests
+        # nginx-auth=true, return a 403 status code.
+        aresponse = super(DataServiceAuthorizationView, self).post(request, *args, **kwargs)
+        if hasattr(self.form, 'service_authdata') and not self.form.service_authdata.get('granted') \
+            and str2bool(request.GET.get(self.nginx_auth_request_query_parameter_name)):
+            aresponse.status_code = 403
+
+        return aresponse
