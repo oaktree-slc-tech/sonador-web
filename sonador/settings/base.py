@@ -302,3 +302,8 @@ CORS_ALLOWED_ORIGINS = siteconfig_site.get('CORS_ALLOWED_ORIGINS', [])
 CORS_ALLOWED_ORIGIN_REGEXES = siteconfig_site.get('CORS_ALLOWED_ORIGIN_REGEXES', [])
 CORS_ALLOW_CREDENTIALS = config_str2bool(siteconfig_site.get('CORS_ALLOW_CREDENTIALS', False))
 
+
+# Viewer Settings
+siteconfig_viewer = siteconfig.get('Viewer', {})
+VIEWER_EMPTY_STATE_MESSAGE = siteconfig_viewer.get('VIEWER_EMPTY_STATE_MESSAGE',
+    'Your user account is not associated with any imaging servers. Please contact your system administrator.')

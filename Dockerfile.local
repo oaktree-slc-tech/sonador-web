@@ -21,7 +21,9 @@ RUN npm install -g gulp yarn \
   && npm install gulp yarn && npm install 
 
 # Build OHIF and viewer components
-RUN cd /srv/www/sonador/sonador/ && gulp js
+RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce \
+  && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif && yarn install && yarn build:package \
+  && cd /srv/www/sonador/sonador/ && gulp deployOHIF
 
 # Install Apache Server and Configure Web Application
 ENV DEBIAN_FRONTEND=noninteractive

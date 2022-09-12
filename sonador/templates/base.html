@@ -40,6 +40,31 @@
   <script src="{% static 'js/ohif/index.umd.js' %}" crossorigin></script>
 
 
+  <!-- Empty State Message -->
+  {% if empty_state %}<script id="empty-state-message">{{ empty_state }}</script>{% endif %}
+
+
+  <!-- Configure User Interface Messages -->
+  <script>
+  // Ensure that Sonador element for window is defined
+  if (!window.sonador){
+    window.sonador = {};
+  }
+
+  // Populate Sonador index page settings
+  if (!window.sonador.home) {
+
+    // Add empty state message
+    var emptystate_element = document.getElementById('empty-state-message');
+    if (emptystate_element && !window.sonador.home) {
+      window.sonador.home = {
+        message: emptystate_element.innerHTML,
+      };
+    }
+  }
+  </script>
+
+
   <!-- PACS Server Connection -->
   {{ pacs_server|json_script:'pacs-connection' }}
 

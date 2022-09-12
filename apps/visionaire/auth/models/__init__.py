@@ -7,6 +7,7 @@ from django.contrib import auth
 from django.db import models
 from django.contrib.auth.models import User, Group
 
+import guru.apisettings as gapicodes
 from guru.models import GuruTokenModel
 from guru.helpers import site_fullurl
 from guru.helpers.compatability import guru_is_safe_url
@@ -16,6 +17,8 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
+from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
+	ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -130,6 +133,7 @@ class SocialUserAccount(GuruTokenModel):
 
 class PacsImagingServerUserAuthorization(models.Model):
 	'''	Permission model which authorizes a user to access the imaging resources of a PACS server.
+		TODO: Implement support for user permissions.
 	'''
 	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='user_authorizations')
 	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='server_authorizations')
@@ -145,7 +149,7 @@ class PacsImagingServerUserAuthorization(models.Model):
 
 			@returns bool: True if the user has the permission, False otherwise
 		'''
-		return True
+		return False
 
 
 class PacsImagingServerGroupAuthorization(models.Model):
@@ -155,6 +159,11 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
 	resource = models.CharField(max_length=2048, default='*',
 		help_text='Resources that the user is authorized to access on the server')
+
+	# Resource permissions
+	query = models.BooleanField(default=False, help_text='Submit DICOM resource queries to the server')
+	view = models.BooleanField(default=False, help_text='View images and other resources from the server')
+	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
 	
 	class Meta:
 		app_label = 'visionaire'
@@ -166,17 +175,35 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		return 'Group Authorization: %s for %s (%s:%s)' \
 			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
 	
-	def user_has_perm(self, user, resource, method, level):
+	def user_has_perm(self, user, resource, orthanc_id, method, level):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
 			@returns bool: True if the user has the permission, False otherwise
 		'''
+		logger.warning('permission request: user=%s resource="%s" orthanc-id="%s" method="%s" level="%s"' 
+			% (user, resource, orthanc_id, method, level))
+
 		# User has superuser permissions
 		if user.is_superuser:
 			return True
 		
 		# User is a member of the group
 		elif self.group.user_set.filter(username=user.username).exists():
-			return True
+
+			# Check system permissions
+			if level == ORTHANC_SYSTEM:		
+				
+				# Check query permissions
+				if method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES \
+						or method.lower() == gapicodes.HTTP_POST and resource == ORTHANC_DICOMWEB_STUDIES:
+					return self.query
+
+				# Check upload permission
+				elif method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
+					return self.upload
+
+			# Check view permissions
+			elif level in ORTHANC_IMAGING_RESOURCES:
+				return self.view
 
 		return False

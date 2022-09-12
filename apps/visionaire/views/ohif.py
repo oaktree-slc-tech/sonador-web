@@ -82,6 +82,9 @@ class OhifDicomViewer(TemplateView):
 	def get_context_data(self, *args, **kwargs):
 		context = super(OhifDicomViewer, self).get_context_data(*args, **kwargs)
 
+		# Empty state (first-run) message
+		context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
+
 		# Retrieve configuration for a specific image server
 		if self.kwargs.get(self.imageserver_objectid_url_param):
 			try:
@@ -91,7 +94,20 @@ class OhifDicomViewer(TemplateView):
 			except self.model.DoesNotExist as err:
 				raise Http404('Imaging server %s does not exist' % self.kwargs.get(self.imageserver_objectid_url_param))			
 		else:
-			context['pacs_server'] = [s.ohif_json for s in self.get_imaging_servers(*args, **kwargs)]
+			
+			def ohif_json(s):
+				'''	Retrieve OHIF configuration and permissions
+				'''
+				# Retrieve server configuration
+				sjson = s.ohif_json
+
+				# Add permissions for user
+				if getattr(self, 'request', None) and getattr(self.request, 'user', None):
+					sjson['perms'] = s.server_perms(self.request.user)
+
+				return sjson
+
+			context['pacs_server'] = [ohif_json(s) for s in self.get_imaging_servers(*args, **kwargs)]
 			context['pacs_config'] = reverse('ohif-config')
 
 		return context
