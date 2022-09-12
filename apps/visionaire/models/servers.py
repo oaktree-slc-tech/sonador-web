@@ -14,6 +14,7 @@ from secure.helpers import server_encrypt_data
 from microservices.models import BaseServerModel
 from microservices.control import server_controlurl
 
+from ..apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
 from ..helpers import API_ACCESS_SERVER_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,26 @@ class PacsImagingServer(BaseServerModel):
 		verbose_name_plural = 'Imaging Servers'
 		ordering = ('default', 'active', 'name')
 
-	def user_has_perm(self, user, resource, method, level):
+	def server_perms(self, user, perms=None):
+		'''	Determine which permissions the user has been granted to the server
+
+			@returns dict: dictionary containing the role and user permissions for the server
+		'''
+		# User role for the server, default permissions (set to default)
+		perms = perms or pick(user, ('is_superuser', 'is_staff'))
+		perms.update(dict((p, False) for p in SONADOR_PERMS))
+
+		# Determine permissions based on group membership
+		for perm in SONADOR_PERMS:
+
+			# User is granted a permission if they are a superuser or a part of a group with the provided permission.
+			# TODO: Add resource modifiers so that the scope of a grant can be narrowed.
+			perms[perm] = user.is_superuser \
+				or any(getattr(auth, perm, False) for auth in self.group_authorizations.filter(group__user=user))
+
+		return perms
+
+	def user_has_perm(self, user, resource, orthanc_id, method, level):
 		'''	Determine if the provided user has the needed permissions to perform the requested action.
 
 			@returns bool: True if the user has the permission, False otherwise
@@ -97,7 +117,7 @@ class PacsImagingServer(BaseServerModel):
 		
 		# Determine if the user is part of a group that has the requested permissions
 		for auth in self.group_authorizations.filter(group__user=user):
-			if auth.user_has_perm(user, resource, method, level):
+			if auth.user_has_perm(user, resource, orthanc_id, method, level):
 				return True
 				
 		return False

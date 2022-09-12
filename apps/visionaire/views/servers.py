@@ -18,8 +18,16 @@ class OhifApiObjectMixin(SonadorApiObjectMixin):
 		if instance and request.method == 'GET' \
 			and SONADOR_OUTPUT_TYPE_OHIF in request.GET.get(SONADOR_OUTPUT_TYPE_QUERY_PARAM, []) \
 			and hasattr(instance, 'ohif_json'):
-			return instance.ohif_json
 
+			# Base JSON properties for the server instance
+			sjson = instance.ohif_json			
+
+			# Determine which server permissions the user has access to
+			if not sjson.get('perms') and getattr(request, 'user', None):
+				sjson['perms'] = instance.server_perms(request.user)
+
+			return sjson
+			
 		return super(OhifApiObjectMixin, self).getModelJsonData(
 			instance, request, vargs=None, vkwargs=None)
 

@@ -79,7 +79,7 @@ class OrthancServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
 			# can be verified by calling the user_has_perm method of the imaging server model.			
 			if self.form.user == 'sonador' \
 				or (self.form.user.pk and self.form.server.user_has_perm(
-						self.form.user, self.form.cleaned_data.get('orthanc_id'), 
+						self.form.user, self.form.cleaned_data.get('uri'), self.form.cleaned_data.get('orthanc_id'),
 						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'))):
 				
 				# The Orthanc advanced authorization plugin expects a response that specifies
