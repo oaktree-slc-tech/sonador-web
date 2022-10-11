@@ -202,6 +202,10 @@ class PacsImagingServerGroupAuthorization(models.Model):
 				elif method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
 					return self.upload
 
+				# DICOMweb viewer permissions: metadata
+				elif method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource:
+					return self.view
+
 			# Check view permissions
 			elif level in ORTHANC_IMAGING_RESOURCES:
 				return self.view
