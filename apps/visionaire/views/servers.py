@@ -1,7 +1,11 @@
 from django.db.models import Q
 
+from guru.forms import create_modelform_class
+from core.forms import SonadorBaseForm
+
 from ..apisettings import SONADOR_OUTPUT_TYPE_OHIF, SONADOR_OUTPUT_TYPE_QUERY_PARAM
 from ..models.servers import PacsImagingServer
+from ..forms.servers import PacsImagingServerForm
 
 from .base import SonadorApiObjectMixin, SonadorApiObjectManagementView, SonadorApiRestView
 
@@ -36,6 +40,7 @@ class PacsImagingServerApiManagementView(OhifApiObjectMixin, SonadorApiObjectMan
 	'''	API object management view for PACS Imaging servers managed by Sonador.
 	'''
 	model = PacsImagingServer
+	modelform = PacsImagingServerForm
 
 	def getQueryset(self, *args, **kwargs):
 		'''	Retrieve the list of servers to which the user has access. For administrative
@@ -62,4 +67,5 @@ class PacsImagingServerApiRestView(OhifApiObjectMixin, SonadorApiRestView):
 	'''	API REST view for PACS Imaging servers managed by Sonador.
 	'''
 	model = PacsImagingServer
+	modelform = PacsImagingServerForm
 	
