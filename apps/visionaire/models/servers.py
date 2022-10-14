@@ -20,6 +20,10 @@ from ..helpers import API_ACCESS_SERVER_TOKEN
 logger = logging.getLogger(__name__)
 
 
+WADO_ROOT = 'wado/'
+DICOMWEB_ROOT = 'dicom-web/'
+QIDO_SUPPORTS_INCLUDE_DEFAULT = True
+
 DICOM_IMAGE_WADO = 'wadors'
 DICOM_IMAGE_CHOICES = (
 	(DICOM_IMAGE_WADO, 'Wadors'),
@@ -55,11 +59,11 @@ class ControlServer(object):
 class PacsImagingServer(BaseServerModel):
 	'''	PACS Imaging Server
 	'''
-	wado_root = models.CharField(verbose_name='Wado root', max_length=512, default='wado/',
+	wado_root = models.CharField(verbose_name='Wado root', max_length=512, default=WADO_ROOT,
 		help_text='URL path to use as the root of the server WADO interface')
-	dicomweb_root = models.CharField(verbose_name='DICOMweb root', max_length=512, default='dicom-web/',
+	dicomweb_root = models.CharField(verbose_name='DICOMweb root', max_length=512, default=DICOMWEB_ROOT,
 		help_text='URL path to use as the root of the server DICOMweb interface')
-	qido_supports_include = models.BooleanField(verbose_name='QIDO Includes', default=True,
+	qido_supports_include = models.BooleanField(verbose_name='QIDO Includes', default=QIDO_SUPPORTS_INCLUDE_DEFAULT,
 		help_text='QIDO interface supports include field')
 	thumbnail_rendering_method = models.CharField(verbose_name='Thumbnail Render Method',
 		max_length=64, default=DICOM_IMAGE_WADO, choices=DICOM_IMAGE_CHOICES,
