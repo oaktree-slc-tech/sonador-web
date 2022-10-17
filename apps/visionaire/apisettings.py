@@ -20,6 +20,7 @@ SONADOR_PERMS = (
 ORTHANC_INSTANCES = '/instances'
 ORTHANC_TOOLS_FIND = '/tools/find'
 ORTHANC_DICOMWEB_STUDIES = '/dicom-web/studies'
+ORTHANC_WADO = '/wado'
 
 ORTHANC_SYSTEM = 'system'
 ORTHANC_RESOURCE_PATIENT = 'patient'
