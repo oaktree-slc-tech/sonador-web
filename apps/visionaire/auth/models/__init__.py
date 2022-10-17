@@ -18,7 +18,8 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
 from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
-	ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES
+	ORTHANC_DICOMWEB_STUDIES, ORTHANC_WADO, \
+	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -202,8 +203,11 @@ class PacsImagingServerGroupAuthorization(models.Model):
 				elif method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
 					return self.upload
 
-				# DICOMweb viewer permissions: metadata
-				elif method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource:
+				# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
+				elif (method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource) \
+					or (ORTHANC_WADO in resource):
+
+					# Wado-URI or DICOMweb Study/Series Endpoint
 					return self.view
 
 			# Check view permissions
