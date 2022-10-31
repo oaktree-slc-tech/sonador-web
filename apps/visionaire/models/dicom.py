@@ -10,6 +10,8 @@ from guru.helpers.utils.object import pick, omit
 
 from secure.fields import EncryptedCharField
 
+from core.models import OrthancPropertiexMixin, OrthancImagingModalityBaseModel
+
 from microservices.models import BaseServerModel
 from microservices.control import server_controlurl, \
 	server_controloperation_put, server_controloperation_delete
@@ -21,41 +23,12 @@ from .servers import PacsImagingServer
 logger = logging.getLogger(__name__)
 
 
-class OrthancPropertiexMixin(object):
-
-	@property
-	def orthanc_name(self):
-		'''	Identifier used for the modality within Orthancs
-		'''
-		return slugify(self.name)
-
-
-class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
+class DicomImagingModality(OrthancImagingModalityBaseModel):
 	'''	Remote DICOM instance associated with a PACS server instance which is able
 		to connect, query, and retrieve data.
 	'''
 	server = models.ForeignKey(PacsImagingServer, on_delete=models.CASCADE,
 		help_text='Imaging server the modality is associated with.')
-	name = models.CharField(verbose_name='Modality Name', max_length=32, default=create_token,
-		help_text='Name by which the modality will be referred to within Orthanc.')
-	aet = models.CharField(verbose_name='AET', max_length=17,
-		help_text='Application Entity Title of the DICOM instance')
-	port = models.IntegerField(verbose_name='Port',
-		help_text='Port number of the modality instance')
-	host = models.CharField(verbose_name='Host', max_length=32,
-		help_text='IP Address of the modality')
-
-	acl_allow_echo = models.BooleanField(verbose_name='Respond to Echo Requests', default=True,
-		help_text='Allow the modality to send an "echo" request to the server. ' \
-			+ 'Echo requests are used to test connectivity between two DCM instances.')
-	acl_allow_find = models.BooleanField(verbose_name='Allow Metadata Find Requests (C-Find)', default=True,
-		help_text='Allow the modality to query the server using C-Find requests and fetch image metadata.')
-	acl_allow_get = models.BooleanField(verbose_name='Allow Get Requests (C-GET)', default=True,
-		help_text='Allow the modality to retrieve images using the C-GET protocol.')
-	acl_allow_move = models.BooleanField(verbose_name='Allow Query/Retrieve (C-Move)', default=True,
-		help_text='Allow the modality to initialize DICOM "move" requests (C-MOVE) to retrieve image data.')
-	acl_allow_store = models.BooleanField(verbose_name='Allow Modality to Write Data (C-Store)', default=True,
-		help_text='Allow the modality to send data to the imaging server.')
 
 	class Meta:
 		app_label = 'visionaire'
@@ -97,6 +70,7 @@ class DicomImagingModality(OrthancPropertiexMixin, GuruTokenModel):
 		return odata
 
 
+
 class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 	'''	Remote DICOMweb instance associated with a PACS server instance which is able
 		to connect, query, and retrieve data.
@@ -106,6 +80,8 @@ class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 	username = EncryptedCharField('Remote Username', max_length=256)
 	password = EncryptedCharField('Remote Server Password', max_length=1024,
 		help_text='Password for the remote server user.')
+
+	dicomweb_urlroot = 'dicom-web/'
 
 	class Meta:
 		app_label = 'visionaire'
@@ -139,6 +115,6 @@ class RemoteDICOMwebServer(OrthancPropertiexMixin, BaseServerModel):
 
 	@property
 	def json(self):
-		odata = { 'server': self.server.pk, 'dicomweb_url': server_controlurl(self, 'dicom-web/'), 'orthanc_name': self.orthanc_name, }
+		odata = { 'server': self.server.pk, 'dicomweb_url': server_controlurl(self, self.dicomweb_urlroot), 'orthanc_name': self.orthanc_name, }
 		odata.update(pick(self, [f.name for f in self._meta.fields if not f.name in odata]))
 		return omit(odata, ('default',))

@@ -7,7 +7,7 @@ from ..models.servers import PacsImagingServer, \
 
 
 class PacsImagingServerForm(SonadorBaseForm):
-	'''	Form instance for creating and updating Sonador Imaging Servers
+	'''	Form class for creating and updating Sonador Imaging Servers
 	'''
 	uid = forms.CharField(label='Server ID', required=False, 
 		help_text='Unique ID to be used for the server. (Only available when creating a server instance.)')

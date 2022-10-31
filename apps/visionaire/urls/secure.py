@@ -18,7 +18,7 @@ from ..views.integrations import DataServiceApiRestView
 from ..auth.models import DataService
 from ..auth.views.service import SecureApiLoginView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
-from ..auth.helpers import api_permission_user_readonly_admin_modify
+from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify
 
 
 urlpatterns_api = [
@@ -64,7 +64,7 @@ urlpatterns_api = [
 			PacsImagingServerApiManagementView.as_view()), 
 		name='pacs-server-management'),
 	url(r'^pacs/(?P<objectid>[a-zA-Z0-9]+)/?$', 
-		api_request(api_permission_user_readonly_admin_modify,
+		api_request(api_permission_imageserver_user_readonly_admin_modify,
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerApiRestView.as_view()), 

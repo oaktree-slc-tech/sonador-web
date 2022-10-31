@@ -6,3 +6,4 @@ class VisionaireAppConfig(AppConfig):
 	'''
 	name = 'visionaire'
 	default_auto_field = 'django.db.models.BigAutoField'
+
