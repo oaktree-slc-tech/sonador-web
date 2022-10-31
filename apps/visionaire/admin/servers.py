@@ -17,12 +17,32 @@ class PacsImagingServerGroupAuthorizationInline(admin.TabularInline):
 	autocomplete_fields = ('group',)
 
 
+class DicomModalityAdminInline(admin.TabularInline):
+	model = DicomImagingModality
+	extra = 0
+
+
+class RemoteDICOMWebServerAdminInline(admin.StackedInline):
+	model = RemoteDICOMwebServer
+	extra = 0
+	exclude = ('default',)
+	fields = (
+		'name',
+		('scheme', 'hostname', 'port'),
+		'description',
+		('username', 'password'),
+	)
+
+
 class PacsImagingServerAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing PACS servers from Sonador
 	'''
 	list_display = ('server_id', 'name', 'active', 'hostname',  'port', 'description',
 		'admin_pacs_viewer', 'admin_pacs_server_admin', 'admin_pacs_server_dicomweb')
-	inlines = (PacsImagingServerGroupAuthorizationInline,)
+	list_filter = ('active',)
+	search_fields = ('name', 'hostname', 'description')
+	
+	inlines = (PacsImagingServerGroupAuthorizationInline, DicomModalityAdminInline, RemoteDICOMWebServerAdminInline)
 
 	def server_id(self, obj):
 		return obj.pk
@@ -62,19 +82,3 @@ class ImagingServerAdminMixin(object):
 			rfields = ('server', 'name') + tuple(rfields)
 
 		return rfields
-
-class DicomImagingModalityAdmin(ImagingServerAdminMixin, admin.ModelAdmin):
-	list_display = ('server', 'name', 'aet', 'host', 'port')
-	list_filter = ('server',)
-
-
-class RemoteDICOMWebServerAdmin(ImagingServerAdminMixin, admin.ModelAdmin):
-	list_display = ('server', 'remoteserver_id', 'name', 'hostname', 'port', 'description')
-	list_filter = ('server',)
-	exclude = ('default',)
-
-	def remoteserver_id(self, obj):
-		return obj.pk
-	remoteserver_id.short_description = 'Remote Server ID'
-
-

@@ -1,3 +1,5 @@
+from django.db import models
+
 from django.shortcuts import reverse
 from django.utils.html import format_html
 from django.contrib import admin
@@ -12,13 +14,14 @@ from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthor
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
 
 
-class ProxyApiAccess(ApiAccess):
+class SonadorApiAccess(ApiAccess):
 	'''	Proxy model which allows for the API access (access ID/secret) to appear in the same model
 		as groups and auth servers
 	'''
+	description = models.CharField(blank=True, null=True, max_length=1024)
+
 	class Meta:
 		app_label = 'auth'
-		proxy = True
 		verbose_name = 'API Access'
 		verbose_name_plural = 'Access IDs/Secret Keys'
 	
@@ -26,13 +29,14 @@ class ProxyApiAccess(ApiAccess):
 		return '%s... (user=%s)' % (self.access_id[:15], self.user.username)
 
 
-class ProxyApiAccessToken(ApiAccessToken):
+class SonadorApiAccessToken(ApiAccessToken):
 	'''	Proxy model which allows for API access tokens to appear in the same model
 		as groups and auth servers.
 	'''
+	description = models.CharField(blank=True, null=True, max_length=1024)
+
 	class Meta:
 		app_label = 'auth'
-		proxy = True
 		verbose_name = 'API Access Token'
 		verbose_name_plural = 'API Access Tokens'
 

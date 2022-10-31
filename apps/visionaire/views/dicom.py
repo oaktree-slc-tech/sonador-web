@@ -9,7 +9,9 @@ class PacsImagingServerChildObjectMixin(object):
 	'''	Mixin object which provides methods for retrieving objects associated with
 		an imaging server.
 	'''
-	request_serverid_fieldname = 'serverid'
+	parent_model = PacsImagingServer
+	parent_fieldname = 'server'
+	request_parent_fieldname = 'serverid'
 
 	def getServer(self, request=None, vargs=None, vkwargs=None):
 		'''	Retrieve the imaging server the child objects are associated with
@@ -20,7 +22,7 @@ class PacsImagingServerChildObjectMixin(object):
 		if vkwargs.get('server'): return vkwargs.get('server')
 
 		# Retrieve server from database, cache a copy
-		server = PacsImagingServer.objects.get(pk=vkwargs.get(self.request_serverid_fieldname))
+		server = self.parent_model.objects.get(pk=vkwargs.get(self.request_parent_fieldname))
 		vkwargs['server'] = server
 
 		return server
@@ -29,7 +31,7 @@ class PacsImagingServerChildObjectMixin(object):
 		'''	Set the server instance for the object as part of the save routine.
 		'''
 		server = self.getServer(request=request, vargs=vargs, vkwargs=vkwargs)
-		setattr(forminstance.instance, 'server', server)
+		setattr(forminstance.instance, self.parent_fieldname, server)
 
 	def saveObjectData(self, request, forminstance, vargs=None, vkwargs=None):
 		'''	Save the object data via the forminstance and attach the server associated with the view
@@ -53,7 +55,9 @@ class PacsImagingServerChildObjectManagementView(PacsImagingServerChildObjectMix
 		'''
 		queryset = super(PacsImagingServerChildObjectManagementView, self).getQueryset(
 			request=request, vargs=vargs, vkwargs=vkwargs)
-		return queryset.filter(server=self.getServer(request=request, vargs=vargs, vkwargs=vkwargs))
+		return queryset.filter(**{
+				self.parent_fieldname: self.getServer(request=request, vargs=vargs, vkwargs=vkwargs),
+			})
 
 
 class PacsImagingServerChildObjectRestView(PacsImagingServerChildObjectMixin, SonadorApiRestView):
@@ -65,4 +69,4 @@ class PacsImagingServerChildObjectRestView(PacsImagingServerChildObjectMixin, So
 		server = self.getServer(request=request, vargs=vargs, vkwargs=vkwargs)
 		omanager = super(PacsImagingServerChildObjectRestView, self).getObjectManager(
 			request=request, vargs=vargs, vkwargs=vkwargs)
-		return omanager.filter(server=server)
+		return omanager.filter(**{ self.parent_fieldname: server })

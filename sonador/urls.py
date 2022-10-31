@@ -17,7 +17,10 @@ from visionaire.auth.views import LoginView, oAuth2TokenAuthorizationView, oAuth
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
 from visionaire.views import OhifConfigView, OhifDicomViewer
 from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
-from visionaire.urls.secure import urlpatterns_api as secure_urlpatterns_api
+from visionaire.urls.secure import urlpatterns_api as visionaire_urlpatterns_api
+
+from gateway import gateway_app_name
+from gateway.urls import urlpatterns_api as gateway_urlpatterns_api
 
 
 urlpatterns = [
@@ -32,24 +35,26 @@ if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDI
 	urlpatterns.extend(static(gsetting('MEDIA_URL'), document_root=gsetting('MEDIA_ROOT')))
 
 # Accounts: Login, logout, service authorization
-if gsetting('AUTH_ENABLED'):
-	urlpatterns.extend([
+urlpatterns.extend([
 
-        # Visionaire API
-        url(r'^visionaire/api/', include((secure_urlpatterns_api, visionaire_app_name), namespace='visionaire-api')),
+    # Visionaire API
+    url(r'^visionaire/api/', include((visionaire_urlpatterns_api, visionaire_app_name), namespace='visionaire-api')),
 
-        # Content Views
-        url(r'^accounts/logout/success/?$', 
-            TemplateView.as_view(template_name='content/logout.html'), name='logout-success'),
-        
-        # oAuth/OpenID
-        url(r'^auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
-		url(r'^accounts/login/?$', LoginView.as_view(), name='login'),
-    	url(r'^accounts/logout/?$', auth_views.LogoutView.as_view(), name='logout'),
+    # Gateway API
+    url(r'^gateway/api/', include((gateway_urlpatterns_api, gateway_app_name), namespace='gateway-api')),
 
-        # Service Authorization Endpoints; Orthanc
-        url(r'^auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
-	])
+    # Content Views
+    url(r'^accounts/logout/success/?$', 
+        TemplateView.as_view(template_name='content/logout.html'), name='logout-success'),
+    
+    # oAuth/OpenID
+    url(r'^auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
+	url(r'^accounts/login/?$', LoginView.as_view(), name='login'),
+	url(r'^accounts/logout/?$', auth_views.LogoutView.as_view(), name='logout'),
+
+    # Service Authorization Endpoints; Orthanc
+    url(r'^auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
+])
 
 
 urlpatterns.extend([

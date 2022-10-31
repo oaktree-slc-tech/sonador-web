@@ -3,6 +3,8 @@ from django.apps import apps
 
 from guru.apisettings import HTTP_GET
 
+from ..models.servers import PacsImagingServer
+
 
 def api_permission_user_identity(user, request, vargs, vkwargs, 
 		user_url_param='objectid', user_url_type=int):
@@ -34,4 +36,21 @@ def api_permission_user_readonly_admin_modify(user, request, vargs, vkwargs):
 	if not (user.is_superuser or user.is_staff):
 		return 	api_permission_user_readonly(user, request, vargs, vkwargs)
 	
-	return user.is_active and user.is_authenticated and (user.is_superuser or user.is_staff)
+	return user.is_active and user.is_authenticated and user.is_superuser
+
+
+def api_permission_imageserver_user_readonly_admin_modify(user, request, vargs, vkwargs,
+		imageserver_model=PacsImagingServer, server_url_param='objectid'):
+	'''	Permission helper for api_request which prevents access to imaging server instances
+		for which a user is not authorized. 
+	'''
+	# Authorize all admin access requests
+	if user.is_active and user.is_authenticated and user.is_superuser:
+		return True
+
+	# Check user access to image server
+	if api_permission_user_readonly_admin_modify(user, request, vargs, vkwargs):
+		return imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).filter(
+			Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
+	
+	return False

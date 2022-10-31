@@ -203,6 +203,7 @@ INSTALLED_APPS = [
 
     # Sonador
     'visionaire',
+    'gateway',
 ]
 
 MIDDLEWARE = [

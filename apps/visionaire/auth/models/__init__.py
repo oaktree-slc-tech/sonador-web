@@ -169,8 +169,8 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	class Meta:
 		app_label = 'visionaire'
 		unique_together = ('server', 'group')
-		verbose_name = 'Group'
-		verbose_name_plural = 'Groups'
+		verbose_name = 'Group Permission'
+		verbose_name_plural = 'Server Group Permissions'
 
 	def __str__(self, *args, **kwargs):
 		return 'Group Authorization: %s for %s (%s:%s)' \

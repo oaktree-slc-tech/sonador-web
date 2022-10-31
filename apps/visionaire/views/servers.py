@@ -59,7 +59,7 @@ class PacsImagingServerApiManagementView(OhifApiObjectMixin, SonadorApiObjectMan
 			return self.model.objects.filter(active=True).filter(
 				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user))
 
-		# For unauthenticated users, return an empty queryset
+		# Return empty queryset to prevent data leakage
 		return queryset.none()
 
 
