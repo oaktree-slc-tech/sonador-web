@@ -18,7 +18,7 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
 from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
-	ORTHANC_DICOMWEB_STUDIES, ORTHANC_WADO, \
+	ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
 	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES
 from .integrations import DataService
 
@@ -195,8 +195,9 @@ class PacsImagingServerGroupAuthorization(models.Model):
 			if level == ORTHANC_SYSTEM:		
 				
 				# Check query permissions
-				if method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES \
-						or method.lower() == gapicodes.HTTP_POST and resource == ORTHANC_DICOMWEB_STUDIES:
+				if (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
+						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
+						or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES):
 					return self.query
 
 				# Check upload permission
