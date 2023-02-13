@@ -49,7 +49,6 @@ class Command(GuruBaseManagementCommand):
         default Orthanc imaging server.
     """
     parser_user_arguments = ('username', 'first_name', 'last_name', 'email', 'password')
-    parser_server_arguments = ('server', 'server_name', 'server_description', 'server_scheme', 'server_hostname', 'server_port')
     parser_sonador_arguments = ('sonador_hostname', 'sonador_description')
 
     def add_arguments(self, parser):
@@ -73,35 +72,6 @@ class Command(GuruBaseManagementCommand):
         parser.add_argument('--apitoken-value', dest='apitoken_value', default=SECURE_API_APITOKEN, 
             help='Secure access token for the account. May also be provided via the SECURE_API_APITOKEN environment variable.')
 
-        # Orthanc server parameters
-        parser.add_argument('--server', dest='server', default=SONADOR_IMAGING_SERVER,
-            help='Imaging server unique identifier. May also be provided via the SONADOR_IMAGING_SERVER environment variable.')
-        parser.add_argument('--server-name', dest='server_name', default=SONADOR_IMAGING_SERVER_NAME,
-            help='Imaging server name. May also be provided via the SONADOR_IMAGING_SERVER_NAME environment variable.')
-        parser.add_argument('--server-description', dest='server_description', default=SONADOR_IMAGING_SERVER_DESCRIPTION,
-            help='Imaging server description. May also be provided via the SONADOR_IMAGING_SERVER_DESCRIPTION environment variable.')
-        parser.add_argument('--server-scheme', dest='server_scheme', default=SONADOR_IMAGING_SERVER_SCHEME,
-            help='Imaging server connection scheme. May also be provided via the SONADOR_IMAGING_SERVER_SCHEME environment variable.')
-        parser.add_argument('--server-hostname', dest='server_hostname', default=SONADOR_IMAGING_SERVER_HOSTNAME,
-            help='Imaging server hostname. May also be provided via the SONADOR_IMAGING_SERVER_HOSTNAME environment variable.')
-        parser.add_argument('--server-port', dest='server_port', default=SONADOR_IMAGING_SERVER_PORT,
-            help='Imaging server port. May also be provided via the SONADOR_IMAGING_SERVER_PORT environment variable.')
-        parser.add_argument('--server-internal-scheme', type=six.text_type, required=False, dest='internal_scheme',
-            default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_SCHEME'),
-            help='URL scheme to be used when connecting to the server within the cluster/firewall. Can '
-                + 'also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_SCHEME environment variable.')
-        parser.add_argument('--server-internal-hostname', type=six.text_type, required=False, dest='internal_hostname',
-            default=os.environ.get('SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME'),
-            help='Fully qualified domain for the imaging server to be used within the cluster/firewall. '
-                + 'Can also be provided as the SONADOR_IMAGING_SERVER_INTERNAL_HOSTNAME environment variable.')
-        parser.add_argument('--server-internal-port', dest='internal_port', 
-            default=int(SONADOR_IMAGING_SERVER_INTERNAL_PORT) if SONADOR_IMAGING_SERVER_INTERNAL_PORT else None,
-            help='Server port to use within the cluster/firewall. Can also be provided as the '
-                + 'SONADOR_IMAGING_SERVER_INTERNAL_PORT environment variable.')
-        parser.add_argument('--server-default', dest='server_default', default=str2bool(SONADOR_IMAGING_SERVER_DEFAULT),
-            help='Should the server be specified as the default for the Sonador instance. May also be provided via the SONADOR_IMAGING_SERVER_DEFAULT '
-                + 'environment variable.')
-
         # Sonador server parameters
         parser.add_argument('--sonador-hostname', dest='sonador_hostname', default=SONADOR_SERVER_HOSTNAME,
             help='Hostname for the Sonador server instance. Added to the site record for the instance.')
@@ -114,9 +84,6 @@ class Command(GuruBaseManagementCommand):
         if any(options.get(a) for a in self.parser_user_arguments) and any(options.get(a) is None for a in self.parser_user_arguments):
             raise CommandError('Invalid user arguments. Please ensure that all user arguments are set '
                 + 'via the environment variables or CLI options, refer to --help for details.')
-        if any(options.get(a) for a in self.parser_server_arguments) and any(options.get(a) is None for a in self.parser_server_arguments):
-            raise CommandError('Invalid server arguments. Please ensure that all server arguments are '
-                + 'set via the environment variables or CLI options, refer to --help for details.')
         if any(options.get(a) for a in self.parser_sonador_arguments) and any(options.get(a) is None for a in self.parser_sonador_arguments):
             raise CommandError('Invalid Sonador hostname or description. Please ensure that all Sonador arguments are '
                 + 'set via the environment variables or CLI options, refer to --help for details.')
@@ -139,69 +106,6 @@ class Command(GuruBaseManagementCommand):
             call_command('migrate')
         except Exception as err:
             raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
-
-
-    def imagingServerArgs(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
-            internal_scheme=None, internal_hostname=None, internal_port=None):
-        ''' Determine arguments for imaging server operation (create/update)
-        '''
-        # Server ID, name, description, and connection params
-        args = (
-            '--server', f'{server}',
-            '--server-name', f'{server_name}',
-            '--server-description', f'{server_description}',
-            '--server-scheme', f'{server_scheme}',
-            '--server-hostname', f'{server_hostname}',
-            '--server-port', f'{server_port}'
-        )
-
-        # Internal connection options
-        if internal_scheme:
-            args += ('--server-internal-scheme', f'{internal_scheme}')
-        if internal_hostname:
-            args += ('--server-internal-hostname', f'{internal_hostname}')
-        if internal_port:
-            args += ('--server-internal-port', f'{internal_port}')
-
-        # Toggle whether the server should be Sonador default
-        if server_default:
-            args += ('--set-default',)
-        elif server_default == False:
-            args += ('--unset-default',)
-
-        return args
-
-    def createImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
-            internal_scheme=None, internal_hostname=None, internal_port=None):
-        ''' Create a Sonador Imaging server with the provided arguments
-        '''
-        try:
-            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
-                internal_scheme=internal_scheme, internal_hostname=internal_hostname, internal_port=internal_port)
-            call_command(f'imaging-server', 'create', *args)
-        except Exception as err:
-            raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
-
-    def updateImagingServer(self, server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
-            internal_scheme=None, internal_hostname=None, internal_port=None):
-        ''' Update an existing server definition
-        '''
-        try:
-            args = self.imagingServerArgs(server, server_name, server_description, server_scheme, server_hostname, server_port, server_default,
-                internal_scheme=internal_scheme, internal_hostname=internal_hostname, internal_port=internal_port)
-            call_command(f'imaging-server', 'update', *args)
-        except Exception as err:
-            raise CommandError(f'Unable to update imaging server, an error occurred: {err}')
-
-    def init_imaging_server(self, *args, **kwargs):
-        ''' Initialize (or update) the development server
-        '''
-        try: self.createImagingServer(*args, **kwargs)
-        except Exception as err:
-            try: self.updateImagingServer(*args, **kwargs)
-            except Exception as err:
-                raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
-
 
     def handle(self, *args, **options):
         ''' Initialize the imaging environment with the specified options
@@ -262,11 +166,6 @@ class Command(GuruBaseManagementCommand):
             except Exception as err:
                 raise CommandError('Unable to configure Sonador site hostname and description.\nID=%s hostname=%s description="%s"'
                     % (gsetting('SITE_ID'), options.get('sonador_hostname'), options.get('sonador_description')))
-
-        # Initialize/update development server instance
-        self.init_imaging_server(*args, **pick(options, 
-            ('server', 'server_name', 'server_description', 'server_scheme', 'server_hostname', 'server_port', 'server_default',
-                'internal_scheme', 'internal_hostname', 'internal_port')))
 
         # Check on existing OHIF viewer on the directory and if doesn't collectstatic
         if not staticfiles_storage.exists(OHIF_BUCKET_PATH):
