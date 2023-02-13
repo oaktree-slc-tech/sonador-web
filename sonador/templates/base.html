@@ -93,15 +93,20 @@
 
         // Extensions
         window.config.extensions = [
-          window.OHIFViewer.OHIFExtCornerstone,
-          window.OHIFViewer.OHIFVTKExtension,
           window.OHIFViewer.OHIFDicomHtmlExtension,
           window.OHIFViewer.OHIFDicomMicroscopyExtension,
           window.OHIFViewer.OHIFDicomPDFExtension,
           window.OHIFViewer.OHIFDicomSegmentationExtension,
           window.OHIFViewer.OHIFDicomRtExtension,
-          window.OHIFViewer.OHIFDicomTagBrowserExtension,
           window.OHIFViewer.OHIFDicomECGExtension,
+
+          // 3D Visualization 
+          window.OHIFViewer.OHIFVTKExtension,
+          window.OHIFViewer.OHIF3DVolumeViewerExtension,
+          window.OHIFViewer.OHIFM3DViewerExtension,
+
+          // Metadata
+          window.OHIFViewer.OHIFDicomTagBrowserExtension,
         ];
 
         window.OHIFViewer.installViewer(

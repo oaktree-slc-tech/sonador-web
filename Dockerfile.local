@@ -14,15 +14,18 @@ RUN export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && pip3 install --timeout 300 -r requirements.txt
 
 # Install Node.js runtime and components
-RUN nodeenv --node=12.16.3 /opt/nodejs/
+RUN nodeenv --node=16.18.0 /opt/nodejs/
 ENV PATH=/opt/nodejs/bin:${PATH}
-RUN npm install -g gulp yarn \
+RUN npm install -g gulp yarn@1.22.19 \
+  && yarn config set @sonador:registry https://code.oak-tree.tech/api/v4/projects/335/packages/npm/ -g \
+  && npm config set @sonador:registry https://code.oak-tree.tech/api/v4/projects/335/packages/npm/ -g \
   && cd /srv/www/sonador/sonador/ \
-  && npm install gulp yarn && npm install 
+  && npm install gulp yarn@1.22.19 && npm install
 
 # Build OHIF and viewer components
 RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce \
-  && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif && yarn install && yarn build:package \
+  && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif \
+  && yarn install && yarn build:package \
   && cd /srv/www/sonador/sonador/ && gulp deployOHIF
 
 # Install Apache Server and Configure Web Application

@@ -9,6 +9,7 @@ var rename = require('gulp-rename');
 var merge = require('merge-stream');
 var shell = require('gulp-shell');
 var merge = require('merge-stream');
+var child_process = require('child_process');
 var exec = require('child_process').exec;
 var execSync = require('child_process').execSync;
 var fs = require('fs');
@@ -109,7 +110,7 @@ function jsBuildOHIFViewer(done){
 
 				// Execute Foundation build script
 				console.info('Build OHIF with default options');
-				execSync('yarn build:package');
+				execSync('yarn build:package', { maxBuffer: 209715200 });
 				console.info('Build of OHIF completed successfully');
 
 				process.chdir(sonador_rootdir);
