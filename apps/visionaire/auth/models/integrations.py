@@ -37,8 +37,8 @@ class DataService(GuruTokenModel):
         if self.acl_allow_staff and user.is_staff:
             return True
         
-        # Determine if the user is part of a group that has the requested permissions
-        for auth in self.groups.filter(group__user):
+        # Determine if the user is part of a group that has the requested permissions.
+        for auth in self.groups.filter(user=user):
             return True
         
         return False

@@ -2,6 +2,9 @@ from django.shortcuts import reverse
 from django.db.models import Q
 from django.views.generic.base import TemplateView
 from django.http import Http404
+from django.templatetags.static import static
+
+from django.contrib.sites.shortcuts import get_current_site
 
 from guru.helpers import gsetting, site_fullurl
 from guru.errors import ConfigurationError
@@ -11,6 +14,7 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_C
 from ..auth.models import SocialAuthorizationServer, SocialUserAccount
 from ..auth.views.base import get_default_authserver, OpenIDAuthServerMixin
 from ..models import PacsImagingServer
+from ..models.branding import SonadorSite
 
 from .base import SONADOR_OHIF_CLIENTID, SONADOR_OHIF_SITE, SONADOR_OHIF_APP, SONADOR_CONFIG_SUPPORTED
 
@@ -28,6 +32,15 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		'''	OHIF viewer settings and components	
 		'''
 		context = super(OhifConfigView, self).get_context_data(**kwargs)
+
+		# Retrieve currently active site and any associated custom branding
+		site = get_current_site(self.request)
+		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		context['site'] = ssite if ssite else site
+		if ssite and ssite.logo:
+			context['logo'] = ssite.logo.url
+		else:
+			context['logo'] = static('images/sonador-logo.ng.svg')
 
 		# If enabled, add the authentication endpoint
 		if gsetting('AUTH_ENABLED'):
@@ -81,6 +94,15 @@ class OhifDicomViewer(TemplateView):
 
 	def get_context_data(self, *args, **kwargs):
 		context = super(OhifDicomViewer, self).get_context_data(*args, **kwargs)
+
+		# Retrieve currently active site and any associated custom branding
+		site = get_current_site(self.request)
+		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		context['site'] = ssite if ssite else site
+		if ssite and ssite.logo:
+			context['logo'] = ssite.logo.url
+		else:
+			context['logo'] = static('images/sonador-logo.ng.svg')
 
 		# Empty state (first-run) message
 		context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')

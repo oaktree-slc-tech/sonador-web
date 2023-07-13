@@ -7,7 +7,7 @@
   "servers": { "dicomWeb": null },
   "fuzzyMatching": false,
 
-  "branding": { "logo": "{% static 'images/sonador-logo.ng.svg' %}"},
+  {% if logo %}"branding": { "logo": "{{ logo }}"},{% endif %}
   "staticUrl": "{% static 'js' %}",
 
   {% if oauth_endpoint %}
