@@ -15,7 +15,7 @@ from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServ
 
 
 class SonadorApiAccess(ApiAccess):
-	'''	Proxy model which allows for the API access (access ID/secret) to appear in the same model
+	'''	Subclass model which allows for the API access (access ID/secret) to appear in the same model
 		as groups and auth servers
 	'''
 	description = models.CharField(blank=True, null=True, max_length=1024)
@@ -30,7 +30,7 @@ class SonadorApiAccess(ApiAccess):
 
 
 class SonadorApiAccessToken(ApiAccessToken):
-	'''	Proxy model which allows for API access tokens to appear in the same model
+	'''	Subclass model which allows for API access tokens to appear in the same model
 		as groups and auth servers.
 	'''
 	description = models.CharField(blank=True, null=True, max_length=1024)

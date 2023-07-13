@@ -11,11 +11,14 @@ from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
 from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization, \
 	DataService
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer 
+from ..models.branding import SonadorSite
 
 from .auth import SonadorApiAccess, SonadorApiAccessToken, ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin, \
 	ProxyDataService, DataServiceAdmin
 from .servers import PacsImagingServerAdmin, ImagingServerAdminMixin
 
+
+# API Management
 
 class UserLabelMixin(object):
 	search_fields = ('user__username', 'user__first_name', 'user__last_name', 'user__email')
@@ -42,11 +45,23 @@ class SonadorApiAccessAdmin(UserLabelMixin, ApiAccessAdmin):
 	list_display = ('user', 'user_display', 'user_email', 'admin_masked_access_id', 'description', 'ctime')
 
 
+# Site Managements
+
+class SonadorSitesAdmin(admin.ModelAdmin):
+	'''	Model admin instance for managing Sonador site instances	
+	'''
+	list_display = ('id', 'domain', 'domain')
+
+
 # Authorization and authentication
 admin.site.register(SonadorApiAccessToken, SonadorApiAccessTokenAdmin)
 admin.site.register(ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin)
 admin.site.register(SonadorApiAccess, SonadorApiAccessAdmin)
 admin.site.register(ProxyDataService, DataServiceAdmin)
+
+
+# Site admin (replaces built-in Django Site Admin)
+admin.site.register(SonadorSite, SonadorSitesAdmin)
 
 
 admin.site.register(PacsImagingServer, PacsImagingServerAdmin)

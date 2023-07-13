@@ -86,5 +86,5 @@ class SonadorS3MediaFilesStorage(S3Boto3Storage):
         bucket = super(SonadorS3MediaFilesStorage, self)._get_or_create_bucket(name)
         return bucket
         
-    def _create_bucket(self, name, bucket):
-        super(SonadorS3MediaFilesStorage, self)._create_bucket(*args, **kwargs)
+    def _create_bucket(self, name, bucket, *args, **kwargs):
+        super(SonadorS3MediaFilesStorage, self)._create_bucket(name, bucket, *args, **kwargs)
