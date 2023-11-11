@@ -19,7 +19,8 @@ from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE
 
 from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
 	ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
-	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES
+	ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES, \
+	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,10 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	query = models.BooleanField(default=False, help_text='Submit DICOM resource queries to the server')
 	view = models.BooleanField(default=False, help_text='View images and other resources from the server')
 	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
+	modify = models.BooleanField(default=False, help_text='Modify DICOM resources on the server')
+	remove = models.BooleanField(default=False, help_text='Remove DICOM resources from the server')
+	comment_edit = models.BooleanField(verbose_name='Manage Comments', default=False, help_text='Add, edit, or remove resource comments')
+	comment_view = models.BooleanField(verbose_name='View Comments', default=False, help_text='View resource comments')
 	
 	class Meta:
 		app_label = 'visionaire'
@@ -197,7 +202,10 @@ class PacsImagingServerGroupAuthorization(models.Model):
 				# Check query permissions
 				if (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
 						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
-						or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES):
+						or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES)) \
+						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_TOOLS_FIND) \
+						or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES) \
+						or (method.lower() == gapicodes.HTTP_GET.lower() and resource in ORTHANC_QUERY_RESOURCES):
 					return self.query
 
 				# Check upload permission
@@ -211,8 +219,24 @@ class PacsImagingServerGroupAuthorization(models.Model):
 					# Wado-URI or DICOMweb Study/Series Endpoint
 					return self.view
 
+				# Check view comment permissions
+				elif (ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_GET.lower()):
+					return self.comment_view
+
+				# Check add/edit/remove permissions
+				elif (ORTHANC_COMMENTS in resource and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
+					return self.comment_edit
+
 			# Check view permissions
-			elif level in ORTHANC_IMAGING_RESOURCES:
+			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
 				return self.view
+
+			# Check modify permissions
+			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
+				return self.modify
+
+			# Check remove permissions
+			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
+				return self.remove
 
 		return False

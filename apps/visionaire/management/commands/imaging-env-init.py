@@ -57,6 +57,10 @@ class Command(GuruBaseManagementCommand):
         # Options for initializing and applying migrations
         parser.add_argument('--nomigrations', dest='dbmigrations', default=True, action='store_false',
             help='Skip initialization of the database. No migrations are created or applied.')
+        parser.add_argument('--skip-childmodel-migrations', dest='childmodel_migrations', default=True, action='store_false',
+            help='Skip migration of inherited/child model instances.')
+        parser.add_argument('--skip-collectstatic', dest='collectstatic', default=True, action='store_false',
+            help='Skip deployment of static files as part of environment initialization.')
 
         # Sonador imaging environment user credentials (defaults are taken from the environment variables)
         parser.add_argument('--username', dest='username', default=SONADOR_USER_USERNAME,
@@ -102,10 +106,28 @@ class Command(GuruBaseManagementCommand):
     def migrate(self):
         ''' Apply application database migrations
         '''
-        try:
-            call_command('migrate')
+        try: call_command('migrate')
         except Exception as err:
             raise CommandError(f'Unable to initialize imaging server, an error occurred: {err}')
+
+    def migrate_childmodels(self):
+        ''' Migrate proxy model instances
+        '''
+        from secure.models import ApiAccess, ApiAccessToken        
+        from ...admin.auth import SonadorApiAccess, SonadorApiAccessToken
+
+        # Iterate through child/parent models
+        for smodel, model, pk_ptr_attr in (
+                (SonadorApiAccess, ApiAccess, 'apiaccess_ptr_id'),
+                (SonadorApiAccessToken, ApiAccessToken, 'apiaccesstoken_ptr_id')):
+
+            # Locate model instances present in the parent not yet migrated to the child
+            for m in model.objects.exclude(pk__in=smodel.objects.all().values_list('pk', flat=True)):
+
+                # Create child model instance from parent attributes
+                sm = smodel(**{ pk_ptr_attr: m.pk })
+                sm.__dict__.update(m.__dict__)
+                sm.save()
 
     def handle(self, *args, **options):
         ''' Initialize the imaging environment with the specified options
@@ -124,6 +146,14 @@ class Command(GuruBaseManagementCommand):
         
         else:
             self.stdout.write('--nomigrations used, skip initialization of database')
+
+        # Migrate child models
+        if options.get('childmodel_migrations'):
+            print('Migrate child models')
+
+            try: self.migrate_childmodels()
+            except Exception as err:
+                raise CommandError(f'Unable to initialize imaging environment, an error occurred while migrating child models: {err}')
 
         # Create API user
         if options.get('username'):
@@ -168,8 +198,11 @@ class Command(GuruBaseManagementCommand):
                     % (gsetting('SITE_ID'), options.get('sonador_hostname'), options.get('sonador_description')))
 
         # Check on existing OHIF viewer on the directory and if doesn't collectstatic
-        if not staticfiles_storage.exists(OHIF_BUCKET_PATH):
-            try:
-                call_command('collectstatic', '--no-input')
+        if options.get('collectstatic'):
+
+            try: call_command('collectstatic', '--no-input')
             except Exception as err:
-                raise CommandError(f'Unable to initialize imaging environment, an error occurred: {err}')
+                raise CommandError(f'Unable to initialize imaging environment, an error occurred while uploading static files: {err}')
+
+        else:
+            self.stdout.write('--skip-collectstatic used, skip upload of static assets')

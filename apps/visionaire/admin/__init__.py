@@ -50,7 +50,7 @@ class SonadorApiAccessAdmin(UserLabelMixin, ApiAccessAdmin):
 class SonadorSitesAdmin(admin.ModelAdmin):
 	'''	Model admin instance for managing Sonador site instances	
 	'''
-	list_display = ('id', 'domain', 'domain')
+	list_display = ('id', 'name', 'domain')
 
 
 # Authorization and authentication
