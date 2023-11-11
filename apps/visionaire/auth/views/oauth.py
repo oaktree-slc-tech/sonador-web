@@ -4,6 +4,7 @@ from six.moves.urllib import parse as urlparse
 
 from django.core.exceptions import PermissionDenied
 from django.core import signing
+from django.middleware import csrf
 
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
@@ -370,3 +371,19 @@ class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):
 			return redirect(authserver.url_login)
 
 		return redirect(reverse('admin:login')+'?'+self.request.GET.urlencode())
+
+
+class CSRFTokenObtainView(GuruQueryParamMixin, View):
+	"""
+	CSRF token obtain view returns csrf token for frontend, has basic auth
+	"""
+
+	def get(self, request, *args, **kwargs):
+		# Ensure user is authenticated to the application
+		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
+			return guru_permission_denied(request)
+
+		token = csrf.get_token(request)
+		return operation_results({
+			'csrf_token': token,
+		})

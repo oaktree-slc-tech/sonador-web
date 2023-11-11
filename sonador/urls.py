@@ -16,7 +16,7 @@ from visionaire import visionaire_app_name
 from visionaire.auth.views import LoginView, oAuth2TokenAuthorizationView, oAuth2TokenRefreshView
 from visionaire.auth.views.service import OrthancSecureUriRedirectView
 from visionaire.views import OhifConfigView, OhifDicomViewer
-from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth
+from visionaire.auth.urls import urlpatterns_openid_auth, urlpatterns_service_auth, urlpatterns_auth_management
 from visionaire.urls.secure import urlpatterns_api as visionaire_urlpatterns_api
 
 from gateway import gateway_app_name
@@ -54,6 +54,9 @@ urlpatterns.extend([
 
     # Service Authorization Endpoints; Orthanc
     url(r'^auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
+
+    # Auth Management Endpoints: Credential/User Management
+    url(r'^auth/api/', include((urlpatterns_auth_management, visionaire_app_name), namespace='auth-api')),    
 ])
 
 
