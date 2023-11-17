@@ -44,16 +44,23 @@ class PacsImagingServerAdmin(admin.ModelAdmin):
 	
 	inlines = (PacsImagingServerGroupAuthorizationInline, DicomModalityAdminInline, RemoteDICOMWebServerAdminInline)
 
+	@admin.display(
+	    description='Server ID'
+	)
 	def server_id(self, obj):
 		return obj.pk
-	server_id.short_description = 'Server ID'
 
+	@admin.display(
+	    description=''
+	)
 	def admin_pacs_viewer(self, obj):
 		'''	URL for PACS OHIF Viewer
 		'''
 		return format_html('<a href="{}" target="_blank">{}</a>', obj.url_viewer, 'Viewer')
-	admin_pacs_viewer.short_description = ''
 
+	@admin.display(
+	    description=''
+	)
 	def admin_pacs_server_admin(self, obj):
 		'''	URL for PACS server administration
 		'''
@@ -61,8 +68,10 @@ class PacsImagingServerAdmin(admin.ModelAdmin):
 				reverse('auth-service:orthanc-admin-redirect', args=(obj.pk,)) if gsetting('AUTH_ENABLED') else obj.url_admin,
 				'Admin',
 			)
-	admin_pacs_server_admin.short_description = ''
 
+	@admin.display(
+	    description=''
+	)
 	def admin_pacs_server_dicomweb(self, obj):
 		'''	URL for PACS server dicom-web client
 		'''
@@ -70,7 +79,6 @@ class PacsImagingServerAdmin(admin.ModelAdmin):
 				reverse('auth-service:orthanc-dicomweb-redirect', args=(obj.pk,)) if gsetting('AUTH_ENABLED') else obj.url_admin,
 				'DICOMweb Client',
 			)
-	admin_pacs_server_dicomweb.short_description = ''
 
 
 class ImagingServerAdminMixin(object):

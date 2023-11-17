@@ -8,7 +8,7 @@ from django.middleware import csrf
 
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
-from django.utils.http import is_safe_url
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.base import View, TemplateView
 
 from django.contrib import auth

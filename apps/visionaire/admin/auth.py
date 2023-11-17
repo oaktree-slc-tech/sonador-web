@@ -121,6 +121,8 @@ class DataServiceAdmin(admin.ModelAdmin):
 	list_display = ('service_id',  'description', 'active', 'acl_allow_staff',)
 	filter_horizontal = ('groups',)
 
+	@admin.display(
+	    description='Service ID'
+	)
 	def service_id(self, obj):
 		return obj.pk
-	service_id.short_description = 'Service ID'
