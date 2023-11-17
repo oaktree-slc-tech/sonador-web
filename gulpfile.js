@@ -35,6 +35,7 @@ var guru_jslib = './lib/guru/jslib/';
 var guru_static = './lib/guru/static/';
 var guru_static_css = guru_static+'css/';
 var guru_static_js = guru_static+'js/';
+var guru_jslib_mlightbox = guru_jslib+'mlightbox/';
 
 
 // Visionaire and OHIF
@@ -207,12 +208,72 @@ function jsBuildAce(done) {
 }
 
 
+function jsBuildMagnificLightbox(done) {
+
+	console.log('Compile and minify Magnific Popup to static folder: ', guru_jslib_mlightbox);
+	var guru_jslib_mlightbox_node_deps = guru_jslib_mlightbox+'node_modules/';
+	var mlightbox_deps, build_mlightbox;
+
+	try {
+		// Determine if necessary dependencies are installed
+		mlightbox_deps = fs.lstatSync(guru_jslib_mlightbox_node_deps);
+		build_mlightbox = true;
+	
+	} catch(err) {
+
+		// Dependencies not yet installed, change to jslib directory and install
+		try {
+
+			console.info('Dependencies for Magnific Popup have not yet been installed. Install to ', 
+				guru_jslib_mlightbox_node_deps);
+			process.chdir(guru_jslib_mlightbox);
+			execSync('npm install');
+			console.info('Magnific Popup dependencies installed successfully');
+			build_mlightbox = true;
+			process.chdir(sonador_rootdir);
+
+		} catch (err) {
+
+			// Indicate that an error occurred, stop build
+			console.log('Error while trying to install node dependencies: ', err);
+			process.chdir(sonador_rootdir);
+			done();
+		}
+	
+	} finally {
+
+		if (build_mlightbox) {
+			try {
+				process.chdir(guru_jslib_mlightbox);
+
+				// Execute Highlight.js build script
+				console.info('Build Magnific Popup with default options');
+				execSync('grunt mfpbuild');
+				console.info('Build of Magnific Popup completed succesfully');
+
+				process.chdir(sonador_rootdir);
+			} catch (err) {
+
+				// Indicate that an error occurred, stop build
+				console.log('Error while trying to build Magnific Popup: ', err);
+				process.chdir(sonador_rootdir);
+				done();
+			}
+		} else { done(); }
+	}
+
+	return gulp.src(guru_jslib_mlightbox+'dist/*.js').pipe(gulp.dest(guru_static_js+'mlightbox/'));
+
+}
+
+
 // Compile 
-const js = gulp.series(jsBuildOHIFViewer, deployOHIF, jsBuildAce);
+const js = gulp.series(jsBuildOHIFViewer, deployOHIF, jsBuildAce, jsBuildMagnificLightbox);
 
 
 // Gulp Tasks
 exports.jsBuildOHIFViewer = jsBuildOHIFViewer;
 exports.deployOHIF = deployOHIF;
 exports.jsBuildAce = jsBuildAce;
+exports.jsBuildMagnificLightbox = jsBuildMagnificLightbox;
 exports.js = js;

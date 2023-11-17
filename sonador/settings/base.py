@@ -173,7 +173,6 @@ LANGUAGES = (
     ('en', 'English'),
 )
 USE_I18N = True
-USE_L10N = True
 
 
 
@@ -195,8 +194,8 @@ INSTALLED_APPS = [
     'microservices',    # Base classes for managing integration with remote systems
     'content',
     'wgtauth',          # oAuth2 authentication
-    'wgtauth.social',
-    'wgtauth.registration',
+    'wgtauth.social.app.WagtailAuthAppConfig',
+    'wgtauth.registration.app.WagtailRegistrationAppConfig',
 
     # Sonador Admin
     'core.apps.SonadorAdminConfig',
@@ -244,7 +243,7 @@ WSGI_APPLICATION = 'sonador.wsgi.application'
 # SCSS Resource Paths
 SCSS_RESOURCE_PATHS = (
     os.path.join(PROJECT_ROOT, 'lib', 'guru', 'styles'),
-    os.path.join(PROJECT_ROOT, 'styles'),
+    os.path.join(PROJECT_ROOT, 'lib', 'content', 'styles'),
 )
 SCSS_STATIC_ROOT = os.path.join(PROJECT_CONFIGURATION_ROOT, 'static', 'css')
 if not os.path.exists(SCSS_STATIC_ROOT):
@@ -256,18 +255,10 @@ if not os.path.exists(SCSS_STATIC_ROOT):
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
 
 STATICFILES_DIRS = [

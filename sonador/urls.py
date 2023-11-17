@@ -1,7 +1,7 @@
 import os
 
+from django.urls import include
 from django.urls import path, re_path
-from django.conf.urls import url, include
 from django.conf.urls.static import static
 from django.views.generic.base import TemplateView
 
@@ -38,25 +38,25 @@ if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDI
 urlpatterns.extend([
 
     # Visionaire API
-    url(r'^visionaire/api/', include((visionaire_urlpatterns_api, visionaire_app_name), namespace='visionaire-api')),
+    path('visionaire/api/', include((visionaire_urlpatterns_api, visionaire_app_name), namespace='visionaire-api')),
 
     # Gateway API
-    url(r'^gateway/api/', include((gateway_urlpatterns_api, gateway_app_name), namespace='gateway-api')),
+    path('gateway/api/', include((gateway_urlpatterns_api, gateway_app_name), namespace='gateway-api')),
 
     # Content Views
-    url(r'^accounts/logout/success/?$', 
+    re_path(r'^accounts/logout/success/?$', 
         TemplateView.as_view(template_name='content/logout.html'), name='logout-success'),
     
     # oAuth/OpenID
-    url(r'^auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
-	url(r'^accounts/login/?$', LoginView.as_view(), name='login'),
-	url(r'^accounts/logout/?$', auth_views.LogoutView.as_view(), name='logout'),
+    path('auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
+	re_path(r'^accounts/login/?$', LoginView.as_view(), name='login'),
+	re_path(r'^accounts/logout/?$', auth_views.LogoutView.as_view(), name='logout'),
 
     # Service Authorization Endpoints; Orthanc
-    url(r'^auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
+    path('auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
 
     # Auth Management Endpoints: Credential/User Management
-    url(r'^auth/api/', include((urlpatterns_auth_management, visionaire_app_name), namespace='auth-api')),    
+    path('auth/api/', include((urlpatterns_auth_management, visionaire_app_name), namespace='auth-api')),    
 ])
 
 

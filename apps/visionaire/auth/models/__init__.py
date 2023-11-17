@@ -197,20 +197,19 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		elif self.group.user_set.filter(username=user.username).exists():
 
 			# Check system permissions
-			if level == ORTHANC_SYSTEM:		
+			if level == ORTHANC_SYSTEM:
+
+				# Check upload permission
+				if method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
+					return self.upload
 				
 				# Check query permissions
-				if (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
-						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
+				elif (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
 						or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES)) \
 						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_TOOLS_FIND) \
 						or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES) \
 						or (method.lower() == gapicodes.HTTP_GET.lower() and resource in ORTHANC_QUERY_RESOURCES):
 					return self.query
-
-				# Check upload permission
-				elif method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
-					return self.upload
 
 				# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
 				elif (method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource) \
