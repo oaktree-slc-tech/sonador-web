@@ -31,6 +31,7 @@ class GatewayDicomModalityAdminInline(admin.TabularInline):
 	extra = 0
 
 
+@admin.register(ClinicalGateway)
 class ClinicalGatewayAdmin(admin.ModelAdmin):
 	'''	Admin instance for accessing and managing Clinical Gateway Instances
 	'''
@@ -42,9 +43,10 @@ class ClinicalGatewayAdmin(admin.ModelAdmin):
 
 	inlines = (GatewayVariableAdminInline, GatewayImagingServerAdminInline, GatewayDicomModalityAdminInline)
 
+	@admin.display(
+	    description='Gateway ID'
+	)
 	def gateway_id(self, obj):
 		return obj.pk
-	gateway_id.short_description = 'Gateway ID'	
 
 
-admin.site.register(ClinicalGateway, ClinicalGatewayAdmin)

@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:experimental
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
 
@@ -15,38 +15,43 @@ RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-
   && pip3 install --timeout 300 -r requirements.txt
 
 # Install Node.js runtime and components
-RUN nodeenv --node=12.16.3 /opt/nodejs/
+RUN nodeenv --node=18.18.2 /opt/nodejs/
 ENV PATH=/opt/nodejs/bin:${PATH}
-RUN npm install -g gulp yarn \
+RUN npm install -g gulp yarn@1.22.19 \
+  && yarn config set @sonador:registry https://code.oak-tree.tech/api/v4/projects/335/packages/npm/ -g \
+  && npm config set @sonador:registry https://code.oak-tree.tech/api/v4/projects/335/packages/npm/ -g \
   && cd /srv/www/sonador/sonador/ \
-  && npm install gulp yarn && npm install 
+  && npm install gulp yarn@1.22.19 && npm install
 
 # Build OHIF and viewer components
-RUN cd /srv/www/sonador/sonador/ && gulp js
+RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce && gulp jsBuildMagnificLightbox \
+  && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif \
+  && yarn install && yarn build:package \
+  && cd /srv/www/sonador/sonador/ && gulp deployOHIF
 
 # Install Apache Server and Configure Web Application
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get install -y tzdata \
   && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
-  && dpkg-reconfigure tzdata 
+  && dpkg-reconfigure tzdata
 RUN apt-get install -y apache2 \
     build-essential \
     postgresql-client \
     net-tools vim telnet \
     libapache2-mod-wsgi-py3 \
   && ln -sf /proc/$$/fd/1 /var/log/apache2/access.log \
-  && ln -sf /proc/$$/fd/2 /var/log/apache2/error.log 
+  && ln -sf /proc/$$/fd/2 /var/log/apache2/error.log
 RUN mkdir -p /srv/www/sonador/logs && cd /srv/www/sonador/sonador/ \
   && ln -s /srv/www/sonador/sonador/config/apache2.docker.conf  /etc/apache2/sites-available/sonador.conf \
   && chown www-data:www-data -R /srv/www/sonador/sonador \
   && a2ensite sonador
 
 # Install PostgreSQL (for production)
-RUN apt-get install libpq-dev && pip3 install --timeout 30 psycopg2
+RUN apt-get install -y libpq-dev && pip3 install --timeout 30 psycopg2
 
 # Install sudo
 RUN apt-get install -y sudo
 
 WORKDIR /srv/www/sonador
 EXPOSE 8070
-CMD apachectl -D FOREGROUND
+CMD uvicorn sonador.asgi:application

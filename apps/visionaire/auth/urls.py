@@ -1,4 +1,4 @@
-from django.conf.urls import url
+from django.urls import re_path
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
@@ -22,26 +22,26 @@ from .forms.cred import SonadorApiAccessTokenForm, SonadorApiAccessCredentialFor
 urlpatterns_openid_auth = [
 
 	# oAuth2 Configuration
-	url(r'.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration-default'),
+	re_path(r'.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration-default'),
 
 	# oAuth SSO: Reirect and Callback Views
-	url(r'^(?P<serverid>\w+)/?$', OpenIDLoginRedirectView.as_view(), name='openid-login'),
-	url(r'^(?P<serverid>\w+)/callback/?$', OpenIDLoginCallbackView.as_view(), name='openid-login-callback'),
-	url(r'^(?P<serverid>\w+)/token/?$', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token'),
-	url(r'^(?P<serverid>\w+)/.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration'),
+	re_path(r'^(?P<serverid>\w+)/?$', OpenIDLoginRedirectView.as_view(), name='openid-login'),
+	re_path(r'^(?P<serverid>\w+)/callback/?$', OpenIDLoginCallbackView.as_view(), name='openid-login-callback'),
+	re_path(r'^(?P<serverid>\w+)/token/?$', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token'),
+	re_path(r'^(?P<serverid>\w+)/.well-known/openid-configuration/?$', oAuth2EndpointsView.as_view(), name='openid-configuration'),
 
 	# oAuth2 Based Token Authorization
-	url(r'', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token-default'),
+	re_path(r'', login_required(oAuth2TokenAuthorizationView.as_view()), name='openid-auth-token-default'),
 ]
 
 
 urlpatterns_service_auth = [
 
 	# Orthanc
-	url(r'^orthanc/(?P<serverid>\w+)/introspect/?$', csrf_exempt(never_cache(OrthancServiceAuthorizationView.as_view())), name='service-orthanc'),
-	url(r'^orthanc/(?P<serverid>\w+)/admin/?$',
+	re_path(r'^orthanc/(?P<serverid>\w+)/introspect/?$', csrf_exempt(never_cache(OrthancServiceAuthorizationView.as_view())), name='service-orthanc'),
+	re_path(r'^orthanc/(?P<serverid>\w+)/admin/?$',
 		login_required(OrthancSecureUriRedirectView.as_view(server_url_attr='url_admin')), name='orthanc-admin-redirect'),
-	url(r'^orthanc/(?P<serverid>\w+)/dicom-web/?$',
+	re_path(r'^orthanc/(?P<serverid>\w+)/dicom-web/?$',
 		login_required(OrthancSecureUriRedirectView.as_view(server_url_attr='url_dicomweb_client')), name='orthanc-dicomweb-redirect'),
 ]
 
@@ -49,7 +49,7 @@ urlpatterns_service_auth = [
 urlpatterns_auth_management = [
 
 	# Sonador CSRF token obtain view
-	url(r'^cred/csrf-token/?$',
+	re_path(r'^cred/csrf-token/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
 					allowed_http_methods_url_signature=('GET',),
 					request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
@@ -57,7 +57,7 @@ urlpatterns_auth_management = [
 		name='client-csrf-token'),
 
 	# Credentials Management: access token
-	url(r'^cred/token/?$',
+	re_path(r'^cred/token/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
 				apiaccess_token_model=SonadorApiAccessToken, 
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
@@ -67,7 +67,7 @@ urlpatterns_auth_management = [
 		name='cred-management-access-token'),
 
 	# Credentials Management: access ID/secret
-	url(r'^cred/access/?$',
+	re_path(r'^cred/access/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
 				apiaccess_token_model=SonadorApiAccessToken, 
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
@@ -75,7 +75,7 @@ urlpatterns_auth_management = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			SonadorUserCredentialManagementView.as_view(model=SonadorApiAccess, modelform=SonadorApiAccessCredentialForm)),
 		name='cred-management-access-secret'),
-	url(r'^cred/access/(?P<objectid>[a-zA-Z0-9]+)/?$',
+	re_path(r'^cred/access/(?P<objectid>[a-zA-Z0-9]+)/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
 				apiaccess_token_model=SonadorApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(

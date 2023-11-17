@@ -1,7 +1,7 @@
 # Configuration Management
 
 # Django Requirements
-Django>=3.2,<4.0
+Django>=4.2
 django-cors-headers==3.5.0
 django-storages==1.12.3
 

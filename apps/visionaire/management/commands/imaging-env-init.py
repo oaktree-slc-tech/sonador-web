@@ -67,13 +67,13 @@ class Command(GuruBaseManagementCommand):
             help='Account username. May also be provided via the SONADOR_USER_USERNAME environment variable.')
         parser.add_argument('--first-name', dest='first_name', default=SONADOR_USER_FIRST_NAME,
             help='First name of user. May also be provided via the SONADOR_USER_FIRST_NAME environment variable.')
-        parser.add_argument('--last-name', dest='last_name', default=SONADOR_USER_LAST_NAME, 
+        parser.add_argument('--last-name', dest='last_name', default=SONADOR_USER_LAST_NAME,
             help='Last name of user. May also be provided via the SONADOR_USER_LAST_NAME environment variable.')
-        parser.add_argument('--email', dest='email', default=SONADOR_USER_EMAIL, 
+        parser.add_argument('--email', dest='email', default=SONADOR_USER_EMAIL,
             help='Email of user. May also be provided via the SONADOR_USER_EMAIL environment variable.')
         parser.add_argument('--password', dest='password', default=SONADOR_USER_PASSWORD,
             help='Account password. May also be provided via the SONADOR_USER_PASSWORD environment variable.')
-        parser.add_argument('--apitoken-value', dest='apitoken_value', default=SECURE_API_APITOKEN, 
+        parser.add_argument('--apitoken-value', dest='apitoken_value', default=SECURE_API_APITOKEN,
             help='Secure access token for the account. May also be provided via the SECURE_API_APITOKEN environment variable.')
 
         # Sonador server parameters
@@ -81,6 +81,13 @@ class Command(GuruBaseManagementCommand):
             help='Hostname for the Sonador server instance. Added to the site record for the instance.')
         parser.add_argument('--sonador-description', dest='sonador_description', default=SONADOR_SERVER_DESCRIPTION,
             help='Sonador server description. Added to the site record for the instance.')
+
+    def compile_scss(self, options):
+        '''Complile the scss
+        '''
+        try: call_command('compile_scss')
+        except Exception as err:
+            raise CommandError('Unable to compile css please ensure static files are configured and view logs for more details')
 
     def validate_options(self, options):
         ''' Ensure that the options provided to the command are complete
@@ -113,7 +120,7 @@ class Command(GuruBaseManagementCommand):
     def migrate_childmodels(self):
         ''' Migrate proxy model instances
         '''
-        from secure.models import ApiAccess, ApiAccessToken        
+        from secure.models import ApiAccess, ApiAccessToken
         from ...admin.auth import SonadorApiAccess, SonadorApiAccessToken
 
         # Iterate through child/parent models
@@ -133,9 +140,9 @@ class Command(GuruBaseManagementCommand):
         ''' Initialize the imaging environment with the specified options
         '''
         self.validate_options(options)
-        
+
         if options.get('dbmigrations'):
-            
+
             # Call makemigrations recursively to account for delays in the initialization of the database.
             # When first launching the container environment, the database may not yet be available.
             count = 0
@@ -143,7 +150,7 @@ class Command(GuruBaseManagementCommand):
 
             # Apply migrations
             self.migrate()
-        
+
         else:
             self.stdout.write('--nomigrations used, skip initialization of database')
 
@@ -166,7 +173,7 @@ class Command(GuruBaseManagementCommand):
             user_apitoken_value = options.get('apitoken_value')
 
             command_args = (
-                f'api-user-credentials', 
+                f'api-user-credentials',
                 '--first-name', f'{first_name}',
                 '--last-name', f'{last_name}',
                 '--email', f'{user_email}',
