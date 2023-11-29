@@ -43,7 +43,8 @@ def hex_hmac(salt, value, key):
 class HexadecimalSigner(signing.TimestampSigner):
 	'''	Signer instance that uses hexadecimal signatures instead of Base64 encoded signatures
 	'''
-	def signature(self, value):
+	def signature(self, value, key=None):
+		key = key or self.key
 		return hex_hmac(self.salt + 'signer', value, self.key)
 
 	def timestamp(self):
@@ -56,17 +57,17 @@ class HexadecimalSigner(signing.TimestampSigner):
 		result = super(signing.TimestampSigner, self).unsign(value)
 		value, timestamp = result.rsplit(self.sep, 1)
 		timestamp = self.decode_timestamp(timestamp)
-		
+
 		if max_age is not None:
 			if isinstance(max_age, datetime.timedelta):
 				max_age = max_age.total_seconds()
-			
+
 			# Check timestamp is not older than max_age
 			age = time.time() - timestamp
 			if age > max_age:
 				raise SignatureExpired(
 					'Signature age %s > %s seconds' % (age, max_age))
-		
+
 		return value
 
 
@@ -94,7 +95,7 @@ def dumps(obj, key=None, salt='django.core.signing', serializer=JSONSerializer, 
 	if compress:
 		cdata = zlib.compress(data)
 
-		# Only return compressed data if the compression result is 
+		# Only return compressed data if the compression result is
 		# less than the uncompressed data
 		if len(cdata) < (len(data) - 1):
 			data = cdata
