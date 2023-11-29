@@ -293,6 +293,7 @@ LOGOUT_REDIRECT_URL = siteconfig_auth.get('LOGOUT_REDIRECT_URL', '/accounts/logo
 CORS_ALLOWED_ORIGINS = siteconfig_site.get('CORS_ALLOWED_ORIGINS', [])
 CORS_ALLOWED_ORIGIN_REGEXES = siteconfig_site.get('CORS_ALLOWED_ORIGIN_REGEXES', [])
 CORS_ALLOW_CREDENTIALS = config_str2bool(siteconfig_site.get('CORS_ALLOW_CREDENTIALS', False))
+CSRF_TRUSTED_ORIGINS = siteconfig_site.get('CSRF_TRUSTED_ORIGINS', [])
 
 
 # Viewer Settings
