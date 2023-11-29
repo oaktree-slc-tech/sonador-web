@@ -74,7 +74,7 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 			it in the "state" parameter for redirect after completion of authentication with the auth
 			server associated with the view instance.
 
-		2. In cases where a client with a valid session connects to the view with an "authorization" 
+		2. In cases where a client with a valid session connects to the view with an "authorization"
 			request, the view will redirect to the token endpoint for the auth server. This emulates
 			the behavior of the API endpoint which provides the token endpint as the auth endpoint
 			for connected clients which provide a valid session cookie.
@@ -84,11 +84,11 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 	def get_site_resource(self, request, vargs, vkwargs):
 		'''	Retrieve a site resource that may be encoded as part of the oAuth URL.
 
-			Special behavior: tp facilitate oAUthrequests from OHIF clients 
-			authenticating using the "authorization_code" workflow, 
+			Special behavior: tp facilitate oAUthrequests from OHIF clients
+			authenticating using the "authorization_code" workflow,
 			the redirect URI of the client is captured (taken from the "state" parameter)
 			and request URL parameters are encoded.
-		'''		
+		'''
 		redirect_url = super(OpenIDLoginRedirectView, self).get_site_resource(request, vargs, vkwargs)
 
 		# Retrieve authserver for the redirect view
@@ -108,7 +108,7 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 					raise PermissionDenied('Client ID provided in the request ("%s") does not match the auth server.'
 						% request.GET.get('client_id'))
 
-				# Ensure that the external redirect URL is included in the white list approved by the server. 
+				# Ensure that the external redirect URL is included in the white list approved by the server.
 				if not authserver.is_safe_url(ohif_redirect_url):
 					raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
 						+ 'or part of the Sonador application.') % ohif_redirect_url)
@@ -116,18 +116,18 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 				# Add the token endpoint for the server and ensure that the parameters are encoded so
 				# they don't interefere with the code workflow.
 				redirect_url = merge_url_querystring(authserver.url_token, request.GET.urlencode())
-			
+
 				# Create logic in the token view that also checks the white list for the auth server
 				# before forwarding the authentication parameters.
 				logger.debug('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
-		
+
 		return redirect_url
 
 	def get(self, request, *args, **kwargs):
 		'''	Generate a 301 redirect to provider authorization URL
 
 			Special behavior: to facilitate authentication requests from OHIF clients
-			authenticating using the "authorization_code" workflow, forward to the 
+			authenticating using the "authorization_code" workflow, forward to the
 			token endpoint for the view authorization endpoint (after checking client_id).
 		'''
 		# For OHIF clients already authenticated to the platform, redirect to the token
@@ -276,7 +276,7 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 				'authorization_endpoint': site_fullurl(authserver.url_login),
 				'response_types_supported': [OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE],
 			})
-		
+
 		logger.debug('OpenID site configuration:\n%r' % openid_config)
 		return openid_config
 
@@ -289,7 +289,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 
 	def get(self, request, *args, **kwargs):
 		'''	Process an oAuth2 token request
-		'''		
+		'''
 		return self.oidc_tokengrant(request, *args, **kwargs)
 
 	def oidc_tokengrant(self, request, *args, **kwargs):
@@ -302,7 +302,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		# Ensure that all needed values for issuing the token were bad in the request
 		tform = self.tokenform_class(
 			self.getQueryStringData(request=request, vargs=args, vkwargs=kwargs))
-		
+
 		if not tform.is_valid():
 			logger.error('Invalid oAuth2 request. Validation errors\n%s'
 				% formerrors2str(json.loads(tform.errors.as_json())))
@@ -346,7 +346,7 @@ class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
 		# Ensure user is authenticated to the application
 		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
 			return guru_permission_denied(request)
-		
+
 		return operation_results({
 			'id_token': request.session.session_key,
 			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
