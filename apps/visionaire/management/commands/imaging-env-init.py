@@ -54,13 +54,15 @@ class Command(GuruBaseManagementCommand):
     def add_arguments(self, parser):
         ''' Provide argument overrides
         '''
-        # Options for initializing and applying migrations
+        # Options for initializing and applying migrations and SCSS
         parser.add_argument('--nomigrations', dest='dbmigrations', default=True, action='store_false',
             help='Skip initialization of the database. No migrations are created or applied.')
         parser.add_argument('--skip-childmodel-migrations', dest='childmodel_migrations', default=True, action='store_false',
             help='Skip migration of inherited/child model instances.')
         parser.add_argument('--skip-collectstatic', dest='collectstatic', default=True, action='store_false',
             help='Skip deployment of static files as part of environment initialization.')
+        parser.add_argument('--skip-compile-scss', dest='compilescss', default=True, action='store_false',
+            help='Skip compiling SCSS as part of environment initialization.')
 
         # Sonador imaging environment user credentials (defaults are taken from the environment variables)
         parser.add_argument('--username', dest='username', default=SONADOR_USER_USERNAME,
@@ -140,6 +142,11 @@ class Command(GuruBaseManagementCommand):
         ''' Initialize the imaging environment with the specified options
         '''
         self.validate_options(options)
+
+        if options.get('compilescss'):
+            self.compile_scss()
+        else:
+            self.stdout.write('--skip-compile-scss used, skip compiling SCSS')
 
         if options.get('dbmigrations'):
 
