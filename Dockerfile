@@ -4,7 +4,7 @@ ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
 
 # Install Python runtime and dependencies
-RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj
+RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj uvicorn
 RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-build-secrets \
   && export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
@@ -52,6 +52,6 @@ RUN apt-get install -y libpq-dev && pip3 install --timeout 30 psycopg2
 # Install sudo
 RUN apt-get install -y sudo
 
-WORKDIR /srv/www/sonador
+WORKDIR /srv/www/sonador/sonador
 EXPOSE 8070
-CMD uvicorn sonador.asgi:application
+CMD uvicorn sonador.asgi:application --port 8070 --host 0.0.0.0
