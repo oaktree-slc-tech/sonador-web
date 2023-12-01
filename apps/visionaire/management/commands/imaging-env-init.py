@@ -84,10 +84,10 @@ class Command(GuruBaseManagementCommand):
         parser.add_argument('--sonador-description', dest='sonador_description', default=SONADOR_SERVER_DESCRIPTION,
             help='Sonador server description. Added to the site record for the instance.')
 
-    def compile_scss(self, options):
+    def compile_scss(self):
         '''Complile the scss
         '''
-        try: call_command('compile_scss')
+        try: call_command('compile-scss')
         except Exception as err:
             raise CommandError('Unable to compile css please ensure static files are configured and view logs for more details')
 

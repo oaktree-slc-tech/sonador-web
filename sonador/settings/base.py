@@ -201,8 +201,8 @@ INSTALLED_APPS = [
     'core.apps.SonadorAdminConfig',
 
     # Sonador
-    'visionaire',
-    'gateway',
+    'visionaire.app.VisionaireAppConfig',
+    'gateway.app.ClinicalGatewayAppConfig',
 ]
 
 MIDDLEWARE = [
