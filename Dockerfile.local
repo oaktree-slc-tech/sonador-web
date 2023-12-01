@@ -4,16 +4,22 @@ ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
 
 # Install Python runtime and dependencies
-RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj uvicorn
+RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
+  && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador 
+USER 1000
 RUN export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
-  && mkdir -p /srv/www/sonador/config && mkdir -p /srv/www/sonador/docroot \
+  && mkdir -p /srv/www/sonador/config \ 
   && cd /srv/www/sonador && git clone https://code.oak-tree.tech/oak-tree/medical-imaging/sonador.git \
   && cd /srv/www/sonador/sonador && git checkout $CI_COMMIT_SHA \
-  && git submodule update --init --recursive \
-  && pip3 install --timeout 300 -r requirements.txt
+  && git submodule update --init --recursive
+USER 0
+RUN pip3 install --timeout 300 -r /srv/www/sonador/sonador/requirements.txt \
+  && pip3 install pytz tzdata uvicorn \
+  && mkdir -p /opt/ && chown -R 1000:1000 /opt/
 
 # Install Node.js runtime and components
+USER 1000
 RUN nodeenv --node=18.18.2 /opt/nodejs/
 ENV PATH=/opt/nodejs/bin:${PATH}
 RUN npm install -g gulp yarn@1.22.19 \
@@ -28,32 +34,16 @@ RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce && gulp jsBuildMagnificLight
   && yarn install && yarn build:package \
   && cd /srv/www/sonador/sonador/ && gulp deployOHIF
 
-# Install Apache Server and Configure Web Application
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get install -y tzdata \
-  && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
-  && dpkg-reconfigure tzdata
-RUN apt-get install -y apache2 \
-    build-essential \
-    postgresql-client \
-    net-tools vim telnet \
-    libapache2-mod-wsgi-py3 \
-  && ln -sf /proc/$$/fd/1 /var/log/apache2/access.log \
-  && ln -sf /proc/$$/fd/2 /var/log/apache2/error.log
-RUN mkdir -p /srv/www/sonador/logs && cd /srv/www/sonador/sonador/ \
-  && ln -s /srv/www/sonador/sonador/config/apache2.docker.conf  /etc/apache2/sites-available/sonador.conf \
-  && chown www-data:www-data -R /srv/www/sonador/sonador \
-  && a2ensite sonador
-
-
 # Install PostgreSQL (for production)
+USER 0
 RUN apt-get install -y libpq-dev && pip3 install --timeout 30 psycopg2
 
 # Install sudo
-RUN apt-get install -y sudo
+RUN apt-get install -y sudo \
+  && cp /srv/www/sonador/sonador/config/entrypoint.sh /srv/www/sonador/ \
+  && chmod +x /srv/www/sonador/entrypoint.sh
 
-WORKDIR /srv/www/sonador
-RUN chmod +x sonador/entrypoint.sh
 EXPOSE 8070
+USER 1000
 WORKDIR /srv/www/sonador
-CMD /srv/www/sonador/sonador/entrypoint.sh
+CMD /srv/www/sonador/entrypoint.sh
