@@ -41,13 +41,13 @@
 
 
   <!-- Empty State Message -->
-  {% if empty_state %}<script id="empty-state-message">{{ empty_state }}</script>{% endif %}
+  {% if empty_state %}<script id="empty-state-message" type="text/template">{{ empty_state }}</script>{% endif %}
 
 
   <!-- Configure User Interface Messages -->
   <script>
   // Ensure that Sonador element for window is defined
-  if (!window.sonador){
+  if (!window.sonador) {
     window.sonador = {};
   }
 
@@ -62,6 +62,11 @@
       };
     }
   }
+
+  {% if SONADOR_URL %}
+  // Populate Sonador Connection URL
+  if (!window.sonador.host) window.sonador.host = '{{ SONADOR_URL }}';
+  {% endif %}
   </script>
 
 
@@ -116,6 +121,7 @@
           // Completion callback
           function() {
             console.log('OHIF initialized successfully!');
+            console.log(window.sonador);
           }
         )
       });    
