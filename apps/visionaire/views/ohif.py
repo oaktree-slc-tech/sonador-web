@@ -81,6 +81,9 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		else:
 			context['router_base'] = '/'
 
+		# Sonador root URL
+		context['SONADOR_URL'] = site_fullurl(request=self.request)
+		
 		return context
 
 
@@ -132,6 +135,9 @@ class OhifDicomViewer(TemplateView):
 			context['pacs_server'] = [ohif_json(s) for s in self.get_imaging_servers(*args, **kwargs)]
 			context['pacs_config'] = reverse('ohif-config')
 
+		# Sonador root URL
+		context['SONADOR_URL'] = site_fullurl(request=self.request)
+		
 		return context
 
 	def get_imaging_servers(self, *args, **kwargs):
