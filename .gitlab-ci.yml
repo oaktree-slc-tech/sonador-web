@@ -49,8 +49,10 @@ test:
     DJANGO_SETTINGS_MODULE: "sonador.settings"
 
   services:
-  - name: postgres:11
+  - name: postgres:16
     alias: sonador-db
+  - name: minio
+    alias: object-storage
 
   script:
   - ln -s /srv/www/sonador/sonador/config/sonador.site.config /srv/www/sonador/config/sonador.site.config

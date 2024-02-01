@@ -4,16 +4,17 @@ ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
 
 # Install Python runtime and dependencies
-RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj uvicorn \
-  && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador 
-USER 1000
+RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
+  && mkdir -p /srv/www/sonador \
+  && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador \
+  && chown 1000:1000 -R /srv/www/sonador 
 RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-build-secrets \
-  && export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
-  && mkdir -p /srv/www/sonador/config && mkdir -p /srv/www/sonador/docroot \
+  && mkdir -p /srv/www/sonador/config \ 
   && cd /srv/www/sonador && git clone https://code.oak-tree.tech/oak-tree/medical-imaging/sonador.git \
   && cd /srv/www/sonador/sonador && git checkout $CI_COMMIT_SHA \
-  && git submodule update --init --recursive
+  && git submodule update --init --recursive \
+  && cd .. && chown -R 1000:1000 /srv/www/sonador/sonador && chown -R 1000:1000 /srv/www/sonador/config
 USER 0
 RUN pip3 install --timeout 300 -r /srv/www/sonador/sonador/requirements.txt \
   && pip3 install uvicorn \
@@ -42,7 +43,7 @@ RUN apt-get install -y libpq-dev && pip3 install --timeout 30 psycopg2
 # Install sudo
 RUN apt-get install -y sudo \
   && cp /srv/www/sonador/sonador/config/entrypoint.sh /srv/www/sonador/ \
-  && chmod +x /srv/www/sonador/entrypoint.sh
+  && chmod +x /srv/www/sonador/entrypoint.sh && chown 1000:1000 /srv/www/sonador/sonador/config/entrypoint.sh 
 
 EXPOSE 8070
 USER 1000

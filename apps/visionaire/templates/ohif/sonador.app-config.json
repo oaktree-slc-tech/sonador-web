@@ -9,6 +9,7 @@
 
   {% if logo %}"branding": { "logo": "{{ logo }}"},{% endif %}
   "staticUrl": "{% static 'js' %}",
+  {% if SONADOR_URL %}"sonadorUrl": "{{ SONADOR_URL }}",{% endif %}
 
   {% if oauth_endpoint %}
   "oidc": [{
