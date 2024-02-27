@@ -159,13 +159,15 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	'''
 	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='group_authorizations')
 	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
-	resource = models.CharField(max_length=2048, default='*',
-		help_text='Resources that the user is authorized to access on the server')
+
+	# Global permissions
+	query = models.BooleanField(default=False, help_text='Submit global DICOM resource queries to the server')
+	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
 
 	# Resource permissions
-	query = models.BooleanField(default=False, help_text='Submit DICOM resource queries to the server')
-	view = models.BooleanField(default=False, help_text='View images and other resources from the server')
-	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
+	resource = models.CharField(max_length=2048, default='*',
+		help_text='Resources pattern that the user is authorized to access on the server')
+	view = models.BooleanField(default=False, help_text='View images and other resources from the server')	
 	modify = models.BooleanField(default=False, help_text='Modify DICOM resources on the server')
 	remove = models.BooleanField(default=False, help_text='Remove DICOM resources from the server')
 	comment_edit = models.BooleanField(verbose_name='Manage Comments', default=False, help_text='Add, edit, or remove resource comments')

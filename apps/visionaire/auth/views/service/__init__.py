@@ -1,4 +1,4 @@
-import logging, six, copy, base64
+import logging, six, copy, base64, posixpath
 from six.moves.urllib import parse as urlparse
 
 from django import forms
@@ -29,48 +29,42 @@ from ....helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 from ....models import PacsImagingServer
 
 from ... import hexsigning
+from ...helpers import create_session_token
 from ...forms.base import ServiceAuthorizationRequest
 from ...forms.orthanc import OrthancServiceAuthorizationForm
 
-from .base import SonadorServiceAuthorizationBaseView
+from .base import SonadorServiceAuthorizationBaseView, OrthancServiceImagingServerMixin
 
 logger = logging.getLogger(__name__)
 
 
-class OrthancServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
+class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorServiceAuthorizationBaseView):
 	'''	API view which can be used to process authorization requests from Orthanc
 	'''
 	formclass = OrthancServiceAuthorizationForm
-	imagingserver_class = PacsImagingServer
-	imagingserver_request_param = 'serverid'
-
-	def getImagingServer(self, *args, **kwargs):
-		''' Retrieve the imaging server associated with the request. After being retrieved
-			from the database, subsequent calls retrieve a cached copy of the data.
-		'''
-		kwargs = kwargs or self.kwargs
-
-		# Retrieve imaging server
-		iserver = kwargs.get('server')
-		if iserver is None:
-			iserver = self.imagingserver_class.objects.get(
-				pk=kwargs.get(self.imagingserver_request_param))
-			kwargs['server'] = iserver
-		
-		return iserver
 	
 	def get_form_kwargs(self, *args, **kwargs):
-		form_kwargs = super(OrthancServiceAuthorizationView, self).get_form_kwargs(*args, **kwargs)
+		form_kwargs = super().get_form_kwargs(*args, **kwargs)
 		form_kwargs['server'] = self.getImagingServer(*args, **kwargs)
 		return form_kwargs
 
 	def get_data(self, context):
 		'''	Process the authorization request.
 		'''
-		adata = super(OrthancServiceAuthorizationView, self).get_data(context)
+		adata = super().get_data(context)
+
+		# Allow requests for static assets
+		_resource = self.form.data.get('uri') or ''
+		_,_rtype = posixpath.splitext(_resource)
+		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf'):
+			adata.update({ 'granted': True, 'validity': 1 })
+
+		# Allow requests to Orthanc OHIF plugin
+		elif _resource == '/ohif/viewer/' or '/ohif/assets/' in _resource:
+			adata.update({ 'granted': True, 'validity': 5 })
 
 		# Authorize requests for Sonador users
-		if self.form.is_valid() and getattr(self.form, 'user', None): 
+		elif self.form.is_valid() and getattr(self.form, 'user', None): 
 
 			# Valid authorization forms resolve to the "Sonador" internal user
 			# or to a user account. The internal user is a superadmin authorized
@@ -84,21 +78,20 @@ class OrthancServiceAuthorizationView(SonadorServiceAuthorizationBaseView):
 				
 				# The Orthanc advanced authorization plugin expects a response that specifies
 				# whether access to the resource should be granted, and for how long.
-				adata.update({
-					'granted': True,
-					'validity': self.form.expires_in,
-				})
+				adata.update({ 'granted': True, 'validity': self.form.expires_in, })				
 
 		# Deny requests from unknown users
 		if not adata.get('granted'):
 			adata.update({ 'granted': False })
 
+		if not adata.get('granted'):
+			logger.warning('Token validation request rejected: resource=%s\n%s' % (self.form.cleaned_data.get('uri'), adata))
 		return adata
 
 	def post(self, request, *args, **kwargs):
 		'''	Process authorization request from Orthanc
 		'''
-		# Retrieve the imaging server and cache
+		# Retrieve imaging server from cache
 		try: server = self.getImagingServer(*args, **kwargs)
 		except self.imagingserver_class.DoesNotExist as err:
 			return guru_page_not_found(self.request, err)
@@ -112,13 +105,23 @@ class OrthancSecureUriRedirectView(RedirectView):
 	model = PacsImagingServer
 	model_objectid_fieldname = 'serverid'
 	server_url_attr = None
+	token_payload = None
+	querystring_attrs = None
 
 	def __init__(self, *args, **kwargs):
 		super(OrthancSecureUriRedirectView, self).__init__(*args, **kwargs)
 
-	def get(self, *args, **kwargs):
+		# Ensure that an imaging server URL attribute is specified for redirect
 		if not getattr(self, 'server_url_attr', None):
 			raise OperationError('Invalid view configuration, so server URL attribute specified')
+
+		# Ensure that token payload and querystring parameters are provided as dictionaries
+		if self.token_payload and not isinstance(self.token_payload, dict):
+			raise TypeError('Invalid Orthanc payload for the view, must be a JSON object/dict')
+		if self.querystring_attrs and not isinstance(self.querystring_attrs, dict):
+			raise TypeError('Invalid querystring parameters for view instance, must be a set of key/value pairs (dict)')
+
+	def get(self, *args, **kwargs):
 
 		try: self.server = self.model.objects.get(pk=kwargs.get(self.model_objectid_fieldname))
 		except self.model.DoesNotExist as err:
@@ -130,9 +133,13 @@ class OrthancSecureUriRedirectView(RedirectView):
 		'''	Redirect to the Orthanc URL specified by the server URL attribute. Includes
 			a signed token value in the URL based on the current user session.
 		'''
-		return merge_url_querystring(getattr(self.server, self.server_url_attr), {
-				'token': 'h:%s' % hexsigning.dumps(self.request.session.session_key, salt=SESSION_SALT),
-			})
+		# Add parameters to redirect, including token
+		_query = copy.deepcopy(self.querystring_attrs) if self.querystring_attrs else {}
+		_query['token'] = create_session_token(
+			self.request.session.session_key, token_payload=copy.deepcopy(self.token_payload) if self.token_payload else None)
+
+		# Create redirect URL
+		return merge_url_querystring(getattr(self.server, self.server_url_attr), _query)
 
 
 class SecureApiLoginView(View):
