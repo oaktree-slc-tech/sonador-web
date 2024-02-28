@@ -100,7 +100,7 @@ class JSONFormApiView(GuruApiRequestMixin, JSONBaseView):
 	def form_valid(self, form):
 		return self.render_to_response(self.get_context_data(form=form))
 
-	def form_invalid(self, form):
+	def form_invalid(self, form):		
 		return self.render_to_response(self.get_context_data(form=form), badrequest=True)
 
 	def get(self, request, *args, **kwargs):

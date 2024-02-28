@@ -1,11 +1,15 @@
-import logging, json
+import logging, json, datetime
 
 from django.views import View
+from django.utils import timezone
+
+from django.contrib.sessions.backends.db import SessionStore
+from django.contrib.sessions.models import Session
 
 from orthancapi import auth as orthanc_authapi
 
 import guru.apisettings as gapi
-from guru.helpers import operation_results
+from guru.helpers import operation_results, create_token
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.user import user_displayname
 
@@ -37,7 +41,7 @@ class OrthancAuthUserProfileView(OrthancServiceImagingServerMixin, SonadorServic
 		adata = super().get_data(context)
 
 		# Retrive user profile
-		if self.form.is_valid() and getattr(self.form, 'user', None):
+		if self.form.is_valid() and getattr(self.form, 'user', None) and self.form.server.user_has_access(self.form.user):
 
 			# Labels and permissions the user is authorized for
 			authorized_labels = []
@@ -53,7 +57,7 @@ class OrthancAuthUserProfileView(OrthancServiceImagingServerMixin, SonadorServic
 				'validity': 60,
 			})
 		
-		logger.warning('User profile response:\n%s' % adata)
+		logger.debug('Orthac user profile response:\n%s' % adata)
 
 		return adata
 
@@ -79,13 +83,45 @@ class OrthancAuthTokenGenerateView(OrthancServiceImagingServerMixin, View):
 		except self.imagingserver_class.DoesNotExist as err:
 			return guru_page_not_found(self.request, err)
 
-		logger.warning('Token authorization request: user=%s\n%s' % (self.request.user, self.request.body))
+		# Convert request to JSON
+		try: rdata = orthanc_authapi.TokenCreationRequest(**json.loads(self.request.body))
+		except ValueError as err:
+			return operation_results({
+					gapi.API_ERROR: 'invalid-request',
+					gapi.API_MESSAGE: 'Unable to load request JSON due to an error: %s' % err,
+				}, status_code=400)
 
-		return operation_results({
-			'request': json.loads(request.body),
-			'token': 'hello-world',
-			# 'url': '/ohif/viewer',
-		})
+		if orthanc_authapi.TokenType.VIEWER_INSTANT_LINK:
+
+			# Ensure that the request includes an expiry
+			skey = 'resource-grant:%s:%s' % (server.pk, create_token())
+			sexp = rdata.expiration_date or timezone.now()+datetime.timedelta(seconds=rdata.validity_duration)
+
+			# Create a resource grant and store it as a Django session. The session is explicitly created first
+			# to provide a structured key name that includes the type of session (resource-grant) and the 
+			# the ID of the server. The session store instance is the retrieved separately once the database
+			# column has been populated.
+			Session(pk=skey, expire_date=sexp).save()
+			
+			# Initialize session store
+			s = SessionStore(session_key=skey)
+			s['type'] = token_type
+
+			# Specify the account which authorized the grant and the resources. The account that authorized
+			# access to the resources is included in the grant, but not shared in the token. When the token
+			# is validated, the validation endpoint will ensure that the authorizing user has access to all resources
+			# before allowing the grant.
+			s['authorizer'] = self.request.user.pk
+			s['resources'] = ['%s:%s' % (r.level.value, r.orthanc_id) for r in rdata.resources]
+			s.save()
+
+			# Generate token request from session ID and resource list
+			_token = create_session_token(
+				s.session_key, token_payload={ 'resources': [r.orthanc_id for r in rdata.resources] })
+
+			return operation_results({ 'request': rdata.dict(), 'token': _token })
+
+		raise NotImplementedError('Invalid token type: %s' % token_type)
 
 
 class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServiceAuthorizationBaseView):
@@ -101,9 +137,7 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 	def get_data(self, context):
 		'''	Process the token decode event
 		'''
-		adata = super().get_data(context)
-
-		logger.warning('Token decode request:\n%s' % self.form.data)
+		adata = super().get_data(context)		
 
 		# Decode user requests
 		if self.form.is_valid() and getattr(self.form, 'user', None):
@@ -123,7 +157,6 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 						self.form.server, 'ui/app/index.html?token=%s' % create_session_token(self.form.session.session_key))
 				})
 
-		logger.warning('Token decode response:\n%s' % adata)
 		return adata
 
 	def post(self, request, *args, **kwargs):

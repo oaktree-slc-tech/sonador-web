@@ -11,6 +11,7 @@ from django.views.generic.base import View, RedirectView
 from django.contrib import auth
 from django.contrib.sessions.backends.db import SessionStore
 
+from guru import apisettings as gapi
 from guru.errors import OperationError
 from guru.helpers import gsetting, operation_results
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
@@ -51,17 +52,23 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 	def get_data(self, context):
 		'''	Process the authorization request.
 		'''
-		adata = super().get_data(context)
+		adata = super().get_data(context)		
 
 		# Allow requests for static assets
 		_resource = self.form.data.get('uri') or ''
 		_,_rtype = posixpath.splitext(_resource)
+
+		logger.info(
+			'Form: valid=%s resource=%s user=%s session=%s' % (
+				self.form.is_valid(), _resource, getattr(self.form, 'user', None),
+				self.form.session.session_key if hasattr(self.form, 'session') else None))
+
 		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf'):
-			adata.update({ 'granted': True, 'validity': 1 })
+			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'static-asset'  })
 
 		# Allow requests to Orthanc OHIF plugin
-		elif _resource == '/ohif/viewer/' or '/ohif/assets/' in _resource:
-			adata.update({ 'granted': True, 'validity': 5 })
+		elif _resource.startswith('/ohif/assets/'):
+			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'ohif-static-asset' })
 
 		# Authorize requests for Sonador users
 		elif self.form.is_valid() and getattr(self.form, 'user', None): 
@@ -78,14 +85,15 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 				
 				# The Orthanc advanced authorization plugin expects a response that specifies
 				# whether access to the resource should be granted, and for how long.
-				adata.update({ 'granted': True, 'validity': self.form.expires_in, })				
+				adata.update({ 'granted': True, 'validity': self.form.expires_in, gapi.API_MESSAGE: 'resource-auth' })				
 
 		# Deny requests from unknown users
 		if not adata.get('granted'):
 			adata.update({ 'granted': False })
 
 		if not adata.get('granted'):
-			logger.warning('Token validation request rejected: resource=%s\n%s' % (self.form.cleaned_data.get('uri'), adata))
+			logger.error('Token rejected: resource=%s\n%s' % (_resource, adata))		
+		
 		return adata
 
 	def post(self, request, *args, **kwargs):
