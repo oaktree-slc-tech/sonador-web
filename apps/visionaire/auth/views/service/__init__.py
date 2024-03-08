@@ -58,17 +58,17 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 		_resource = self.form.data.get('uri') or ''
 		_,_rtype = posixpath.splitext(_resource)
 
-		logger.info(
-			'Form: valid=%s resource=%s user=%s session=%s' % (
-				self.form.is_valid(), _resource, getattr(self.form, 'user', None),
-				self.form.session.session_key if hasattr(self.form, 'session') else None))
-
-		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf'):
+		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf', 'gif'):
 			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'static-asset'  })
 
 		# Allow requests to Orthanc OHIF plugin
-		elif _resource.startswith('/ohif/assets/'):
+		elif _resource == '/ohif/viewer' or _resource.startswith('/ohif/assets/'):
 			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'ohif-static-asset' })
+
+		# Allow requests to Orthanc /system endoint
+		elif _resource == '/system' and self.form.is_valid() and getattr(self.form, 'user', None) \
+			and self.form.server.user_has_access(self.form.user):
+			adata.update({ 'granted': True, 'validity': 1, gapi.API_MESSAGE: 'system-config' })
 
 		# Authorize requests for Sonador users
 		elif self.form.is_valid() and getattr(self.form, 'user', None): 
@@ -92,8 +92,10 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 			adata.update({ 'granted': False })
 
 		if not adata.get('granted'):
-			logger.error('Token rejected: resource=%s\n%s' % (_resource, adata))		
+			logger.error('Token rejected: resource=%s\nresponse=%s\nrequest=%s' % (_resource, adata, self.form.cleaned_data))
 		
+		if self.form:
+			logger.warning('Auth request: user=%s resource=%s\n%s' % (getattr(self.form, 'user', None), _resource, adata))
 		return adata
 
 	def post(self, request, *args, **kwargs):

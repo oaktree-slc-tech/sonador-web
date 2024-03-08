@@ -137,7 +137,7 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 	def get_data(self, context):
 		'''	Process the token decode event
 		'''
-		adata = super().get_data(context)		
+		adata = super().get_data(context)
 
 		# Decode user requests
 		if self.form.is_valid() and getattr(self.form, 'user', None):
@@ -165,6 +165,6 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 		# Retrieve imaging server from cache
 		try: server = self.getImagingServer(*args, **kwargs)
 		except self.imagingserver_class.DoesNotExist as err:
-			return guru_page_not_found(self.request, err)
+			return guru_page_not_found(self.request, err)		
 
 		return super().post(request, *args, **kwargs)

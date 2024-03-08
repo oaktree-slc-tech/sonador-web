@@ -172,6 +172,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	remove = models.BooleanField(default=False, help_text='Remove DICOM resources from the server')
 	comment_edit = models.BooleanField(verbose_name='Manage Comments', default=False, help_text='Add, edit, or remove resource comments')
 	comment_view = models.BooleanField(verbose_name='View Comments', default=False, help_text='View resource comments')
+	acl = models.BooleanField(verbose_name='Access Control', default=False, help_text='View and modify resource access control permissions')
 	
 	class Meta:
 		app_label = 'visionaire'
