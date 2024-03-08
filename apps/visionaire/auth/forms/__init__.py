@@ -34,6 +34,6 @@ from .. import hexsigning
 
 from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseForm
 from .orthanc import OrthancServiceAuthorizationForm
+from .user import UserCreationForm, UserChangeForm, GroupForm
 
 logger = logging.getLogger(__name__)
-

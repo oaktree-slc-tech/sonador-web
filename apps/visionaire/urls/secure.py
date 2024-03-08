@@ -1,5 +1,4 @@
 from django.urls import path, re_path
-
 from guru.views import GuruApiObjectManagementView, GuruApiRestView
 
 from secure.models import ApiAccessToken
@@ -14,8 +13,9 @@ from ..views.dicom import PacsImagingServerChildObjectManagementView, PacsImagin
 from ..views.servers import PacsImagingServerApiManagementView, PacsImagingServerApiRestView
 from ..views.integrations import DataServiceApiRestView
 
-from ..auth.models import DataService
+from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
+from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify
 
@@ -98,5 +98,58 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerChildObjectRestView.as_view(model=RemoteDICOMwebServer)), 
 		name='pacs-server-dicomweb-update'),
-]
 
+	# Imaging Server API: Group Access Control Management
+	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/?$",
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST", ),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerChildObjectManagementView.as_view(model=PacsImagingServerGroupAuthorization)),
+		name="group-access-control-manage",
+	),
+	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/(?P<objectid>[a-zA-Z0-9]+)/?$",
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerChildObjectRestView.as_view(model=PacsImagingServerGroupAuthorization)),
+		name="group-access-control-update",
+	),
+
+
+	# User Management API
+	path("user/", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("GET", "POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserManagementView.as_view()),
+		name="user-management",
+	),
+	path("user/<int:objectid>/",
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserRestView.as_view()),
+		name="user-update",
+	),
+
+	
+	# Group Management API
+	path("group/", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("GET", "POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			GroupManagementView.as_view()),
+		name="group-management",
+	),
+	path("group/<int:objectid>/",
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			GroupManagementView.as_view()),
+		name="group-update",
+	),
+]
