@@ -103,10 +103,10 @@ urlpatterns_api = [
 	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/?$",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken,
-				allowed_http_methods_token_access=("POST", ),
+				allowed_http_methods_token_access=('GET', "POST"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerChildObjectManagementView.as_view(model=PacsImagingServerGroupAuthorization)),
-		name="group-access-control-manage",
+		name="group-access-control-management",
 	),
 	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/(?P<objectid>[a-zA-Z0-9]+)/?$",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
@@ -119,14 +119,14 @@ urlpatterns_api = [
 
 
 	# User Management API
-	path("user/", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+	path("user", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			UserManagementView.as_view()),
 		name="user-management",
 	),
-	path("user/<int:objectid>/",
+	path("user/<int:objectid>",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),

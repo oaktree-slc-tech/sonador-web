@@ -15,7 +15,7 @@ class UserApiMixin:
 		'''	Retrieve user details, remove hashed password and other sensitive information
 			from response.
 		'''
-		json = super().getModelJsonData(self, instance, vargs=vargs, vkwarg=vkwargs)
+		json = super().getModelJsonData(instance, request, vargs=vargs, vkwargs=vkwargs)
 		json.pop('password', None)	
 		return json	
 
