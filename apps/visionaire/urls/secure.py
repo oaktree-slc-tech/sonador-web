@@ -1,4 +1,6 @@
 from django.urls import path, re_path
+
+from guru.forms import create_modelform_class
 from guru.views import GuruApiObjectManagementView, GuruApiRestView
 
 from secure.models import ApiAccessToken
@@ -16,6 +18,8 @@ from ..views.integrations import DataServiceApiRestView
 from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
 from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView
+from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
+from ..auth.views.acl import PacsImagingServerGroupAuthorizationManagementView, PacsImagingServerGroupAuthorizationRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify
 
@@ -105,7 +109,7 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=('GET', "POST"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			PacsImagingServerChildObjectManagementView.as_view(model=PacsImagingServerGroupAuthorization)),
+			PacsImagingServerGroupAuthorizationManagementView.as_view()),
 		name="group-access-control-management",
 	),
 	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/(?P<objectid>[a-zA-Z0-9]+)/?$",
@@ -113,7 +117,7 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			PacsImagingServerChildObjectRestView.as_view(model=PacsImagingServerGroupAuthorization)),
+			PacsImagingServerGroupAuthorizationRestView.as_view()),
 		name="group-access-control-update",
 	),
 
