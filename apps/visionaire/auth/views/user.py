@@ -1,13 +1,24 @@
+from django import forms
 from django.forms.models import model_to_dict
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
 from guru.helpers.user import user_displayname
+from guru.filter.forms import GuruFilterForm
+from guru.filter.views import GuruQueryParamFilterFormMixin
 
 from ...views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..forms import UserCreationForm, UserChangeForm, GroupForm
 
+
+
+class UserFilterForm(GuruFilterForm):
+	'''	Filter form which can be used to search for user instances
+	'''
+	username = forms.CharField(max_length=256, required=False)
+	first_name = forms.CharField(max_length=512, required=False)
+	last_name = forms.CharField(max_length=512, required=False)
 
 
 class UserApiMixin:
@@ -33,11 +44,16 @@ class UserApiMixin:
 		return json	
 
 
-class UserManagementView(UserApiMixin, SonadorApiObjectManagementView):
+class UserManagementView(GuruQueryParamFilterFormMixin, UserApiMixin, SonadorApiObjectManagementView):
 	'''	Sonador user API management view: create new users, list/filter existing users
 	'''
 	model = get_user_model()
 	modelform = UserCreationForm
+	filterform = UserFilterForm
+
+	def __init__(self, *args, **kwargs):
+		self.initFilterForm()
+		super().__init__(*args, **kwargs)
 
 
 class UserRestView(UserApiMixin, SonadorApiRestView):
@@ -47,11 +63,22 @@ class UserRestView(UserApiMixin, SonadorApiRestView):
 	modelform = UserChangeForm
 
 
-class GroupManagementView(SonadorApiObjectManagementView):
+class GroupFilterForm(GuruFilterForm):
+	'''	Filter form which can be used to search for group instances
+	'''
+	name = forms.CharField(max_length=256, required=False)
+
+
+class GroupManagementView(GuruQueryParamFilterFormMixin, SonadorApiObjectManagementView):
 	'''	Sonador group API management view: create new users, list/filter existing users
 	'''
 	model = Group
 	modelform = GroupForm
+	filterform = GroupFilterForm
+
+	def __init__(self, *args, **kwargs):
+		self.initFilterForm()
+		super().__init__(*args, **kwargs)
 
 	
 class GroupRestView(SonadorApiRestView):
