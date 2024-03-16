@@ -1,5 +1,9 @@
+from django.forms.models import model_to_dict
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+
+from guru.helpers.user import user_displayname
 
 from ...views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..forms import UserCreationForm, UserChangeForm, GroupForm
@@ -16,7 +20,16 @@ class UserApiMixin:
 			from response.
 		'''
 		json = super().getModelJsonData(instance, request, vargs=vargs, vkwargs=vkwargs)
-		json.pop('password', None)	
+		json.pop('password', None)
+
+		# Convert group models to JSON
+		if json.get('groups'):
+			json['groups'] = [g for g in map(model_to_dict, json['groups'])]
+
+		# Add user name to JSON
+		if instance:
+			json['name'] = user_displayname(instance)
+
 		return json	
 
 

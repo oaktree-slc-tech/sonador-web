@@ -137,19 +137,19 @@ urlpatterns_api = [
 
 	
 	# Group Management API
-	path("group/", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+	path("group", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			GroupManagementView.as_view()),
 		name="group-management",
 	),
-	path("group/<int:objectid>/",
+	path("group/<int:objectid>",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			GroupManagementView.as_view()),
+			GroupRestView.as_view()),
 		name="group-update",
 	),
 ]
