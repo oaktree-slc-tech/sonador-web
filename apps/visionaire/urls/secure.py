@@ -18,6 +18,8 @@ from ..views.integrations import DataServiceApiRestView
 from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
 from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView
+from ..auth.views import cred as sonador_cred
+from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
 from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
 from ..auth.views.acl import PacsImagingServerGroupAuthorizationManagementView, PacsImagingServerGroupAuthorizationRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
@@ -128,7 +130,7 @@ urlpatterns_api = [
 				allowed_http_methods_token_access=("GET", "POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			UserManagementView.as_view()),
-		name="user-management",
+		name="admin-user-management",
 	),
 	path("user/<int:objectid>",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
@@ -136,8 +138,36 @@ urlpatterns_api = [
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			UserRestView.as_view()),
-		name="user-update",
+		name="admin-user-update",
 	),
+	re_path(r'^user/(?P<userid>[0-9]+)/cred/token/?$',			# Admin Credentials Management: access token
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				apiaccess_token_model=sonador_cred.SonadorApiAccessToken, 
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
+				allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			sonador_cred.SonadorAdminUserTokenManagementView.as_view(
+				model=sonador_cred.SonadorApiAccessToken, modelform=SonadorApiAccessTokenForm)),
+		name='admin-cred-management-access-token'),
+
+	# Admin Credentials Management: access ID/secret
+	re_path(r'^user/(?P<userid>[0-9]+)/cred/access/?$',			
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				apiaccess_token_model=sonador_cred.SonadorApiAccessToken, 
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			sonador_cred.SonadorAdminUserCredentialManagementView.as_view(
+				model=sonador_cred.SonadorApiAccess, modelform=SonadorApiAccessCredentialForm)),
+		name='admin-cred-management-access-secret'),
+	re_path(r'^user/(?P<userid>[0-9]+)/cred/access/(?P<objectid>[a-zA-Z0-9]+)/?$',
+		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				apiaccess_token_model=sonador_cred.SonadorApiAccessToken,
+				allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			sonador_cred.SonadorAdminUserCredentialRestView.as_view(
+				model=sonador_cred.SonadorApiAccess, modelform=SonadorApiAccessCredentialForm)),
+		name='admin-cred-management-access-update'),
 
 	
 	# Group Management API
@@ -146,7 +176,7 @@ urlpatterns_api = [
 				allowed_http_methods_token_access=("GET", "POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			GroupManagementView.as_view()),
-		name="group-management",
+		name="admin-group-management",
 	),
 	path("group/<int:objectid>",
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
@@ -154,6 +184,6 @@ urlpatterns_api = [
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			GroupRestView.as_view()),
-		name="group-update",
+		name="admin-group-update",
 	),
 ]
