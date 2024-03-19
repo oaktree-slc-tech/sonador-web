@@ -125,8 +125,8 @@ class SonadorAdminUserCredentialsManagementMixin(object):
 	def getUser(self, *args, **kwargs):
 		'''	Retrieve user instance
 		'''
-		return self.user_model.objects.get(
-			pk=(kwargs.get('vkwargs') or {}).get(self.request_user_fieldname))
+		vkwargs = kwargs.get('vkwargs', {}) or self.kwargs or {}
+		return self.user_model.objects.get(pk=vkwargs.get(self.request_user_fieldname))
 
 
 class SonadorAdminUserCredentialManagementView(
