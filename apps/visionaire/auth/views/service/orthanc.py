@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
+from django.contrib.auth import get_user_model
 
 from orthancapi import auth as orthanc_authapi
 
@@ -15,6 +16,7 @@ from guru.helpers.user import user_displayname
 
 from microservices.control import server_controlurl
 
+from ....apisettings import SONADOR_USERNAME, SONADOR_USER_PK, SONADOR_USER_LABEL
 from ....views.base import SonadorApiRestView
 
 from ...helpers import create_session_token
@@ -43,18 +45,43 @@ class OrthancAuthUserProfileView(OrthancServiceImagingServerMixin, SonadorServic
 		# Retrive user profile
 		if self.form.is_valid() and getattr(self.form, 'user', None) and self.form.server.user_has_access(self.form.user):
 
+			# User UID
+			user_uid = self.form.user.pk if isinstance(self.form.user, get_user_model()) \
+				else SONADOR_USER_PK if isinstance(self.form.user, str) \
+				else None
+
+			if not user_uid:
+				raise ValueError('Unable to create user profile, invalid user UID=%s' % user_uid)
+
+			# Username
+			username = self.form.user.username if isinstance(self.form.user, get_user_model()) \
+				else self.form.user if isinstance(self.form.user, str) \
+				else None
+			if not username:
+				raise ValueError('Unable to create user profile, invalid username="%s"' % username)
+
+			# User display name
+			user_label = user_displayname(self.form.user) if isinstance(self.form.user, get_user_model()) \
+				else SONADOR_USER_LABEL if isinstance(self.form.user, str) \
+				else None
+
+			if not user_label:
+				raise ValueError('Unable to create user profile, invalid uesr label="%s"' % user_label)
+
+			# User email
+			user_label = self.form.user.email if isinstance(self.form.user, get_user_model()) else None
+
 			# Labels and permissions the user is authorized for
 			authorized_labels = []
 			permissions = []
-			if self.form.user.is_superuser:
+			if (isinstance(self.form.user, get_user_model()) and self.form.user.is_superuser) \
+				or (isinstance(self.form.user, str) and self.form.user == SONADOR_USERNAME):
 				authorized_labels.append('*')
 				permissions.append('all')
 
 			adata.update({
-				'server': self.form.server.pk, 'pk': self.form.user.pk, 'username': self.form.user.username, 
-				'name': user_displayname(self.form.user), 'email': self.form.user.email,
-				'authorized-labels': authorized_labels, 'permissions': permissions,
-				'validity': 60,
+				'server': self.form.server.pk, 'pk': user_uid, 'username': username, 'name': user_label, 'email': user_label,
+				'authorized-labels': authorized_labels, 'permissions': permissions, 'validity': 60,
 			})
 		
 		logger.debug('Orthac user profile response:\n%s' % adata)

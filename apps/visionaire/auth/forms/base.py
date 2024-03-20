@@ -21,6 +21,7 @@ from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 
+from ...apisettings import SONADOR_USERNAME
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
@@ -66,7 +67,7 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 
 			# Compare decrypted server token to local server token
 			if stoken == gsetting('SERVER_APITOKEN'):
-				self.user = 'sonador'
+				self.user = SONADOR_USERNAME
 				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
 				logger.debug('Authentication using Sonador server token')
 

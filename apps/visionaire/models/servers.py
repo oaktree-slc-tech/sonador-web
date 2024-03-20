@@ -109,9 +109,14 @@ class PacsImagingServer(BaseServerModel):
 		'''	Determine if the provided user has access to the server in any capacity
 
 			@returns bool: True if the user has some access to the server, False otherwise
-		'''
+		'''		
+		# Check user to determine if it matches the Sonador system user
+		if isinstance(user, str) and user == 'sonador':
+			return True
+
+		# Check if the user is a super-user or part of a group affiliated with the server		
 		access = user.is_superuser or (
-			len(self.user_authorizations(user=user)) > 0 or len(self.group_authorizations.filter(group__user=user)) > 0)
+			len(self.user_authorizations.filter(user=user)) > 0 or len(self.group_authorizations.filter(group__user=user)) > 0)
 
 		return user.is_active and access
 

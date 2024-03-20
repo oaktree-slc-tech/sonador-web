@@ -1,3 +1,8 @@
+from orthancapi import apisettings as orthanc_api
+
+SONADOR_USERNAME = 'sonador'
+SONADOR_USER_PK = -42
+SONADOR_USER_LABEL = 'Sonador Web Application'
 SONADOR_OHIF_CLIENTID = 'sonador-ohif'
 
 # Sonador OHIF Client Types
@@ -32,6 +37,16 @@ ORTHANC_RESOURCE_STUDY = 'study'
 ORTHANC_RESOURCE_SERIES = 'series'
 ORTHANC_RESOURCE_INSTANCE = 'instance'
 
+ORTHANC_RESOURCE_URL_PATIENT = '/patients'
+ORTHANC_RESOURCE_URL_STUDY = '/studies'
+ORTHANC_RESOURCE_URL_SERIES = '/series'
+
+ORTHANC_RESOURCE_URL = {
+	orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(): ORTHANC_RESOURCE_URL_PATIENT,
+	orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower(): ORTHANC_RESOURCE_URL_STUDY,
+	orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower(): ORTHANC_RESOURCE_URL_SERIES,
+}
+
 ORTHANC_CACHE = '/cache'
 ORTHANC_CACHE_PATIENT = '%s/patient' % ORTHANC_CACHE
 ORTHANC_CACHE_STUDY = '%s/studies' % ORTHANC_CACHE
@@ -39,6 +54,9 @@ ORTHANC_CACHE_SERIES = '%s/series' % ORTHANC_CACHE
 ORTHANC_CACHE_TAGS = '%s/dcm-tags' % ORTHANC_CACHE
 
 ORTHANC_COMMENTS = 'comments'
+
+
+WILDCARD = '*'
 
 
 # "View" resource endpoints
