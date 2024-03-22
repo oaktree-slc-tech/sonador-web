@@ -30,6 +30,7 @@ from guru.errors import GuruFormError
 
 from guru.forms.helpers import validate_form_data
 
+from ....apisettings import SONADOR_USERNAME
 from ....forms.servers import PacsImagingServerForm
 from ....views import JSONFormApiView
 from ....views.base import SonadorApiRestView
@@ -88,14 +89,25 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 			# to access or modify any imaging resource. User accounts require
 			# permission to access the resource they have requested. Resource requests
 			# can be verified by calling the user_has_perm method of the imaging server model.			
-			if self.form.user == 'sonador' \
-				or (self.form.user.pk and self.form.server.user_has_perm(
+			if self.form.user == 'sonador' or getattr(self.form.user, 'pk', None):
+
+				if self.form.user == SONADOR_USERNAME:
+					granted = True
+					validity = self.form.expires_in
+
+				else:
+					granted, validity = self.form.server.user_has_perm(
 						self.form.user, self.form.cleaned_data.get('uri'), self.form.cleaned_data.get('orthanc_id'),
-						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'))):
-				
-				# The Orthanc advanced authorization plugin expects a response that specifies
-				# whether access to the resource should be granted, and for how long.
-				adata.update({ 'granted': True, 'validity': self.form.expires_in, gapi.API_MESSAGE: 'resource-auth' })				
+						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'))
+
+				if granted:
+
+					if validity is None:
+						validity = self.form.expires_in
+					
+					# The Orthanc advanced authorization plugin expects a response that specifies
+					# whether access to the resource should be granted, and for how long.
+					adata.update({ 'granted': granted, 'validity': validity, gapi.API_MESSAGE: 'resource-auth' })
 
 		# Deny requests from unknown users
 		if not adata.get('granted'):

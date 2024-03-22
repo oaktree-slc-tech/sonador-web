@@ -127,19 +127,19 @@ class PacsImagingServer(BaseServerModel):
 		'''
 		# Administrative or superuser
 		if user.is_superuser:
-			return True
+			return True, None
 
 		# Determine if the user has the requested permissions
 		for auth in self.user_authorizations.filter(user=user):
 			if auth.has_perm(resource, method, level):
-				return True
+				return True, None
 		
 		# Determine if the user is part of a group that has the requested permissions
 		for auth in self.group_authorizations.filter(group__user=user):
 			if auth.user_has_perm(user, resource, orthanc_id, method, level):
-				return True
+				return True, auth.duration
 				
-		return False
+		return False, None
 
 	@property
 	def wadoUriRoot(self):

@@ -184,6 +184,10 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	acl = models.BooleanField(
 		verbose_name='Access Control', default=False, help_text='View and modify resource access control permissions')
 
+	# Duration of the grant
+	duration = models.IntegerField(verbose_name='Grant Duration', default=15, 
+		help_text='Time in seconds for which access to the resource should be granted.')
+
 	sep_policiy = ' '
 	sep_resource = ','
 	
