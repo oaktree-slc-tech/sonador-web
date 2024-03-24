@@ -297,7 +297,30 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		if auth_scope.get(level) and orthanc_id in auth_scope[level]:
 			return True
 
+		# For series requests which will be authorized by patient policies, 
+		# retrieve auth scope for each child study of the patient. (This is done since
+		# retrieval of child study auth scopes can be resource intensive if there are a lot of studies.
+		if level == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower() \
+			and policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
+
+			for _p in policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
+				_pr = self.orthanc_resourceinfo(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(), _p)
+
+				for _s in _pr.get('Studies', []):
+					_study_authscope = self.resource_authscope(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, _s)
+					if orthanc_id in _study_authscope.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower()):
+						return True
+
 		return False
+
+	def orthanc_resourceinfo(self, level, orthanc_id):
+		'''	Retrieve the resource details for the provided Orthanc ID
+		'''
+		if not ORTHANC_RESOURCE_URL.get(level.lower()):
+			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, uid))
+
+		return server_controloperation_get(
+			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), headers=self.server.sonador_auth)
 
 	def resource_policy(self, resource=None):
 		'''	Parse resource policy to components: patient, study, series
@@ -327,21 +350,17 @@ class PacsImagingServerGroupAuthorization(models.Model):
 			are not included in the set of UIDs retrieved by this method.)
 
 			* series: includes UID of study and series within auth scope (sibling series are ommitted and any request will be deined)
-			* study: includes UID of patient, all child series are included within auth scope
-			* patient: includes UIDs of child studies and series
+			* study: includes UID of patient and child series
+			* patient: includes UIDs of child studies
 
 			@returns dict of UIDs keyed to study level. Values of the dictionary are a set.
 		'''
-		if not ORTHANC_RESOURCE_URL.get(level.lower()):
-			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, uid))
-
 		authscope = {}
 
-		# Retrieve UIDs of parent/child resources
-		_r = server_controloperation_get(
-			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), headers=self.server.sonador_auth)		
+		# Retrieve details of authorized resource
+		_r = self.orthanc_resourceinfo(level, orthanc_id)
 
-		# Unpack resource parent UIDs to scope:
+		# Series related UIDs: parent study and patient
 		if level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower():
 
 			# Study
@@ -355,5 +374,26 @@ class PacsImagingServerGroupAuthorization(models.Model):
 				p_uid = _rp.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
 				if p_uid:
 					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
+
+		# Study related UIDs: parent patient and child series
+		elif level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower():
+
+			# Patient
+			p_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
+			if p_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
+
+			# Child series
+			sx_uid = _r.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES, [])
+			if sx_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower()] = set(sx_uid)
+
+		# Patient related UIDs: authorize access to child studies
+		elif level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower():
+
+			# Child studies
+			s_uid = _r.get('Studies', [])
+			if s_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower()] = set(s_uid)
 		
 		return authscope
