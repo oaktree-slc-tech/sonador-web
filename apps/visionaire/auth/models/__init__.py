@@ -28,6 +28,8 @@ from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOA
 	ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES, \
 	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS, \
 	WILDCARD, ORTHANC_RESOURCE_URL, ORTHANC_RESOURCE_URL_PATIENT, ORTHANC_RESOURCE_URL_STUDY, ORTHANC_RESOURCE_URL_SERIES
+
+from ..helpers import parse_resource_policy
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -188,7 +190,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	duration = models.IntegerField(verbose_name='Grant Duration', default=15, 
 		help_text='Time in seconds for which access to the resource should be granted.')
 
-	sep_policiy = ' '
+	sep_policy = ' '
 	sep_resource = ','
 	
 	class Meta:
@@ -325,23 +327,8 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	def resource_policy(self, resource=None):
 		'''	Parse resource policy to components: patient, study, series
 		'''
-		resource = resource or self.resource
-		policy = {}
-
-		for _component in (resource or '').split(self.sep_policiy):
-
-			# Split policy components to resource class and grants
-			if '=' in _component:
-				_rclass,_rgrant = _component.split('=')
-				_rgrant = set(_rgrant.split(self.sep_resource))
-
-				if _rclass in orthanc_api.IMAGING_SERVER_RESOURCES or _rclass.title() in orthanc_api.IMAGING_SERVER_RESOURCES:
-
-					if _rclass.lower() in policy:
-						policy[_rclass].update(_rgrant)
-					else: policy[_rclass] = _rgrant
-
-		return policy
+		return parse_resource_policy(
+			resource or self.resource, sep_policy=self.sep_policy, sep_resource=self.sep_resource)
 
 	def resource_authscope(self, level, orthanc_id, dicom_uid=None):
 		'''	Retrieve the UIDs of resources to which the user has access from a resource scope defined in the policy. The auth scope

@@ -18,6 +18,8 @@ from secure.models import ApiAccess, ApiAccessToken
 
 from wgtauth.apisettings import BASIC_AUTH_TYPE
 
+from orthancapi import apisettings as orthanc_api
+
 from ..models.servers import PacsImagingServer
 from ..helpers import SESSION_SALT
 from . import hexsigning
@@ -41,6 +43,29 @@ def create_session_token(session_key, token_payload=None, salt=SESSION_SALT):
 		token_payload['session'] = session_key
 
 	return 'h:%s' % hexsigning.dumps(token_payload or session_key, salt=salt)
+
+
+def parse_resource_policy(resource_pollicy, sep_policy=' ', sep_resource=',', sep_equals='='):
+	'''	Parse the provided resource policy to a dictionary with study, series, and patient grants
+
+		@returns dict
+	'''
+	policy = {}
+
+	for _component in (resource_pollicy or '').split(sep_policy):
+
+		# Split policy components to resource class and grants
+		if '=' in _component:
+			_rclass,_rgrant = _component.split(sep_equals)
+			_rgrant = set(_rgrant.split(sep_resource))
+
+			if _rclass in orthanc_api.IMAGING_SERVER_RESOURCES or _rclass.title() in orthanc_api.IMAGING_SERVER_RESOURCES:
+
+				if _rclass.lower() in policy:
+					policy[_rclass].update(_rgrant)
+				else: policy[_rclass] = _rgrant
+
+	return policy
 
 
 
