@@ -15,6 +15,7 @@ import guru.apisettings as gapicodes
 from guru.models import GuruTokenModel
 from guru.helpers import site_fullurl
 from guru.helpers.compatability import guru_is_safe_url
+from guru.helpers.utils.object import pick, omit
 
 from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_TYPE, \
 	OAUTH_CODE_RESPONSE_TYPE
@@ -22,9 +23,10 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
 from orthancapi import apisettings as orthanc_api
+from orthancapi.auth.acl import ServerAuthorization as OrthancServerAuthorization, \
+	ResourceAuthorization as OrthancResourceAuthorization
 
-from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
-	ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
+from ...apisettings import SONADOR_PERMS, ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
 	ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES, \
 	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS, \
 	WILDCARD, ORTHANC_RESOURCE_URL, ORTHANC_RESOURCE_URL_PATIENT, ORTHANC_RESOURCE_URL_STUDY, ORTHANC_RESOURCE_URL_SERIES
@@ -215,55 +217,29 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		if user.is_superuser:
 			return True
 		
-		# User is a member of the group
+		# User is a member of the group, check server permissions
 		elif self.group.user_set.filter(username=user.username).exists():
+			_server_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
 
 			# Server query permission
-			if (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
-				or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES)) \
-				or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_TOOLS_FIND) \
-				or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES) \
-				or (method.lower() == gapicodes.HTTP_GET.lower() and resource in ORTHANC_QUERY_RESOURCES):
+			if _server_auth.query_perm(resource, method) is not None:
 				return self.query
 
 			# Upload permission
-			if method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
+			elif _server_auth.upload_perm(resource, method) is not None:
 				return self.upload
+
+			# TODO: Check Sonador "local policies" for permissions
 
 			# Ensure that the requested resource matches a UID within the scope of the user
 			elif self.resource == WILDCARD \
 				or self.user_has_system_perm(user, level, resource) \
 				or self.user_has_resource_perm(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
 
-				# Check system permissions
-				if level == ORTHANC_SYSTEM:
-
-					# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
-					if (method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource) \
-						or (ORTHANC_WADO in resource):
-
-						# Wado-URI or DICOMweb Study/Series Endpoint
-						return self.view
-
-					# Check view comment permissions
-					elif (ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_GET.lower()):
-						return self.comment_view
-
-					# Check add/edit/remove permissions
-					elif (ORTHANC_COMMENTS in resource and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
-						return self.comment_edit
-
-				# Check view permissions
-				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
-					return self.view
-
-				# Check modify permissions
-				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
-					return self.modify
-
-				# Check remove permissions
-				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
-					return self.remove
+				# Check resource request against the policy permissions
+				_auth = ResourceAuthorization(**pick(self, SONADOR_PERMS))
+				if _auth.has_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+					return True
 
 		return False
 	
