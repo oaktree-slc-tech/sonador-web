@@ -1,4 +1,4 @@
-import logging
+import logging, fnmatch, posixpath, copy
 from django.db import models
 
 from django.urls import reverse
@@ -6,6 +6,10 @@ from django.contrib import auth
 
 from django.db import models
 from django.contrib.auth.models import User, Group
+
+from microservices.control import server_controlurl, \
+	server_controloperation_put, server_controloperation_delete
+from microservices.control.jsonapi import server_controloperation_get
 
 import guru.apisettings as gapicodes
 from guru.models import GuruTokenModel
@@ -17,10 +21,13 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_T
 
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
+from orthancapi import apisettings as orthanc_api
+
 from ...apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, \
 	ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
 	ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES, \
-	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS
+	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS, \
+	WILDCARD, ORTHANC_RESOURCE_URL, ORTHANC_RESOURCE_URL_PATIENT, ORTHANC_RESOURCE_URL_STUDY, ORTHANC_RESOURCE_URL_SERIES
 from .integrations import DataService
 
 logger = logging.getLogger(__name__)
@@ -159,17 +166,30 @@ class PacsImagingServerGroupAuthorization(models.Model):
 	'''
 	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='group_authorizations')
 	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
-	resource = models.CharField(max_length=2048, default='*',
-		help_text='Resources that the user is authorized to access on the server')
+
+	# Global permissions
+	query = models.BooleanField(default=False, help_text='Submit global DICOM resource queries to the server')
+	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
 
 	# Resource permissions
-	query = models.BooleanField(default=False, help_text='Submit DICOM resource queries to the server')
-	view = models.BooleanField(default=False, help_text='View images and other resources from the server')
-	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
+	resource = models.CharField(max_length=2048, default='*',
+		help_text='Resources pattern that the user is authorized to access on the server')
+	view = models.BooleanField(default=False, help_text='View images and other resources from the server')	
 	modify = models.BooleanField(default=False, help_text='Modify DICOM resources on the server')
 	remove = models.BooleanField(default=False, help_text='Remove DICOM resources from the server')
-	comment_edit = models.BooleanField(verbose_name='Manage Comments', default=False, help_text='Add, edit, or remove resource comments')
-	comment_view = models.BooleanField(verbose_name='View Comments', default=False, help_text='View resource comments')
+	comment_edit = models.BooleanField(
+		verbose_name='Manage Comments', default=False, help_text='Add, edit, or remove resource comments')
+	comment_view = models.BooleanField(
+		verbose_name='View Comments', default=False, help_text='View resource comments')
+	acl = models.BooleanField(
+		verbose_name='Access Control', default=False, help_text='View and modify resource access control permissions')
+
+	# Duration of the grant
+	duration = models.IntegerField(verbose_name='Grant Duration', default=15, 
+		help_text='Time in seconds for which access to the resource should be granted.')
+
+	sep_policiy = ' '
+	sep_resource = ','
 	
 	class Meta:
 		app_label = 'visionaire'
@@ -181,7 +201,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		return 'Group Authorization: %s for %s (%s:%s)' \
 			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
 	
-	def user_has_perm(self, user, resource, orthanc_id, method, level):
+	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
 			@returns bool: True if the user has the permission, False otherwise
@@ -196,46 +216,184 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		# User is a member of the group
 		elif self.group.user_set.filter(username=user.username).exists():
 
-			# Check system permissions
-			if level == ORTHANC_SYSTEM:
+			# Server query permission
+			if (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
+				or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES)) \
+				or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_TOOLS_FIND) \
+				or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES) \
+				or (method.lower() == gapicodes.HTTP_GET.lower() and resource in ORTHANC_QUERY_RESOURCES):
+				return self.query
 
-				# Check upload permission
-				if method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
-					return self.upload
-				
-				# Check query permissions
-				elif (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_STUDIES) \
-						or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES)) \
-						or (method.lower() == gapicodes.HTTP_POST.lower() and resource == ORTHANC_TOOLS_FIND) \
-						or (method.lower() == gapicodes.HTTP_GET.lower() and resource == ORTHANC_DICOMWEB_SERIES) \
-						or (method.lower() == gapicodes.HTTP_GET.lower() and resource in ORTHANC_QUERY_RESOURCES):
-					return self.query
+			# Upload permission
+			if method.lower() == gapicodes.HTTP_POST.lower() and resource in (ORTHANC_DICOMWEB_STUDIES, ORTHANC_INSTANCES):
+				return self.upload
 
-				# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
-				elif (method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource) \
-					or (ORTHANC_WADO in resource):
+			# Ensure that the requested resource matches a UID within the scope of the user
+			elif self.resource == WILDCARD \
+				or self.user_has_system_perm(user, level, resource) \
+				or self.user_has_resource_perm(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
 
-					# Wado-URI or DICOMweb Study/Series Endpoint
+				# Check system permissions
+				if level == ORTHANC_SYSTEM:
+
+					# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
+					if (method.lower() == gapicodes.HTTP_GET.lower() and ORTHANC_DICOMWEB_STUDIES in resource) \
+						or (ORTHANC_WADO in resource):
+
+						# Wado-URI or DICOMweb Study/Series Endpoint
+						return self.view
+
+					# Check view comment permissions
+					elif (ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_GET.lower()):
+						return self.comment_view
+
+					# Check add/edit/remove permissions
+					elif (ORTHANC_COMMENTS in resource and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
+						return self.comment_edit
+
+				# Check view permissions
+				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
 					return self.view
 
-				# Check view comment permissions
-				elif (ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_GET.lower()):
-					return self.comment_view
+				# Check modify permissions
+				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
+					return self.modify
 
-				# Check add/edit/remove permissions
-				elif (ORTHANC_COMMENTS in resource and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
-					return self.comment_edit
-
-			# Check view permissions
-			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
-				return self.view
-
-			# Check modify permissions
-			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
-				return self.modify
-
-			# Check remove permissions
-			elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
-				return self.remove
+				# Check remove permissions
+				elif level in ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
+					return self.remove
 
 		return False
+	
+	def user_has_system_perm(self, user, level, resource):
+		'''	Determine if the user has access to the requested system resource
+		'''
+		return False
+
+	def user_has_resource_perm(self, user, level, resource, orthanc_id, dicom_uid=None):
+		'''	Determine if the user has access to the requested resource
+		'''
+		# Authorize resource		
+		if self.resource == WILDCARD:
+			return True
+
+		# Parse resource to grant components
+		policy = self.resource_policy()
+
+		# Check resource request against policy components
+		for rclass,rgrant in policy.items():
+			if orthanc_id in rgrant:
+				return True
+
+		# Retrieve authorization scope defined by the policy
+		auth_scope = copy.deepcopy(policy)
+		for rclass, rgrant in policy.items():
+			for uid in rgrant:
+				for _rc, _rg in self.resource_authscope(rclass, uid).items():
+					if auth_scope.get(_rc): auth_scope[_rc].update(_rg)
+					else: auth_scope[_rc] = _rg
+
+		# Check resource request against the authorized scope
+		if auth_scope.get(level) and orthanc_id in auth_scope[level]:
+			return True
+
+		# For series requests which will be authorized by patient policies, 
+		# retrieve auth scope for each child study of the patient. (This is done since
+		# retrieval of child study auth scopes can be resource intensive if there are a lot of studies.
+		if level == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower() \
+			and policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
+
+			for _p in policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
+				_pr = self.orthanc_resourceinfo(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(), _p)
+
+				for _s in _pr.get('Studies', []):
+					_study_authscope = self.resource_authscope(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, _s)
+					if orthanc_id in _study_authscope.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower()):
+						return True
+
+		return False
+
+	def orthanc_resourceinfo(self, level, orthanc_id):
+		'''	Retrieve the resource details for the provided Orthanc ID
+		'''
+		if not ORTHANC_RESOURCE_URL.get(level.lower()):
+			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, uid))
+
+		return server_controloperation_get(
+			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), headers=self.server.sonador_auth)
+
+	def resource_policy(self, resource=None):
+		'''	Parse resource policy to components: patient, study, series
+		'''
+		resource = resource or self.resource
+		policy = {}
+
+		for _component in (resource or '').split(self.sep_policiy):
+
+			# Split policy components to resource class and grants
+			if '=' in _component:
+				_rclass,_rgrant = _component.split('=')
+				_rgrant = set(_rgrant.split(self.sep_resource))
+
+				if _rclass in orthanc_api.IMAGING_SERVER_RESOURCES or _rclass.title() in orthanc_api.IMAGING_SERVER_RESOURCES:
+
+					if _rclass.lower() in policy:
+						policy[_rclass].update(_rgrant)
+					else: policy[_rclass] = _rgrant
+
+		return policy
+
+	def resource_authscope(self, level, orthanc_id, dicom_uid=None):
+		'''	Retrieve the UIDs of resources to which the user has access from a resource scope defined in the policy. The auth scope
+			is composed of resource types (patient, study, series) and authorized resources/patterns. Building a complete authorization 
+			scope also includes inspecting resource permissions for parents/children resources. (Permissions for sibling resources
+			are not included in the set of UIDs retrieved by this method.)
+
+			* series: includes UID of study and series within auth scope (sibling series are ommitted and any request will be deined)
+			* study: includes UID of patient and child series
+			* patient: includes UIDs of child studies
+
+			@returns dict of UIDs keyed to study level. Values of the dictionary are a set.
+		'''
+		authscope = {}
+
+		# Retrieve details of authorized resource
+		_r = self.orthanc_resourceinfo(level, orthanc_id)
+
+		# Series related UIDs: parent study and patient
+		if level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower():
+
+			# Study
+			s_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_STUDY)
+			if s_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower()] = set([s_uid])
+
+				# Patient
+				_rp = server_controloperation_get(
+					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)), headers=self.server.sonador_auth)
+				p_uid = _rp.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
+				if p_uid:
+					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
+
+		# Study related UIDs: parent patient and child series
+		elif level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower():
+
+			# Patient
+			p_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
+			if p_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
+
+			# Child series
+			sx_uid = _r.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES, [])
+			if sx_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower()] = set(sx_uid)
+
+		# Patient related UIDs: authorize access to child studies
+		elif level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower():
+
+			# Child studies
+			s_uid = _r.get('Studies', [])
+			if s_uid:
+				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower()] = set(s_uid)
+		
+		return authscope

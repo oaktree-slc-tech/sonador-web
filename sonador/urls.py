@@ -44,9 +44,9 @@ urlpatterns.extend([
     path('gateway/api/', include((gateway_urlpatterns_api, gateway_app_name), namespace='gateway-api')),
 
     # Content Views
-    re_path(r'^accounts/logout/success/?$', 
+    re_path(r'^accounts/logout/success/?$',
         TemplateView.as_view(template_name='content/logout.html'), name='logout-success'),
-    
+
     # oAuth/OpenID
     path('auth/openid/', include((urlpatterns_openid_auth, visionaire_app_name), namespace='auth')),
 	re_path(r'^accounts/login/?$', LoginView.as_view(), name='login'),
@@ -56,7 +56,7 @@ urlpatterns.extend([
     path('auth/service/', include((urlpatterns_service_auth, visionaire_app_name), namespace='auth-service')),
 
     # Auth Management Endpoints: Credential/User Management
-    path('auth/api/', include((urlpatterns_auth_management, visionaire_app_name), namespace='auth-api')),    
+    path('auth/api/', include((urlpatterns_auth_management, visionaire_app_name), namespace='auth-api')),
 ])
 
 
@@ -71,12 +71,9 @@ urlpatterns.extend([
     # OHIF: Imaging Server Specific Configuration and Viewer
     re_path(r'^ohif/config/(?P<iserverid>\w+)/?$',
         OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-imageserver-config'),
-    re_path(r'^ohif/viewer/(?P<iserverid>\w+)/?(.+)?/?$', 
-        login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
-        name='ohif-imageserver-viewer'),
 
     # Sonador Root Viewer
-    re_path(r'^.*$', 
-    	login_required(OhifDicomViewer.as_view()) if gsetting('AUTH_ENABLED') else OhifDicomViewer.as_view(),
-    	name='ohif-viewer'),
+    re_path(r'^.*$', login_required(OhifDicomViewer.as_view()), name='ohif-viewer'),
+
+
 ])

@@ -5,7 +5,31 @@ from guru.apisettings import HTTP_CONTENT_JSON, HTTP_CONTENT_FORM_ENCODED
 
 from ....views import JSONFormApiView
 
+from ....models import PacsImagingServer
+
 logger = logging.getLogger(__name__)
+
+
+class OrthancServiceImagingServerMixin:
+	'''	Mixin class used for retrieving image server instances
+	'''
+	imagingserver_class = PacsImagingServer
+	imagingserver_request_param = 'serverid'
+
+	def getImagingServer(self, *args, **kwargs):
+		''' Retrieve the imaging server associated with the request. After being retrieved
+			from the database, subsequent calls retrieve a cached copy of the data.
+		'''
+		kwargs = kwargs or self.kwargs
+
+		# Retrieve imaging server
+		iserver = kwargs.get('server')
+		if iserver is None:
+			iserver = self.imagingserver_class.objects.get(
+				pk=kwargs.get(self.imagingserver_request_param))
+			kwargs['server'] = iserver
+		
+		return iserver
 
 
 class SonadorServiceAuthorizationBaseView(JSONFormApiView):

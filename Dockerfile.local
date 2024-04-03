@@ -11,13 +11,13 @@ RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv pyth
 USER 1000
 RUN export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
-  && mkdir -p /srv/www/sonador/config \ 
+  && mkdir -p /srv/www/sonador/config \
   && cd /srv/www/sonador && git clone https://code.oak-tree.tech/oak-tree/medical-imaging/sonador.git \
-  && cd /srv/www/sonador/sonador && git checkout $CI_COMMIT_SHA \
+  && cd /srv/www/sonador/sonador && git checkout f4e0f26bd3e53d3b693320778827811ace8483bb \
   && git submodule update --init --recursive
 USER 0
 RUN pip3 install --timeout 300 -r /srv/www/sonador/sonador/requirements.txt \
-  && pip3 install pytz tzdata uvicorn \
+  && pip3 install pytz tzdata uvicorn pydantic \
   && mkdir -p /opt/ && chown -R 1000:1000 /opt/
 
 # Install Node.js runtime and components

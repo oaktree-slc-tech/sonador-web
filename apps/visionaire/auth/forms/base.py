@@ -6,10 +6,13 @@ from django.core import signing
 
 from django.contrib import auth
 from django.contrib.sessions.backends.db import SessionStore
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
+from django.contrib.auth.models import Group
 
 from guru.errors import OperationError
 from guru.helpers import gsetting
 from guru.helpers.urls import merge_url_querystring
+from guru.helpers.utils.object import pick, omit
 
 from secure.models import ApiAccess, ApiAccessToken
 from secure.helpers import server_decrypt_data
@@ -18,6 +21,7 @@ from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 
+from ...apisettings import SONADOR_USERNAME
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
@@ -38,9 +42,16 @@ class ServiceAuthorizationRequest(object):
 class SonadorServiceAuthorizationBaseForm(forms.Form):
 	''' Form instance which can be used to decode and verify token requests from services
 		integrated with Sonador.
+
+		@data-attr session (str): ID of the session associated with the user
+		@data-attr token_payload (dict): key/value pairs of JSON encoded tokens
 	'''
 	token_key = forms.CharField(required=True)
 	token_value = forms.CharField(required=True)
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.token_payload = None
 
 	def decode_server_token_authdata(self, cleaned_data, tokenvalue_kw='token_value'):
 		'''	Decode authentication data based on the Sonador server token
@@ -56,7 +67,7 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 
 			# Compare decrypted server token to local server token
 			if stoken == gsetting('SERVER_APITOKEN'):
-				self.user = 'sonador'
+				self.user = SONADOR_USERNAME
 				self.expires_in = gsetting('AUTH_EXPIRES_IN_SERVERTOKEN')
 				logger.debug('Authentication using Sonador server token')
 
@@ -82,14 +93,28 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 
 			# Determine encoding of the token
 			if ssig[:2] == 'h:':
-				skey = self.decode_hex_authdata(ssig[2:])
+				token_payload = self.decode_hex_authdata(ssig[2:])
 			else:
-				skey = self.decode_base64_authdata(ssig)
+				token_payload = self.decode_base64_authdata(ssig)
 
+			# Retrieve session and other token payload data
+
+			# String token payload: Django session ID
+			if isinstance(token_payload, str):
+				skey = token_payload
+
+			# JSON token payload: session ID available from "session" key
+			elif isinstance(token_payload, dict):
+				skey = token_payload['session']
+				self.token_payload = token_payload
+				cleaned_data['token_payload'] = omit(token_payload, ('session',))
+
+			else: raise TypeError('Unsupported token payload type: %s' % type(skey).__name__)
+
+			logger.debug('Bearer token session: %s' % str(skey))
 			cleaned_data['session'] = skey
 
 			# Retrieve session from backend storage
-			logger.debug('Bearer token session: %s' % skey)
 			self.session = SessionStore(session_key=skey)
 			self.user = auth.get_user(ServiceAuthorizationRequest(self.session))
 			self.expires_in = gsetting('AUTH_EXPIRES_IN_SESSION')

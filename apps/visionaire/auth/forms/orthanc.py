@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 class OrthancServiceAuthorizationForm(SonadorServiceAuthorizationBaseForm):
 	'''	Form class which can be used to approve or deny authorization requests from Orthanc.
 	'''
-	level = forms.CharField(required=True)
-	method = forms.CharField(required=True)
+	level = forms.CharField(required=False)
+	method = forms.CharField(required=False)
 
 	dicom_uid = forms.CharField(required=False)
 	orthanc_id = forms.CharField(required=False)

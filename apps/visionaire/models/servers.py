@@ -36,8 +36,8 @@ def pacs_ohif_serverdata(server):
 	''' Ceate a JSON dictionary of the server configuration properties
 		required by OHIF
 	'''
-	sdata = pick(server, ('token', 'default', 'name', 'wadoUriRoot', 'qidoRoot', 'wadoRoot', 'qidoSupportsIncludeField',
-						  'imageRendering', 'thumbnailRendering'))
+	sdata = pick(server, ('token', 'default', 'name', 'wadoUriRoot', 'qidoRoot', 'wadoRoot', 
+		'qidoSupportsIncludeField', 'imageRendering', 'thumbnailRendering'))
 	sdata['requestOptions'] = {'requestFromBrowser': True}
 	sdata['enableStudyLazyLoad'] = True
 
@@ -105,6 +105,21 @@ class PacsImagingServer(BaseServerModel):
 
 		return perms
 
+	def user_has_access(self, user):
+		'''	Determine if the provided user has access to the server in any capacity
+
+			@returns bool: True if the user has some access to the server, False otherwise
+		'''		
+		# Check user to determine if it matches the Sonador system user
+		if isinstance(user, str) and user == 'sonador':
+			return True
+
+		# Check if the user is a super-user or part of a group affiliated with the server		
+		access = user.is_superuser or (
+			len(self.user_authorizations.filter(user=user)) > 0 or len(self.group_authorizations.filter(group__user=user)) > 0)
+
+		return user.is_active and access
+
 	def user_has_perm(self, user, resource, orthanc_id, method, level):
 		'''	Determine if the provided user has the needed permissions to perform the requested action.
 
@@ -112,19 +127,19 @@ class PacsImagingServer(BaseServerModel):
 		'''
 		# Administrative or superuser
 		if user.is_superuser:
-			return True
+			return True, None
 
 		# Determine if the user has the requested permissions
 		for auth in self.user_authorizations.filter(user=user):
 			if auth.has_perm(resource, method, level):
-				return True
+				return True, None
 		
 		# Determine if the user is part of a group that has the requested permissions
 		for auth in self.group_authorizations.filter(group__user=user):
 			if auth.user_has_perm(user, resource, orthanc_id, method, level):
-				return True
+				return True, auth.duration
 				
-		return False
+		return False, None
 
 	@property
 	def wadoUriRoot(self):
@@ -157,16 +172,10 @@ class PacsImagingServer(BaseServerModel):
 		return server_controlurl(self, 'app/explorer.html')
 
 	@property
-	def url_dicomweb_client(self):
-		'''	URL for the Orthanc DICOMweb interface
+	def url_orthanc_explorer2(self):
+		'''	URL for the Orthanc explorer admin interface
 		'''
-		return server_controlurl(self, 'dicom-web/app/client/index.html')
-
-	@property
-	def url_viewer_config(self):
-		'''	URL for the OHIF viewer configuration associated with the server
-		'''
-		return reverse('ohif-imageserver-config', args=(self.pk,))
+		return server_controlurl(self, 'ui/app/token-landing.html')
 
 	@property
 	def url_viewer(self):
