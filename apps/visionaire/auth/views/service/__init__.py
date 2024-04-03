@@ -15,20 +15,18 @@ from django.contrib.sessions.backends.db import SessionStore
 from guru import apisettings as gapicodes
 
 from guru import apisettings as gapi
-from guru.errors import OperationError
+from guru.errors import OperationError, GuruFormError
+from guru.forms.helpers import validate_form_data
 from guru.helpers import gsetting, operation_results
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.urls import merge_url_querystring
+from guru.helpers.utils.object import omit
 
 from secure.models import ApiAccess, ApiAccessToken
-from secure.helpers import server_decrypt_data
+from secure.helpers import server_decrypt_data, masked_value
 
 from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
-
-from guru.errors import GuruFormError
-
-from guru.forms.helpers import validate_form_data
 
 from ....apisettings import SONADOR_USERNAME
 from ....forms.servers import PacsImagingServerForm
@@ -65,10 +63,15 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 		'''
 		adata = super().get_data(context)		
 
-		# Allow requests for static assets
+		# Request components
+		_user = getattr(self.form, 'user', None)
+		_orthanc_id = self.form.data.get('orthanc_id') or ''
+		_level = self.form.data.get('level') or ''
+		_method = self.form.data.get('method') or ''
 		_resource = self.form.data.get('uri') or ''
 		_,_rtype = posixpath.splitext(_resource)
 
+		# Allow requests for static assets
 		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf', 'gif'):
 			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'static-asset'  })
 
@@ -98,7 +101,8 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 				else:
 					granted, validity = self.form.server.user_has_perm(
 						self.form.user, self.form.cleaned_data.get('uri'), self.form.cleaned_data.get('orthanc_id'),
-						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'))
+						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'), 
+						dicom_uid=self.form.cleaned_data.get('dicom_uid'))
 
 				if granted:
 
@@ -114,10 +118,13 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 			adata.update({ 'granted': False })
 
 		if not adata.get('granted'):
-			logger.error('Token rejected: resource=%s\nresponse=%s\nrequest=%s' % (_resource, adata, self.form.cleaned_data))
+			logger.error('Token rejected: user="%s" level="%s" orthanc-id="%s resource="%s" method="%s"\nresponse=%s\nrequest=%s' % (
+				_user, _level, _orthanc_id, _resource, _method, adata, {
+					**omit(self.form.cleaned_data, ('token_value',)),
+					'token_value': masked_value(self.form.cleaned_data.get('token_value')) if self.form.cleaned_data.get('token_value') else '(null)',
+				}
+			))
 		
-		if self.form:
-			logger.warning('Auth request: user=%s resource=%s\n%s' % (getattr(self.form, 'user', None), _resource, adata))
 		return adata
 
 	def post(self, request, *args, **kwargs):

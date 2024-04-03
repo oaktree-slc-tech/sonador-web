@@ -120,7 +120,7 @@ class PacsImagingServer(BaseServerModel):
 
 		return user.is_active and access
 
-	def user_has_perm(self, user, resource, orthanc_id, method, level):
+	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None):
 		'''	Determine if the provided user has the needed permissions to perform the requested action.
 
 			@returns bool: True if the user has the permission, False otherwise
@@ -131,12 +131,12 @@ class PacsImagingServer(BaseServerModel):
 
 		# Determine if the user has the requested permissions
 		for auth in self.user_authorizations.filter(user=user):
-			if auth.has_perm(resource, method, level):
+			if auth.has_perm(resource, method, level, dicom_uid=dicom_uid):
 				return True, None
 		
 		# Determine if the user is part of a group that has the requested permissions
 		for auth in self.group_authorizations.filter(group__user=user):
-			if auth.user_has_perm(user, resource, orthanc_id, method, level):
+			if auth.user_has_perm(user, resource, orthanc_id, method, level, dicom_uid=dicom_uid):
 				return True, auth.duration
 				
 		return False, None

@@ -1,4 +1,4 @@
-import logging, fnmatch, posixpath, copy
+import logging, json, fnmatch, posixpath, copy
 from django.db import models
 
 from django.urls import reverse
@@ -8,7 +8,7 @@ from django.db import models
 from django.contrib.auth.models import User, Group
 
 from microservices.control import server_controlurl, \
-	server_controloperation_put, server_controloperation_delete
+	server_controloperation_post, server_controloperation_put, server_controloperation_delete
 from microservices.control.jsonapi import server_controloperation_get
 
 import guru.apisettings as gapicodes
@@ -25,6 +25,8 @@ from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE
 from orthancapi import apisettings as orthanc_api
 from orthancapi.auth.acl import ServerAuthorization as OrthancServerAuthorization, \
 	ResourceAuthorization as OrthancResourceAuthorization
+from orthancapi.auth.validation import SonadorGroup as OrthancSonadorGroup, \
+	SonadorUser as OrthancSonadorUser, SonadorResourceAuthorizationRequest
 
 from ...apisettings import SONADOR_PERMS, ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICOMWEB_SERIES, ORTHANC_WADO, \
 	ORTHANC_CACHE_PATIENT, ORTHANC_CACHE_STUDY, ORTHANC_CACHE_SERIES, \
@@ -210,16 +212,13 @@ class PacsImagingServerGroupAuthorization(models.Model):
 
 			@returns bool: True if the user has the permission, False otherwise
 		'''
-		logger.warning('permission request: user=%s resource="%s" orthanc-id="%s" method="%s" level="%s"' 
-			% (user, resource, orthanc_id, method, level))
-
 		# User has superuser permissions
 		if user.is_superuser:
 			return True
 		
 		# User is a member of the group, check server permissions
 		elif self.group.user_set.filter(username=user.username).exists():
-			_server_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
+			_server_auth = OrthancServerAuthorization(**pick(self, SONADOR_PERMS))
 
 			# Server query permission
 			if _server_auth.query_perm(resource, method) is not None:
@@ -229,16 +228,23 @@ class PacsImagingServerGroupAuthorization(models.Model):
 			elif _server_auth.upload_perm(resource, method) is not None:
 				return self.upload
 
-			# TODO: Check Sonador "local policies" for permissions
+			# Retrieve Sonador local permissions for the request
+			elif _orthanc_auth := self.orthanc_resource_auth(user, resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+				logger.warning('Orthanc local permissions: user=%s level="%s" orthanc-id="%s" resource="%s" method="%s"\n%s' % (
+					user, level, orthanc_id, resource, method, _orthanc_auth,
+				))
+				_auth = OrthancResourceAuthorization(**_orthanc_auth)
+				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+					return True
 
-			# Ensure that the requested resource matches a UID within the scope of the user
-			elif self.resource == WILDCARD \
+			# If no other authorization was successful, check if resource UID is within global scope of the user
+			if self.resource == WILDCARD \
 				or self.user_has_system_perm(user, level, resource) \
 				or self.user_has_resource_perm(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
 
 				# Check resource request against the policy permissions
-				_auth = ResourceAuthorization(**pick(self, SONADOR_PERMS))
-				if _auth.has_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+				_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
+				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
 					return True
 
 		return False
@@ -282,7 +288,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 			and policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
 
 			for _p in policy.get(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()):
-				_pr = self.orthanc_resourceinfo(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(), _p)
+				_pr = self.orthanc_resource_info(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(), _p)
 
 				for _s in _pr.get('Studies', []):
 					_study_authscope = self.resource_authscope(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, _s)
@@ -291,14 +297,41 @@ class PacsImagingServerGroupAuthorization(models.Model):
 
 		return False
 
-	def orthanc_resourceinfo(self, level, orthanc_id):
+	def orthanc_resource_auth(self, user, resource, orthanc_id, method, level, dicom_uid=None):
+		'''	Retrieve the orthanc authorization context for the provided resource request
+		'''
+		if not isinstance(user, auth.get_user_model()):
+			raise ValueError('Unable to retrieve Orthanc local authorization context, invalid user instance')		
+
+		# Validation Sonador resource authorization request
+		_auth_request = SonadorResourceAuthorizationRequest(
+			user=OrthancSonadorUser(id=user.pk, **pick(user, ('username', 'email'))),
+			group=OrthancSonadorGroup(id=self.group.pk, name=self.group.name),
+			level=level, method=method, uri=resource, **{ 'orthanc-id': orthanc_id, 'dicom-uid': dicom_uid })
+		_rdata = json.loads(_auth_request.json())
+
+		# Ensure that keys contain a dash instead of an underscore
+		for f in ('orthanc_id', 'dicom_uid'):
+			_val = _rdata.pop(f, None)
+			
+			# Replace keyname with dash
+			if _val is not None:			
+				_rdata[f.replace('_', '-')] = _val		
+
+		return server_controloperation_post(self.server, _rdata, resource='system/acl/resource', 
+			headers=self.server.sonador_auth)
+
+	def orthanc_resource_info(self, level, orthanc_id):
 		'''	Retrieve the resource details for the provided Orthanc ID
+
+			@returns JSON (dict) with resource details from Orthanc API
 		'''
 		if not ORTHANC_RESOURCE_URL.get(level.lower()):
 			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, uid))
 
 		return server_controloperation_get(
-			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), headers=self.server.sonador_auth)
+			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), 
+			headers=self.server.sonador_auth)
 
 	def resource_policy(self, resource=None):
 		'''	Parse resource policy to components: patient, study, series
@@ -321,7 +354,7 @@ class PacsImagingServerGroupAuthorization(models.Model):
 		authscope = {}
 
 		# Retrieve details of authorized resource
-		_r = self.orthanc_resourceinfo(level, orthanc_id)
+		_r = self.orthanc_resource_info(level, orthanc_id)
 
 		# Series related UIDs: parent study and patient
 		if level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower():
@@ -333,7 +366,8 @@ class PacsImagingServerGroupAuthorization(models.Model):
 
 				# Patient
 				_rp = server_controloperation_get(
-					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)), headers=self.server.sonador_auth)
+					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)), 
+					headers=self.server.sonador_auth)
 				p_uid = _rp.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
 				if p_uid:
 					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])

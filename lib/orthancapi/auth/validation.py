@@ -3,8 +3,10 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 
+from .. import apisettings
 
-class Levels(str, Enum):
+
+class ResourceLevels(str, Enum):
     PATIENT = 'patient'
     STUDY = 'study'
     SERIES = 'series'
@@ -13,7 +15,7 @@ class Levels(str, Enum):
     SYSTEM = 'system'
 
 
-class Methods(str, Enum):
+class ResourceRequestMethods(str, Enum):
     GET = 'get'
     POST = 'post'
     PUT = 'put'
@@ -50,7 +52,7 @@ class OrthancResource(BaseModel):
     dicom_uid: Optional[str] = Field(alias="dicom-uid", default=None)
     orthanc_id: Optional[str] = Field(alias="orthanc-id", default=None)
     url: Optional[str] = None                                                       # e.g. a download link /studies/.../archive
-    level: Levels
+    level: ResourceLevels
 
     class Config:  # allow creating object from dict (used when deserializing the JWT)
         populate_by_name = True
@@ -74,13 +76,16 @@ class TokenCreationResponse(BaseModel):
 
 
 class TokenValidationRequest(BaseModel):
+    ''' Orthanc Advanced Authorization Request: Orthanc -> Sonador.
+        Sent from Orthanc auth plugin to Sonador auth API.
+    '''
     dicom_uid: Optional[str] = Field(alias="dicom-uid", default=None)
     orthanc_id: Optional[str] = Field(alias="orthanc-id", default=None)
     token_key: Optional[str] = Field(alias="token-key", default=None)
     token_value: Optional[str] = Field(alias="token-value", default=None)
     server_id: Optional[str] = Field(alias="server-id", default=None)
-    level: Optional[Levels]
-    method: Methods
+    level: Optional[ResourceLevels]
+    method: ResourceRequestMethods
     uri: Optional[str] = None
 
 
@@ -107,6 +112,9 @@ class UserProfileRequest(BaseModel):
 
 
 class UserPermissions(str, Enum):
+    ''' Orthanc Advanced Authorization Plugin User Permissions (Orthanc Explorer 2): Sonador -> Orthanc.
+        Model used to validate responses from the Sonador authorization API.
+    '''
     ALL = 'all'
     VIEW = 'view'
     DOWNLOAD = 'download'
@@ -124,6 +132,9 @@ class UserPermissions(str, Enum):
 
 
 class UserProfileResponse(BaseModel):
+    ''' Orthanc Advanced Authorization Plugin User Profile Response: Sonador -> Orthanc.
+        Model used to validate responses from the Sonador authorization API.
+    '''
     name: str
     authorized_labels: List[str] = Field(alias="authorized-labels", default_factory=list)
     permissions: List[UserPermissions] = Field(default_factory=list)
@@ -132,3 +143,37 @@ class UserProfileResponse(BaseModel):
     class Config:
         use_enum_values = True
         populate_by_name = True
+
+
+class SonadorGroup(BaseModel):
+    ''' Sonador group
+    '''
+    ID: int = Field(alias='id')
+    name: str
+
+
+class SonadorUser(BaseModel):
+    ''' Sonador user
+    '''
+    ID: int = Field(alias='id')
+    username: str
+    email: str
+    groups: Optional[List[SonadorGroup]] = Field(default=None)
+
+
+class SonadorResourceAuthorizationRequest(BaseModel):
+    ''' Sonador authorization request sent to Orthanc/Sonador cloud plugin to query Orthanc local permissions.
+        Model sued to validate requests from Sonador to Orthanc Cloud plugin API endpoint.
+    '''    
+    # Resource UIDs
+    orthanc_id: Optional[str] = Field(alias='orthanc-id', default=None)
+    dicom_uid: Optional[str] = Field(alias='dicom-uid', default=None)
+    
+    # User and group identifiers
+    user: Optional[SonadorUser] = Field(default=None)
+    group: Optional[SonadorGroup] = Field(default=None)
+    
+    # Request type and methods  
+    level: Optional[ResourceLevels]
+    method: ResourceRequestMethods
+    uri: Optional[str] = None
