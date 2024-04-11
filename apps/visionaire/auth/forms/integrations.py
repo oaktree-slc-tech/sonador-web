@@ -25,27 +25,20 @@ from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseFo
 logger = logging.getLogger(__name__)
 
 
-class DataServiceAuthorizationForm(SonadorServiceAuthorizationBaseForm):
-    ''' Form class which can be used to approve or deny authentication/authorization
-        requests from Data Services that have been registered with Sonador.
+class IntegrationAuthorizationForm(SonadorServiceAuthorizationBaseForm):
+    ''' Form class which can be used to approve or deny authentication/authorization requests
+        from systems which integrate with Sonador
     '''
     formdata_transforms = {
         'token-key': 'token_key',
         'token-value': 'token_value',
     }
 
-    def __init__(self, *args, **kwargs):
-        self.service = kwargs.pop('service', None)
-        super().__init__(*args, **kwargs)
-
-        if not self.service:
-            raise ValueError('Unable to initialize authorization form: data service not provided')
-
     def clean(self, *args, **kwargs):
         ''' Clean data and convert parameters to the format required needed for session
             or API token authorization.
         '''
-        cleaned_data = super(DataServiceAuthorizationForm, self).clean(*args, **kwargs)
+        cleaned_data = super().clean(*args, **kwargs)
         logger.debug('Authentication request data:\n%r' % cleaned_data)
 
         # The form validates tokens based as they would appear in an "Authorization" header.
@@ -64,4 +57,32 @@ class DataServiceAuthorizationForm(SonadorServiceAuthorizationBaseForm):
         # Parse authentication data
         cleaned_data = self.clean_authdata(cleaned_data)
         logger.debug('Cleaned authentication data: user=%s\n%s' % (getattr(self, 'user', None), cleaned_data))
+        return cleaned_data
+
+
+class DataServiceAuthorizationForm(IntegrationAuthorizationForm):
+    ''' Form class which can be used to approve or deny authentication/authorization
+        requests from Data Services that have been registered with Sonador and interact
+        with the data services API.
+    '''
+    def __init__(self, *args, **kwargs):
+        self.service = kwargs.pop('service', None)
+        super().__init__(*args, **kwargs)
+
+        if not self.service:
+            raise ValueError('Unable to initialize authorization form: data service not provided')
+
+    def clean(self, *args, **kwargs):
+        ''' Ensure that the form user has access to the data service
+        '''
+        cleaned_data = super().clean(*args, **kwargs)
+
+        # Ensure that the form user has access to the form service
+        if not getattr(self, 'user', None):
+            raise forms.ValidationError('Unable to retrieve valid user instance for token')
+        if getattr(self, 'user', None) and self.user.pk and not self.service.user_has_perm(self.user):
+            raise forms.ValidationError('User "%s" does not have permission to access data service "%s"' % (
+                    self.form.user, self.form.service.pk
+                ))
+
         return cleaned_data

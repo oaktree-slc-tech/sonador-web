@@ -15,6 +15,7 @@ from guru.errors import OperationError
 from guru.helpers import gsetting, operation_results
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.urls import merge_url_querystring
+from guru.helpers.utils.object import pick, omit
 
 from secure.models import ApiAccess, ApiAccessToken
 from secure.helpers import server_decrypt_data
@@ -34,11 +35,56 @@ from .. import hexsigning
 
 from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseForm
 
+from .credential_providers.sonador import SonadorCredentialProvider
+from .credential_providers.staticfile import SonadorStaticFileCredentialProvider
+from .credential_providers.remote import SonadorRemoteCredentialProvider
+
+from .integrations import IntegrationAuthorizationForm
+
 logger = logging.getLogger(__name__)
 
 
-class OrthancServiceAuthorizationForm(SonadorServiceAuthorizationBaseForm):
-	'''	Form class which can be used to approve or deny authorization requests from Orthanc.
+class ImagingServerFormMixin:
+	'''	Mixin class which provides methods for validating access to imaging server instances
+	'''
+	def _init_server(self, *args, **kwargs):
+		'''	Initialize imaging server properties for the form
+		'''
+		self.server = kwargs.pop("server", None)
+
+		if not self.server:
+			raise ValueError("Unable to initialize authorization form: imaging server not provided")
+
+
+class ImagingServerIntegrationAuthorizationForm(ImagingServerFormMixin, IntegrationAuthorizationForm):
+	'''	Form class wich can be used to introspect requests associated with an imaging server instance.
+		For  authorization of requests sent by the Orthanc advanced authorization plugin, 
+		use OrthancServiceAuthorizationForm.
+	'''
+	def __init__(self, *args, **kwargs):
+		self._init_server(*args, **kwargs)
+		super().__init__(*args, **omit(kwargs, ('server',)))
+
+	def clean(self, *args, **kwargs):
+		'''	Ensure that the user has access to the server before authorizing the request
+		'''
+		cleaned_data = super().clean(*args, *kwargs)
+
+		if not getattr(self, 'user', None):
+			raise forms.ValidationError('Unable to retrieve valid user instance for token')
+		if getattr(self, 'user', None) and self.user.pk and not self.server.user_has_access(self.user):
+			raise forms.ValidationError('User "%s" does not have permission to access data server "%s"' % (
+					self.form.user, self.form.server.pk
+				))
+
+		return cleaned_data
+
+
+class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuthorizationBaseForm):
+	'''	Form class which can be used to approve or deny authorization requests from Orthanc. This form provides
+		authorization for static file and secure resources, and is able to validate credentials from remote IdP instances.
+		It implements the API defined by the Orthanc Advanced Authorization Plugin "token introspection" endpoint:
+		https://orthanc.uclouvain.be/book/plugins/authorization.html#get-user-profile-user-get-profile
 	'''
 	level = forms.CharField(required=False)
 	method = forms.CharField(required=False)
@@ -54,12 +100,11 @@ class OrthancServiceAuthorizationForm(SonadorServiceAuthorizationBaseForm):
 		'dicom-uid': 'dicom_uid',
 	}
 
-	def __init__(self, *args, **kwargs):
-		self.server = kwargs.pop("server", None)
-		super().__init__(*args, **kwargs)
+	credential_providers = [SonadorStaticFileCredentialProvider, SonadorCredentialProvider, SonadorRemoteCredentialProvider]
 
-		if not self.server:
-			raise ValueError("Unable to initialize authorization form: imaging server not provided")
+	def __init__(self, *args, **kwargs):
+		self._init_server(*args, **kwargs)		
+		super().__init__(*args, **omit(kwargs, ('server',)))
 
 	def clean(self, *args, **kwargs):
 		'''	Clean data and convert parameters to the format required needed for session

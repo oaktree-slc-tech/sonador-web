@@ -27,9 +27,13 @@ class PacsImagingServerGroupAuthorizationManagementView(GuruQueryParamFilterForm
 	modelform = PacsImagingServerGroupAuthorizationForm
 	filterform = PacsImagingServerGroupAuthorizationFilterForm
 
+	response_objectid_fieldname = 'token'
+
 
 class PacsImagingServerGroupAuthorizationRestView(PacsImagingServerChildObjectRestView):
 	'''	View class for managing specific group authorization policy instances for an imaging server
 	'''
 	model = PacsImagingServerGroupAuthorization
 	modelform = PacsImagingServerGroupAuthorizationForm
+
+	response_objectid_fieldname = 'token'
