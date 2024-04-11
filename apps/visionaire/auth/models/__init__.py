@@ -46,11 +46,13 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 	default = models.BooleanField(default=False, help_text='Use authentication server as default')
 	callback_url = models.TextField(blank=True, null=True, verbose_name='Callback URL',
 		help_text='Redirect URLs to which the authorization server will forward traffic. Use one line per URI.')
+	enable_idp_token_validation = models.BooleanField(default=False, verbose_name='Validation of IDP Tokens',
+		help_text='Enable validation of remote tokens (if supported by the provider).')
 
 	class Meta:
 		app_label = 'visionaire'
-		verbose_name = 'Social Auth Credential'
-		verbose_name_plural = 'Social Auth Server Credentials'
+		verbose_name = 'oAuth2 Auth Credential'
+		verbose_name_plural = 'oAuth2 Auth Credentials'
 
 	@property
 	def url_login(self):
@@ -123,8 +125,8 @@ class SocialUserAccount(GuruTokenModel):
 	class Meta:
 		unique_together = ('social_provider', 'social_user_id', 'user')
 		app_label = 'visionaire'
-		verbose_name = 'Linked Social User Account'
-		verbose_name_plural = 'Linked Social Auth Accounts'
+		verbose_name = 'Linked oAuth2 User Account'
+		verbose_name_plural = 'Linked oAuth2 Accounts'
 
 	def signal_first_login(self, request, registration=False):
 		'''	Trigger the socialuser_first_login signal for the model instance
@@ -146,7 +148,7 @@ class SocialUserAccount(GuruTokenModel):
 		}
 
 
-class PacsImagingServerUserAuthorization(models.Model):
+class PacsImagingServerUserAuthorization(GuruTokenModel):
 	'''	Permission model which authorizes a user to access the imaging resources of a PACS server.
 		TODO: Implement support for user permissions.
 	'''
@@ -167,7 +169,7 @@ class PacsImagingServerUserAuthorization(models.Model):
 		return False
 
 
-class PacsImagingServerGroupAuthorization(models.Model):
+class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	'''	Permission model which authorizes a group to access the imaging resources of a PACS server.
 	'''
 	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='group_authorizations')
@@ -394,3 +396,11 @@ class PacsImagingServerGroupAuthorization(models.Model):
 				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower()] = set(s_uid)
 		
 		return authscope
+
+	@property
+	def json(self):
+		_json = {
+			'token': self.pk, 'server': self.server.pk, 'group': self.group.pk,
+			**pick(self, ('query', 'upload', 'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration'))
+		}
+		return _json

@@ -17,3 +17,6 @@ class VisionaireAppConfig(AppConfig):
 
 		# Initialize Visionaire app components
 		super().ready(*args, **kwargs)
+
+		# Enable Visionaire signals
+		from . import signals

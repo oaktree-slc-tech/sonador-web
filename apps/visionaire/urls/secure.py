@@ -1,3 +1,10 @@
+'''	Visionaire API REST endpoints
+	
+	The Visionaire API provides endpoints for the management of imaging servers (PACS),
+	associated DICOM modalities and DICOMweb peers, access control policies, user-accessible
+	endpoints for the management of credentials (access IDs and tokens), and administrative
+	endpoints which are used for integration of the platform with Orthanc and other clients.
+'''
 from django.urls import path, re_path
 
 from guru.forms import create_modelform_class
@@ -17,6 +24,8 @@ from ..views.integrations import DataServiceApiRestView
 
 from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
+from ..auth.views.service.orthanc import PacsImagingServerAuthUserProfileView
+from ..auth.views.service.integrations import UserProfileAuthorizationView
 from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView
 from ..auth.views import cred as sonador_cred
 from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
@@ -123,6 +132,16 @@ urlpatterns_api = [
 		name="group-access-control-update",
 	),
 
+	# Image Server API: User/group endpoints for service integration and token introspection
+	re_path(r'^pacs/(?P<serverid>\w+)/user/introspect/profile/?$',
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerAuthUserProfileView.as_view()),
+		name='pacs-user-token-introspect'
+	),
+
 
 	# User Management API
 	path("user", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
@@ -140,6 +159,18 @@ urlpatterns_api = [
 			UserRestView.as_view()),
 		name="admin-user-update",
 	),
+
+	# User Management API: User/group endpoints for service integration and token introspection
+	re_path(r'^user/introspect/profile/?$',
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserProfileAuthorizationView.as_view(include_groups=True)), 
+		name='admin-user-token-introspect'
+	),
+
+	# Admin Credentials Management: API token
 	re_path(r'^user/(?P<userid>[0-9]+)/cred/token/?$',			# Admin Credentials Management: access token
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
 				apiaccess_token_model=sonador_cred.SonadorApiAccessToken, 

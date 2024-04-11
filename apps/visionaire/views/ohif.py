@@ -29,7 +29,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 	model = PacsImagingServer
 
 	def get_context_data(self, **kwargs):
-		'''	OHIF viewer settings and components	
+		'''	OHIF viewer settings and components
 		'''
 		context = super(OhifConfigView, self).get_context_data(**kwargs)
 
@@ -83,7 +83,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 
 		# Sonador root URL
 		context['SONADOR_URL'] = site_fullurl(request=self.request)
-		
+
 		return context
 
 
@@ -117,9 +117,9 @@ class OhifDicomViewer(TemplateView):
 				context['pacs_server'] = [iserver.ohif_json]
 				context['pacs_config'] = iserver.url_viewer_config
 			except self.model.DoesNotExist as err:
-				raise Http404('Imaging server %s does not exist' % self.kwargs.get(self.imageserver_objectid_url_param))			
+				raise Http404('Imaging server %s does not exist' % self.kwargs.get(self.imageserver_objectid_url_param))
 		else:
-			
+
 			def ohif_json(s):
 				'''	Retrieve OHIF configuration and permissions
 				'''
@@ -137,7 +137,7 @@ class OhifDicomViewer(TemplateView):
 
 		# Sonador root URL
 		context['SONADOR_URL'] = site_fullurl(request=self.request)
-		
+
 		return context
 
 	def get_imaging_servers(self, *args, **kwargs):

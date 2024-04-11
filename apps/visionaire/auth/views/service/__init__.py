@@ -28,6 +28,8 @@ from secure.helpers import server_decrypt_data, masked_value
 from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
 
+from orthancapi.helpers import orthanc_hosted_staticfile
+
 from ....apisettings import SONADOR_USERNAME
 from ....forms.servers import PacsImagingServerForm
 from ....views import JSONFormApiView
@@ -72,12 +74,10 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 		_,_rtype = posixpath.splitext(_resource)
 
 		# Allow requests for static assets
-		if self.form and _rtype.replace('.', '').lower() in ('css', 'js', 'ico', 'woff2', 'ttf', 'gif'):
-			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'static-asset'  })
-
-		# Allow requests to Orthanc OHIF plugin
-		elif _resource == '/ohif/viewer' or _resource.startswith('/ohif/assets/'):
-			adata.update({ 'granted': True, 'validity': 5, gapi.API_MESSAGE: 'ohif-static-asset' })
+		if self.form.is_valid() and orthanc_hosted_staticfile(uri=_resource, method=_method):		
+			adata.update({ 'granted': True, 'validity': 5, 
+				gapi.API_MESSAGE: 'ohif-static-asset' if 'ohif' in _resource else 'static-asset'
+			})
 
 		# Allow requests to Orthanc /system endoint
 		elif _resource == '/system' and self.form.is_valid() and getattr(self.form, 'user', None) \
