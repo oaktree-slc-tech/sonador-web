@@ -1,9 +1,11 @@
+'''	View instances which provide API endpoints conformant with the Orthanc Advanced Authorization
+	Plugin: https://orthanc.uclouvain.be/book/plugins/authorization.html
+'''
 import logging, json, datetime
 
+from django.contrib.sessions.backends.db import SessionStore
 from django.views import View
 from django.utils import timezone
-
-from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
 from django.contrib.auth import get_user_model
 
@@ -13,6 +15,7 @@ import guru.apisettings as gapi
 from guru.helpers import operation_results, create_token
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
 from guru.helpers.user import user_displayname
+from guru.helpers.utils.object import pick, omit
 
 from microservices.control import server_controlurl
 
@@ -20,73 +23,49 @@ from ....apisettings import SONADOR_USERNAME, SONADOR_USER_PK, SONADOR_USER_LABE
 from ....views.base import SonadorApiRestView
 
 from ...helpers import create_session_token
-from ...forms.orthanc import OrthancServiceAuthorizationForm
+from ...forms.orthanc import ImagingServerIntegrationAuthorizationForm, OrthancServiceAuthorizationForm
 
 from .base import SonadorServiceAuthorizationBaseView, OrthancServiceImagingServerMixin
+from .integrations import UserProfileAuthorizationView
 
 logger = logging.getLogger(__name__)
 
 
-class OrthancAuthUserProfileView(OrthancServiceImagingServerMixin, SonadorServiceAuthorizationBaseView):
-	'''	API view which can be used to process token authorization requests from Sonador
+class PacsImagingServerAuthUserProfileView(OrthancServiceImagingServerMixin, UserProfileAuthorizationView):
+	'''	API view which can be used to retrieve the user profiles based on token authorization requests.
+		Generally follows the "Token Introspection" endpoint specified by the oAuth2 standard:
+		https://www.oauth.com/oauth2-servers/token-introspection-endpoint/
+
+		and is used by services which integrate with Sonador to retrieve information about users
+		requesting access to resources managed by the service. Provides support for both Sonador generated
+		and remote IdP service tokens.
 	'''
-	formclass = OrthancServiceAuthorizationForm
+	formclass = ImagingServerIntegrationAuthorizationForm
+	validity_duration = 60
 
 	def get_form_kwargs(self, *args, **kwargs):
 		form_kwargs = super().get_form_kwargs(*args, **kwargs)
 		form_kwargs['server'] = self.getImagingServer(*args, **kwargs)
 		return form_kwargs
 
-	def get_data(self, context):
-		'''	Process the token decode event
+	def user_has_perm(self, *args, **kwargs):
+		return self.form.server.user_has_access(self.form.user)
+
+	def createProfileResponse(self, *args, **kwargs):
+		'''	Add authorization and validity parameters to the response
 		'''
-		adata = super().get_data(context)
+		return { 'validity': getattr(self.form, 'expires_in', None) or self.validity_duration }
 
-		# Retrive user profile
-		if self.form.is_valid() and getattr(self.form, 'user', None) and self.form.server.user_has_access(self.form.user):
+	def getUserProfileJson(self, user, response):
+		'''	Retrieve JSON for the provided user instance including the groups to which the user
+			has access which are associated with the server.
+		'''
+		response = super().getUserProfileJson(user, response)
+		response['user']['groups'] = [self.getGroupJson(g) 
+			for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)]
+		response['server'] = self.getImagingServer().pk
 
-			# User UID
-			user_uid = self.form.user.pk if isinstance(self.form.user, get_user_model()) \
-				else SONADOR_USER_PK if isinstance(self.form.user, str) \
-				else None
-
-			if not user_uid:
-				raise ValueError('Unable to create user profile, invalid user UID=%s' % user_uid)
-
-			# Username
-			username = self.form.user.username if isinstance(self.form.user, get_user_model()) \
-				else self.form.user if isinstance(self.form.user, str) \
-				else None
-			if not username:
-				raise ValueError('Unable to create user profile, invalid username="%s"' % username)
-
-			# User display name
-			user_label = user_displayname(self.form.user) if isinstance(self.form.user, get_user_model()) \
-				else SONADOR_USER_LABEL if isinstance(self.form.user, str) \
-				else None
-
-			if not user_label:
-				raise ValueError('Unable to create user profile, invalid uesr label="%s"' % user_label)
-
-			# User email
-			user_label = self.form.user.email if isinstance(self.form.user, get_user_model()) else None
-
-			# Labels and permissions the user is authorized for
-			authorized_labels = []
-			permissions = []
-			if (isinstance(self.form.user, get_user_model()) and self.form.user.is_superuser) \
-				or (isinstance(self.form.user, str) and self.form.user == SONADOR_USERNAME):
-				authorized_labels.append('*')
-				permissions.append('all')
-
-			adata.update({
-				'server': self.form.server.pk, 'pk': user_uid, 'username': username, 'name': user_label, 'email': user_label,
-				'authorized-labels': authorized_labels, 'permissions': permissions, 'validity': 60,
-			})
-		
-		logger.debug('Orthac user profile response:\n%s' % adata)
-
-		return adata
+		return response
 
 	def post(self, request, *args, **kwargs):
 		# Retrieve imaging server from cache
@@ -95,6 +74,59 @@ class OrthancAuthUserProfileView(OrthancServiceImagingServerMixin, SonadorServic
 			return guru_page_not_found(self.request, err)
 
 		return super().post(request, *args, **kwargs)
+
+
+class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
+	'''	API view which can be used to process token authorization requests from Sonador and return a 
+		user profile in the response. Conforms to the Orthanc User Profile view API specification:
+		https://orthanc.uclouvain.be/book/plugins/authorization.html#get-user-profile-user-get-profile.		
+	'''
+	formclass = OrthancServiceAuthorizationForm
+	
+	def getUserProfileJson(self, user, response):
+		'''	Retrieve Orthanc user profile JSON data required by the Orthanc Advanced Authorization plugin
+		'''
+		# User UID
+		user_uid = self.form.user.pk if isinstance(self.form.user, get_user_model()) \
+			else SONADOR_USER_PK if isinstance(self.form.user, str) \
+			else None
+
+		if not user_uid:
+			raise ValueError('Unable to create user profile, invalid user UID=%s' % user_uid)
+
+		# Username
+		username = self.form.user.username if isinstance(self.form.user, get_user_model()) \
+			else self.form.user if isinstance(self.form.user, str) \
+			else None
+		if not username:
+			raise ValueError('Unable to create user profile, invalid username="%s"' % username)
+
+		# User display name
+		user_label = user_displayname(self.form.user) if isinstance(self.form.user, get_user_model()) \
+			else SONADOR_USER_LABEL if isinstance(self.form.user, str) \
+			else None
+
+		if not user_label:
+			raise ValueError('Unable to create user profile, invalid uesr label="%s"' % user_label)
+
+		# User email
+		user_label = self.form.user.email if isinstance(self.form.user, get_user_model()) else None
+
+		# Labels and permissions the user is authorized for
+		authorized_labels = []
+		permissions = []
+		if (isinstance(self.form.user, get_user_model()) and self.form.user.is_superuser) \
+			or (isinstance(self.form.user, str) and self.form.user == SONADOR_USERNAME):
+			authorized_labels.append('*')
+			permissions.append('all')
+
+		response.update({
+			'server': self.form.server.pk, 'id': user_uid, 'username': username, 'name': user_label, 'email': user_label,
+			'authorized-labels': authorized_labels, 'permissions': permissions,
+			'groups': [self.getGroupJson(g) for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)]
+		})
+
+		return response
 
 
 class OrthancAuthTokenGenerateView(OrthancServiceImagingServerMixin, View):
@@ -167,7 +199,7 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 		adata = super().get_data(context)
 
 		# Decode user requests
-		if self.form.is_valid() and getattr(self.form, 'user', None):
+		if self.form.is_valid() and getattr(self.form, 'user', None) and self.form.server.user_has_access(self.form.user):
 
 			# Ensure that the token includes required components to generate redirect			
 			if not self.form.token_payload or not self.form.token_payload.get('orthanc-resource'):
@@ -194,4 +226,4 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 		except self.imagingserver_class.DoesNotExist as err:
 			return guru_page_not_found(self.request, err)		
 
-		return super().post(request, *args, **kwargs)
+		return super().post(request, *args, **kwargs) 

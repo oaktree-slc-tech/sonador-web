@@ -41,13 +41,16 @@ urlpatterns_openid_auth = [
 
 urlpatterns_service_auth = [
 
-	# Orthanc authorization API
+	# Orthanc authorization API: implements the endpoints required by the Orthanc Advanced Authorization
+	# Plugin: https://orthanc.uclouvain.be/book/plugins/authorization.htm. For authentication
+	# view instances use Sonador credentials (either a username/token or an access ID/secret) sent
+	# as basic credentials.
 	re_path(r'^orthanc/(?P<serverid>\w+)/introspect/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
 			OrthancServiceAuthorizationView.as_view()), name='service-orthanc'),
 	re_path(r'^orthanc/(?P<serverid>\w+)/user-profile/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
-			orthanc.OrthancAuthUserProfileView.as_view()), name='service-orthanc-user'),\
+			orthanc.OrthancAuthUserProfileView.as_view()), name='service-orthanc-user'),
 	re_path(r'^orthanc/(?P<serverid>\w+)/token-generate/(?P<token_type>[a-zA-Z0-9\-]+)?$',
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
 			orthanc.OrthancAuthTokenGenerateView.as_view()), name='service-orthanc-token-generate'),
