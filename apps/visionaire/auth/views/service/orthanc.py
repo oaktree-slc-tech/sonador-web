@@ -64,6 +64,8 @@ class PacsImagingServerAuthUserProfileView(OrthancServiceImagingServerMixin, Use
 		response['user']['groups'] = [self.getGroupJson(g) 
 			for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)]
 		response['server'] = self.getImagingServer().pk
+		response['user']['permissions'] = [
+			k for k,v in self.getImagingServer().server_perms(user).items() if (v and k not in ('is_superuser', 'is_staff'))]
 
 		return response
 
@@ -110,7 +112,7 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 			raise ValueError('Unable to create user profile, invalid uesr label="%s"' % user_label)
 
 		# User email
-		user_label = self.form.user.email if isinstance(self.form.user, get_user_model()) else None
+		user_email = self.form.user.email if isinstance(self.form.user, get_user_model()) else None		
 
 		# Labels and permissions the user is authorized for
 		authorized_labels = []
@@ -121,9 +123,9 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 			permissions.append('all')
 
 		response.update({
-			'server': self.form.server.pk, 'id': user_uid, 'username': username, 'name': user_label, 'email': user_label,
+			'server': self.form.server.pk, 'id': user_uid, 'username': username, 'name': user_label, 'email': user_email,
 			'authorized-labels': authorized_labels, 'permissions': permissions,
-			'groups': [self.getGroupJson(g) for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)]
+			'groups': [self.getGroupJson(g) for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)],
 		})
 
 		return response

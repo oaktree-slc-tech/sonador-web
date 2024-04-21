@@ -14,7 +14,7 @@ from secure.helpers import server_encrypt_data
 from microservices.models import BaseServerModel
 from microservices.control import server_controlurl
 
-from ..apisettings import SONADOR_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
+from ..apisettings import SONADOR_PERMS, SONADOR_SERVER_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
 from ..helpers import API_ACCESS_SERVER_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class PacsImagingServer(BaseServerModel):
 		perms.update(dict((p, False) for p in SONADOR_PERMS))
 
 		# Determine permissions based on group membership
-		for perm in SONADOR_PERMS:
+		for perm in SONADOR_SERVER_PERMS:
 
 			# User is granted a permission if they are a superuser or a part of a group with the provided permission.
 			# TODO: Add resource modifiers so that the scope of a grant can be narrowed.
