@@ -115,7 +115,7 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 		user_email = self.form.user.email if isinstance(self.form.user, get_user_model()) else None		
 
 		# Labels and permissions the user is authorized for
-		authorized_labels = []
+		authorized_labels = ['all']
 		permissions = []
 		if (isinstance(self.form.user, get_user_model()) and self.form.user.is_superuser) \
 			or (isinstance(self.form.user, str) and self.form.user == SONADOR_USERNAME):
@@ -123,9 +123,7 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 			permissions.append('all')
 
 		response.update({
-			'server': self.form.server.pk, 'id': user_uid, 'username': username, 'name': user_label, 'email': user_email,
-			'authorized-labels': authorized_labels, 'permissions': permissions,
-			'groups': [self.getGroupJson(g) for g in self.form.user.groups.filter(server_authorizations__server=self.form.server)],
+			'name': user_label, 'authorized-labels': authorized_labels, 'permissions': permissions,
 		})
 
 		return response

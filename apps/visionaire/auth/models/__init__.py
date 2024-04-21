@@ -222,8 +222,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		elif self.group.user_set.filter(username=user.username).exists():
 			_server_auth = OrthancServerAuthorization(**pick(self, SONADOR_PERMS))
 
+			# System and scoped resources
+			if _acl_scoped_resource := _server_auth.acl_scoped_resource(resource, method) is not None:
+				return _acl_scoped_resource
+
 			# Server query permission
-			if _server_auth.query_perm(resource, method) is not None:
+			elif _server_auth.query_perm(resource, method) is not None:
 				return self.query
 
 			# Upload permission

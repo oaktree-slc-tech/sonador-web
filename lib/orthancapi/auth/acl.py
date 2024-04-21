@@ -12,12 +12,34 @@ class ServerAuthorization:
 		self.query = query
 		self.upload = upload
 
+	def acl_scoped_resource(self, resource, method):
+		'''	Determine if the requested resource matches a scoped resource within Orthanc.
+
+			* /cache/dcm-tags: dictionary of tags stored by the Sonador resource cache
+			* /tools/secure-find: scoped search endpoint
+			* /dicom-web/studies:  scoped DICOMweb query endpoint
+		'''
+		# Server DICOM tags
+		if method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_CACHE_TAGS:			
+			return True
+
+		# DICOMmweb study endpoint (ACL mediated)
+		elif method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_DICOMWEB_STUDIES:
+			return True
+
+		# tools/secure-find (ACL mediated)
+		elif method.lower() == gapicodes.HTTP_POST.lower() and resource == orthanc_api.ORTHANC_TOOLS_FIND_SECURE:
+			return True
+
+		return None
+
 	def query_perm(self, resource, method):
 		'''	Determine if the requested resource matches a query query endpoint and return the permission
 			for the server. If the request does not match a query endpoint, the method returns None.
 
 			@returns bool or None if the method was unable to match the resource request
 		'''
+		# System-wide Resource Query
 		if (method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_DICOMWEB_STUDIES) \
 			or (method.lower() == gapicodes.HTTP_POST.lower() and resource in (
 				orthanc_api.ORTHANC_CACHE_PATIENT, orthanc_api.ORTHANC_CACHE_STUDY, orthanc_api.ORTHANC_CACHE_SERIES)) \
