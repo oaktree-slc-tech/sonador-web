@@ -13,6 +13,7 @@ from django.contrib import auth
 from guru import apisettings as gapi
 from guru.apisettings import HTTP_GET
 from guru.helpers import create_token
+from guru.helpers.utils.object import pick
 from guru.helpers.compatability import guru_page_not_found
 
 from secure import apisettings as secureapi
@@ -73,7 +74,7 @@ def parse_resource_policy(resource_pollicy, sep_policy=' ', sep_resource=',', se
 
 # Decorator Functions
 
-def orthancserver_basicauth(required_permission, 
+def orthancserver_basicauth(required_permission,
 		imagingserver_model=PacsImagingServer, apiaccess_model=ApiAccess, apiaccess_token_model=ApiAccessToken,
 		serverid_fieldname='serverid'):
 	''' Allows for the view to be accessed by the Orthanc Advanced Authorization plugin via basic authentication
@@ -84,9 +85,9 @@ def orthancserver_basicauth(required_permission,
 			either a Django permissions string or a callable function
 			which accepts a user object as a parameter.
 
-			If required_permission is a permissions string, the 
-			user.has_perm method will be used to determine if the 
-			user associated with the request has the required 
+			If required_permission is a permissions string, the
+			user.has_perm method will be used to determine if the
+			user associated with the request has the required
 			permissions to access the requested resource.
 
 			If a callable method or function, required_permission should
@@ -104,7 +105,7 @@ def orthancserver_basicauth(required_permission,
 		@input apiaccess_model (Model subclass which implements BaseApiAccess API, default=secure.models.ApiAccess):
 			Model which should be used to retrieve the access ID/secret key combination and determine
 			whether the user has access to the requested resource.
-		@input apiaccess_token_model (Model subclass which implements the BaseApiToken API, default=None): 
+		@input apiaccess_token_model (Model subclass which implements the BaseApiToken API, default=None):
 			Model which should be used to retrieve access tokens from and determine whether the user has access
 			to the requested resource. When the model is None, token access is disabled.
 	'''
@@ -127,7 +128,7 @@ def orthancserver_basicauth(required_permission,
 				if callable(required_permission): return required_permission(suser, request, args, kwargs)
 				if isinstance(required_permission, str):
 					return suser.has_perm(required_permission)
-				
+
 				raise TypeError('required_permission must either be a callable function or string')
 
 			# Response for failed requests
@@ -147,23 +148,23 @@ def orthancserver_basicauth(required_permission,
 							apiaccess = apiaccess_model.objects.get(access_id=uname)
 							if apiaccess.secret_key == secret:
 								request.user = apiaccess.user
-						
+
 						# Failed to retrieve API access model, attempt retrieval of token model
 						except ObjectDoesNotExist:
 							apiaccess = apiaccess_token_model.objects.get(token=secret)
 							if apiaccess.user.username == uname:
-								request.user = apiaccess.user						
+								request.user = apiaccess.user
 
 				except ObjectDoesNotExist:
 					apiresponse[gapi.API_ERROR] = secureapi.API_INVALID_CREDENTIALS
 					apiresponse[gapi.API_MESSAGE] = secureapi.API_ERROR_MISSING_CREDENTIALS
 
 				except ValueError as err:
-					logger.error('Unable to decode user credentials from authentication string')				
+					logger.error('Unable to decode user credentials from authentication string')
 
 			# Check that PAI user has access to requested resource
 			if getattr(request, 'user', None):
-				
+
 				try: upass = server.user_has_access(request.user) and check_userperms(request.user)
 				except ObjectDoesNotExist as err:
 					return guru_page_not_found(required_permission, err)
@@ -183,7 +184,7 @@ def orthancserver_basicauth(required_permission,
 
 # Permission functions
 
-def api_permission_user_identity(user, request, vargs, vkwargs, 
+def api_permission_user_identity(user, request, vargs, vkwargs,
 		user_url_param='objectid', user_url_type=int):
 	'''	Permission helper method for api_request which checks that a user is currently active
 		and that the request user matches the user specified in the keyword arguments.
@@ -191,13 +192,13 @@ def api_permission_user_identity(user, request, vargs, vkwargs,
 	# Convert user ID param to int
 	try: url_userid = user_url_type(vkwargs.get(user_url_param))
 	except ValueError as err: url_userid = vkwargs.get(user_url_param)
-	
+
 	return user.is_active and (user.is_superuser or user.pk == url_userid)
 
 
 def api_permission_user_readonly(user, request, vargs, vkwargs):
 	'''	Permission helper for api_request which checks that a user is currently active and
-		requesting READ ONLY access to an API endpoint (GET). 
+		requesting READ ONLY access to an API endpoint (GET).
 
 		@returns bool: True if the user is active, authenticated, and the request method is GET.
 			False otherwise.
@@ -212,14 +213,14 @@ def api_permission_user_readonly_admin_modify(user, request, vargs, vkwargs):
 	# Allow access for read-only requests
 	if not (user.is_superuser or user.is_staff):
 		return 	api_permission_user_readonly(user, request, vargs, vkwargs)
-	
+
 	return user.is_active and user.is_authenticated and user.is_superuser
 
 
 def api_permission_imageserver_user_readonly_admin_modify(user, request, vargs, vkwargs,
 		imageserver_model=PacsImagingServer, server_url_param='objectid'):
 	'''	Permission helper for api_request which prevents access to imaging server instances
-		for which a user is not authorized. 
+		for which a user is not authorized.
 	'''
 	# Authorize all admin access requests
 	if user.is_active and user.is_authenticated and user.is_superuser:
@@ -229,19 +230,19 @@ def api_permission_imageserver_user_readonly_admin_modify(user, request, vargs, 
 	if api_permission_user_readonly_admin_modify(user, request, vargs, vkwargs):
 		return imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).filter(
 			Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
-	
+
 	return False
 
 
 # OpenID Connect helper methods: these methods are used by the workflow views
-# and by the Orthanc token validation views in order to enable validation of 
+# and by the Orthanc token validation views in order to enable validation of
 # remote tokens
 
 
 def openid_get_django_user(authserver, socialuser_model, openid_username, authtoken, request=None):
 	'''	Retrieve the auth profile associated with the OpenID username provided
 		by the auth server. From that, fetch the user model. If the user does not exist,
-		a username will be constructed from the data provided by the server.		
+		a username will be constructed from the data provided by the server.
 
 		Username processing:
 
@@ -257,7 +258,7 @@ def openid_get_django_user(authserver, socialuser_model, openid_username, authto
 
 		@input authserver (sonador.auth.models.SocialAuthorizationServer): authorization server
 			instance and provider to be used for retrieving the user details.
-		@input socialuser_model (sonador.auth.models.SocialUserAccount): social user account class to 
+		@input socialuser_model (sonador.auth.models.SocialUserAccount): social user account class to
 			be used for creating a Django user instance and associating it with the remote
 			IdP account.
 		@input openid_username (str): OpenID username retrieved form the identity provider
