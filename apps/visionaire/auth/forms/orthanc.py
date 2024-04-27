@@ -74,7 +74,7 @@ class ImagingServerIntegrationAuthorizationForm(ImagingServerFormMixin, Integrat
 			raise forms.ValidationError('Unable to retrieve valid user instance for token')
 		if getattr(self, 'user', None) and self.user.pk and not self.server.user_has_access(self.user):
 			raise forms.ValidationError('User "%s" does not have permission to access data server "%s"' % (
-					self.form.user, self.form.server.pk
+					self.user, self.server.pk
 				))
 
 		return cleaned_data
