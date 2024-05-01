@@ -40,7 +40,7 @@ urlpatterns_api = [
 
 	# API Client Login
 	re_path(r'^login/?$',
-		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and (user.is_superuser or user.is_staff),
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated,
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET',),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			SecureApiLoginView.as_view()),

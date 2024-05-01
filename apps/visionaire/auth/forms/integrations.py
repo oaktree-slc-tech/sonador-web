@@ -16,6 +16,8 @@ from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 
+from core.forms import SonadorBaseForm
+
 from ...helpers import API_AUTHORIZATION_HEADER, SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
@@ -23,6 +25,18 @@ from ...helpers import API_AUTHORIZATION_HEADER, SESSION_SALT, ACCESS_TOKEN_MAX_
 from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseForm
 
 logger = logging.getLogger(__name__)
+
+
+from ..models import DataService
+
+
+class DataServiceForm(SonadorBaseForm):
+    ''' Form class for creating and updating Sonador data services
+    '''
+    class Meta:
+        model = DataService
+        fields = '__all__'
+        exclude = ('token',)
 
 
 class IntegrationAuthorizationForm(SonadorServiceAuthorizationBaseForm):
@@ -82,7 +96,7 @@ class DataServiceAuthorizationForm(IntegrationAuthorizationForm):
             raise forms.ValidationError('Unable to retrieve valid user instance for token')
         if getattr(self, 'user', None) and self.user.pk and not self.service.user_has_perm(self.user):
             raise forms.ValidationError('User "%s" does not have permission to access data service "%s"' % (
-                    self.form.user, self.form.service.pk
+                    self.user, self.service.pk
                 ))
 
         return cleaned_data
