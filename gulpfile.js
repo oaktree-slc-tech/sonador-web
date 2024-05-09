@@ -269,6 +269,7 @@ function jsBuildMagnificLightbox(done) {
 
 // Compile 
 const js = gulp.series(jsBuildOHIFViewer, deployOHIF, jsBuildAce, jsBuildMagnificLightbox);
+const jsOHIF = gulp.series(jsBuildOHIFViewer, deployOHIF)
 
 
 // Gulp Tasks
@@ -276,4 +277,5 @@ exports.jsBuildOHIFViewer = jsBuildOHIFViewer;
 exports.deployOHIF = deployOHIF;
 exports.jsBuildAce = jsBuildAce;
 exports.jsBuildMagnificLightbox = jsBuildMagnificLightbox;
+exports.jsOHIF = jsOHIF;
 exports.js = js;
