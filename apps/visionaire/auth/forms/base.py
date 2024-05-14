@@ -25,6 +25,8 @@ from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
 
+from ...kafka import KafkaManager
+
 from .. import hexsigning
 
 from .credential_providers.base import CredentialValidationError
@@ -33,6 +35,8 @@ from .credential_providers.remote import SonadorRemoteCredentialProvider
 
 logger = logging.getLogger(__name__)
 
+kafka_manager = KafkaManager(bootstrap_servers='kafka:9092', client_id='django_service_producer')
+kafka_manager.create_topic('audit-event-log')
 
 class SonadorServiceAuthorizationBaseForm(forms.Form):
 	''' Form instance which can be used to decode and verify token requests from services
@@ -49,6 +53,7 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.token_payload = None
+		self.kafka_manager = kafka_manager
 
 	def clean_authdata(self, cleaned_data):
 		'''	Inspect authentication headers, convert to correct sessions or API tokens,
@@ -67,6 +72,9 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 				self.expires_in = getattr(_cred, 'expires_in', None)
 				self.user = getattr(_cred, 'user', None)
 				self.session = getattr(_cred, 'session', None)
+
+				# Export to Audit Log Trail
+				kafka_manager.send_audit_event('audit-event-log', cleaned_data, self.user.get_full_name(), self.expires_in)
 
 				return cleaned_data
 

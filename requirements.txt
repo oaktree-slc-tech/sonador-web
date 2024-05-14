@@ -31,3 +31,6 @@ googleapis-common-protos==1.53.0
 
 # Visionaire Dependencies
 tabulate==0.8.7
+
+# Streaming
+kafka-python==2.02
