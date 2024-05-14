@@ -262,6 +262,9 @@ STATIC_URL = '/static/'
 
 # Authentication Settings
 siteconfig_auth = siteconfig.get('Authentication', {})
+
+# In version 0.1 of Sonador, it was possible to turn off authentication. Since version 0.2 
+# authentication is always enabled.
 AUTH_ENABLED = True
 SERVER_APITOKEN = siteconfig_auth.get('SERVER_APITOKEN')
 if AUTH_ENABLED and not SERVER_APITOKEN:
@@ -275,6 +278,13 @@ AUTH_EXPIRES_IN_SERVERTOKEN = int(siteconfig_auth.get('AUTH_EXPIRES_IN_SERVERTOK
 AUTH_EXPIRES_IN_APITOKEN = int(siteconfig_auth.get('AUTH_EXPIRES_IN_APITOKEN', AUTH_EXPIRES_IN_DEFAULT))
 AUTH_EXPIRES_IN_SESSION = int(siteconfig_auth.get('AUTH_EXPIRES_IN_SESSION', AUTH_EXPIRES_IN_DEFAULT))
 AUTH_EXPIRES_IN_ORTHANC_PASSWORD = int(siteconfig_auth.get('AUTH_EXPIRES_IN_ORTHANC_PASSWORD', AUTH_EXPIRES_IN_DEFAULT))
+
+# Sonador Credentials Cache
+AUTH_CREDENTIALS_CACHE = config_str2bool(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE', False))
+AUTH_CREDENTIALS_CACHE_MAX_AGE = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_MAX_AGE', 180))
+AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS', 16))
+AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH', 42))
+
 
 # Site Redirect Settings
 LOGIN_REDIRECT_URL = siteconfig_auth.get('LOGIN_REDIRECT_URL', '/')

@@ -2,6 +2,7 @@ import logging, six, copy, base64
 from six.moves.urllib import parse as urlparse
 
 from guru.apisettings import HTTP_CONTENT_JSON, HTTP_CONTENT_FORM_ENCODED
+from guru.helpers import gsetting
 
 from ....views import JSONFormApiView
 
@@ -37,6 +38,18 @@ class SonadorServiceAuthorizationBaseView(JSONFormApiView):
 		services integrated with Sonador.
 	'''
 	formclass = None
+	cache_validation = False
+
+	def get_form_kwargs(self, *args, **kwargs):
+		'''	Retrieve keyword arguments for the form instance.
+		'''
+		form_kwargs = super().get_form_kwargs(*args, **kwargs)
+
+		# Add authorization cache setting to form
+		if form_kwargs.get('cache_validation') is None:
+			form_kwargs['cache_validation'] = self.cache_validation
+
+		return form_kwargs
 
 	def getRequestJsonData(self, *args, **kwargs):
 		'''	Retrieve the data from the request. The service view is able

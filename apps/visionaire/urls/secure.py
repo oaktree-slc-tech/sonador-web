@@ -9,6 +9,7 @@ from django.urls import path, re_path
 
 from guru.forms import create_modelform_class
 from guru.views import GuruApiObjectManagementView, GuruApiRestView
+from guru.helpers import gsetting
 
 from secure.models import ApiAccessToken
 from secure.helpers import api_request
@@ -66,7 +67,7 @@ urlpatterns_api = [
 				allowed_http_methods_url_signature=('POST',),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',), allow_formencoded=True,
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			DataServiceAuthorizationView.as_view()),
+			DataServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='data-service-token-introspect'),
 
 
@@ -139,7 +140,7 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			PacsImagingServerAuthUserProfileView.as_view()),
+			PacsImagingServerAuthUserProfileView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='pacs-user-token-introspect'
 	),
 
@@ -173,7 +174,7 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			UserProfileAuthorizationView.as_view(include_groups=True)),
+			UserProfileAuthorizationView.as_view(include_groups=True, cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='admin-user-token-introspect'
 	),
 

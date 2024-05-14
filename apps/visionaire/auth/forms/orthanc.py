@@ -37,6 +37,7 @@ from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseFo
 
 from .credential_providers.sonador import SonadorCredentialProvider
 from .credential_providers.staticfile import SonadorStaticFileCredentialProvider
+from .credential_providers.cache import SonadorTokenCacheCredentialProvider
 from .credential_providers.remote import SonadorRemoteCredentialProvider
 
 from .integrations import IntegrationAuthorizationForm
@@ -100,7 +101,10 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		'dicom-uid': 'dicom_uid',
 	}
 
-	credential_providers = [SonadorStaticFileCredentialProvider, SonadorCredentialProvider, SonadorRemoteCredentialProvider]
+	credential_providers = [
+		SonadorStaticFileCredentialProvider, SonadorCredentialProvider, 
+		SonadorTokenCacheCredentialProvider, SonadorRemoteCredentialProvider
+	]
 
 	def __init__(self, *args, **kwargs):
 		self._init_server(*args, **kwargs)		

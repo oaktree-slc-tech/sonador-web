@@ -1,4 +1,4 @@
-import logging, six, copy, base64
+import logging, six, copy, base64, traceback
 
 from django import forms
 from django.core import signing
@@ -29,6 +29,7 @@ from .. import hexsigning
 
 from .credential_providers.base import CredentialValidationError
 from .credential_providers.sonador import SonadorCredentialProvider, ServiceAuthorizationRequest
+from .credential_providers.cache import SonadorTokenCacheCredentialProvider
 from .credential_providers.remote import SonadorRemoteCredentialProvider
 
 logger = logging.getLogger(__name__)
@@ -43,14 +44,29 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 	'''
 	token_key = forms.CharField(required=True)
 	token_value = forms.CharField(required=True)
+	cache_validation = False
 
-	credential_providers = [SonadorCredentialProvider, SonadorRemoteCredentialProvider]
+	credential_providers = [
+		SonadorCredentialProvider, SonadorTokenCacheCredentialProvider, SonadorRemoteCredentialProvider
+	]
 
 	def __init__(self, *args, **kwargs):
+
+		self.cache_validation = kwargs.pop('cache_validation', self.cache_validation)
 		super().__init__(*args, **kwargs)
 		self.token_payload = None
 
-	def clean_authdata(self, cleaned_data):
+	def _get_credential_provider_kwargs(self, credential_provider_class, options=None, **kwargs):
+		'''	Retrieve the keyword arguments and options for the provided credential provider class.
+		'''
+		options = options or {}
+
+		# Manage credential cache options		
+		if credential_provider_class in (SonadorRemoteCredentialProvider, SonadorTokenCacheCredentialProvider):
+			options['cache_validation'] = self.cache_validation
+		return options
+
+	def clean_authdata(self, cleaned_data, **kwargs):
 		'''	Inspect authentication headers, convert to correct sessions or API tokens,
 			retrieve users and permissions.
 		'''
@@ -59,7 +75,7 @@ class SonadorServiceAuthorizationBaseForm(forms.Form):
 			try:
 
 				# Decode and parse the credential data
-				_cred = cred_provider(cleaned_data)
+				_cred = cred_provider(cleaned_data, **self._get_credential_provider_kwargs(cred_provider, **kwargs))
 				cleaned_data = _cred.clean()
 
 				# Copy token payload and user attributes to form		

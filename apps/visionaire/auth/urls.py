@@ -47,16 +47,16 @@ urlpatterns_service_auth = [
 	# as basic credentials.
 	re_path(r'^orthanc/(?P<serverid>\w+)/introspect/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
-			OrthancServiceAuthorizationView.as_view()), name='service-orthanc'),
+			OrthancServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), name='service-orthanc'),
 	re_path(r'^orthanc/(?P<serverid>\w+)/user-profile/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
-			orthanc.OrthancAuthUserProfileView.as_view()), name='service-orthanc-user'),
+			orthanc.OrthancAuthUserProfileView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), name='service-orthanc-user'),
 	re_path(r'^orthanc/(?P<serverid>\w+)/token-generate/(?P<token_type>[a-zA-Z0-9\-]+)?$',
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
 			orthanc.OrthancAuthTokenGenerateView.as_view()), name='service-orthanc-token-generate'),
 	re_path(r'^orthanc/(?P<serverid>\w+)/token-decode/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
-			orthanc.OrthancAuthTokenDecodeView.as_view()), name='service-orthanc-token-decode'),
+			orthanc.OrthancAuthTokenDecodeView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), name='service-orthanc-token-decode'),
 	
 	# Orthanc explorer (classic) and admin (OE2)
 	re_path(r'^orthanc/(?P<serverid>\w+)/explorer/?$',
