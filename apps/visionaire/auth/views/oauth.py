@@ -37,7 +37,9 @@ from wgtauth.registration.views import RegistrationView, RegistrationSuccessView
 
 from ...views.base import JSONBaseView
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
-from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM
+from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM, \
+	OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM, OPENID_AUTH_TOKEN_SESSION_PARAM, \
+	OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM, OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
 from ..helpers import openid_get_django_user
@@ -46,12 +48,6 @@ from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
 from .base import get_default_authserver, OpenIDAuthServerMixin
 
 logger = logging.getLogger(__name__)
-
-
-OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM = 'openid-auth-provider'
-OPENID_AUTH_TOKEN_SESSION_PARAM = 'openid-auth-token'
-OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM = 'openid-auth-token-type'
-OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM = 'openid-auth-scope'
 
 
 class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):

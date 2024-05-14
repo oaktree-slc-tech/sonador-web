@@ -30,3 +30,10 @@ SONADOR_OUTPUT_TYPE_QUERY_PARAM = 'output-type'
 
 
 NGINX_AUTH_REQUEST_QUERY_PARAM = 'nginx-auth'
+
+
+OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM = 'openid-auth-provider'
+OPENID_AUTH_TOKEN_SESSION_PARAM = 'openid-auth-token'
+OPENID_AUTH_TOKEN_USER = 'openid-auth-user'
+OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM = 'openid-auth-token-type'
+OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM = 'openid-auth-scope'
