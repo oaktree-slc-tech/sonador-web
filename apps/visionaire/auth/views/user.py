@@ -96,7 +96,7 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 
 	def __init__(self, *args, server=None, **kwargs):
 		self.server = server
-		if server is None:
+		if not server:
 			raise ValueError('Unable to initialize user filter form, invalid imaging server instance')
 
 		super().__init__(*args, **kwargs)
@@ -155,12 +155,12 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		'name': 'name__icontains'
 	}
 
-	def __init__(self, *args, **kwargs):
-		self.server = kwargs.pop('server', None)
-		super().__init__(*args, **kwargs)
-
-		if not self.server:
+	def __init__(self, *args, server=None, **kwargs):
+		self.server = server
+		if not server:
 			raise ValueError('Unable to initialize group filter form, invalid imaging server instance')
+			
+		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
 		'''	Filter user list to only those which have access to ther server 
