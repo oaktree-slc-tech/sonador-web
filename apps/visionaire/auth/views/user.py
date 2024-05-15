@@ -13,6 +13,8 @@ from guru.filter.views import GuruQueryParamFilterFormMixin, GuruFilterView
 from ...views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..forms import UserCreationForm, UserChangeForm, GroupForm
 
+from .service.base import OrthancServiceImagingServerMixin
+
 
 
 class UserFilterBaseForm(GuruFilterForm):
@@ -81,7 +83,7 @@ class UserRestView(UserApiMixin, SonadorApiRestView):
 	modelform = UserChangeForm
 
 
-class FrontendUserFilterForm(UserFilterBaseForm):
+class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 	'''	Filter form instance used by frontend API views for search/filter of Sonador users
 	'''
 	filtermodel = get_user_model()
@@ -92,11 +94,31 @@ class FrontendUserFilterForm(UserFilterBaseForm):
 		'email': 'email__icontains',
 	}
 
+	def __init__(self, *args, **kwargs):
+		self.server = kwargs.pop('server', None)
+		super().__init__(*args, **kwargs)
 
-class UserFilterView(UserApiMixin, GuruFilterView):
+		if not self.server:
+			raise ValueError('Unable to initializer user filter form, invalid imaging server instance')
+
+	def getObjectManager(self):
+		'''	Filter user list to only those which have access to ther server 
+		'''
+		return super().getObjectManager().filter(groups__server_authorizations__server=self.server).distinct()
+
+
+class PacsImagingServerUserFilterView(OrthancServiceImagingServerMixin, UserApiMixin, GuruFilterView):
 	'''	Sonador API view which can be used to search/filter Sonador users
 	'''
-	filterform = FrontendUserFilterForm
+	filterform = PacsImagingServerFrontendUserFilterForm
+
+	def getFilterFormParams(self, request=None, vargs=None, vkwargs=None):
+		'''	Add imaging server reference to filter form parameters
+		'''
+		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
+		fparams['server'] = self.getImagingServer()
+
+		return fparams
 
 
 class GroupFilterBaseForm(GuruFilterForm):
@@ -124,7 +146,7 @@ class GroupRestView(SonadorApiRestView):
 	modelform = GroupForm
 
 
-class FrontendGroupFilterForm(GroupFilterBaseForm):
+class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 	'''	Filter form instance used by frontend API views for search/filter of Sonador groups
 	'''
 	filtermodel = Group
@@ -132,10 +154,29 @@ class FrontendGroupFilterForm(GroupFilterBaseForm):
 	filterkey_transforms = {
 		'name': 'name__icontains'
 	}
-	
 
-class GroupFilterView(GuruFilterView):
+	def __init__(self, *args, **kwargs):
+		self.server = kwargs.pop('server', None)
+		super().__init__(*args, **kwargs)
+
+		if not self.server:
+			raise ValueError('Unable to initialize group filter form, invalid imaging server instance')
+
+	def getObjectManager(self):
+		'''	Filter user list to only those which have access to ther server 
+		'''
+		return super().getObjectManager().filter(server_authorizations__server=self.server).distinct()
+
+
+class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFilterView):
 	'''	Sonador API view which can be used to search/filter Sonador groups
 	'''
-	filterform = FrontendGroupFilterForm
+	filterform = PacsImagingServerFrontendGroupFilterForm
 
+	def getFilterFormParams(self, request=None, vargs=None, vkwargs=None):
+		'''	Add imaging server reference to filter form parameters
+		'''
+		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
+		fparams['server'] = self.getImagingServer()
+
+		return fparams

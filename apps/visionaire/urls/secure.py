@@ -28,7 +28,7 @@ from ..auth.views.service import SecureApiLoginView
 from ..auth.views.service.orthanc import PacsImagingServerAuthUserProfileView
 from ..auth.views.service.integrations import UserProfileAuthorizationView
 from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView, \
-	UserFilterView, GroupFilterView
+	PacsImagingServerUserFilterView, PacsImagingServerGroupFilterView
 from ..auth.views import cred as sonador_cred
 from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
 from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
@@ -147,7 +147,7 @@ urlpatterns_api = [
 		name="group-access-control-update",
 	),
 
-	# Image Server API: User/group endpoints for service integration and token introspection
+	# Image Server API: User/group endpoints for service integration, token introspection, and user/group search
 	re_path(r'^pacs/(?P<serverid>\w+)/user/introspect/profile/?$',
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
@@ -156,6 +156,23 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerAuthUserProfileView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='pacs-user-token-introspect'
+	),
+	re_path(r'^pacs/(?P<serverid>\w+)/user/search/?$', api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=('POST',),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerUserFilterView.as_view(include_groups=False, include_permissions=False)),
+		name="pacs-user-search",
+	),
+	re_path(r'^pacs/(?P<serverid>\w+)/group/search/?$',
+		api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerGroupFilterView.as_view()),
+		name="pacs-group-search",
 	),
 
 	# User Management API
@@ -175,14 +192,6 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			UserRestView.as_view(include_groups=True, include_permissions=True)),
 		name="admin-user-update",
-	),
-	path("user/search", api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
-				api_request_authentication=bearertoken_api_request_authentication,
-				apiaccess_token_model=ApiAccessToken,
-				allowed_http_methods_token_access=('POST',),
-				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			UserFilterView.as_view(include_groups=False, include_permissions=False)),
-		name="user-search",
 	),
 
 	# User Management API: User/group endpoints for service integration and token introspection
@@ -246,14 +255,5 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			GroupManagementView.as_view()),
 		name="admin-group-management",
-	),
-	path("group/search",
-		api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
-				api_request_authentication=bearertoken_api_request_authentication,
-				apiaccess_token_model=ApiAccessToken,
-				allowed_http_methods_token_access=("POST",),
-				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			GroupFilterView.as_view()),
-		name="group-search",
 	),
 ]
