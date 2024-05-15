@@ -94,12 +94,12 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 		'email': 'email__icontains',
 	}
 
-	def __init__(self, *args, **kwargs):
-		self.server = kwargs.pop('server', None)
-		super().__init__(*args, **kwargs)
+	def __init__(self, *args, server=None, **kwargs):
+		self.server = server
+		if server is None:
+			raise ValueError('Unable to initialize user filter form, invalid imaging server instance')
 
-		if not self.server:
-			raise ValueError('Unable to initializer user filter form, invalid imaging server instance')
+		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
 		'''	Filter user list to only those which have access to ther server 
@@ -116,7 +116,7 @@ class PacsImagingServerUserFilterView(OrthancServiceImagingServerMixin, UserApiM
 		'''	Add imaging server reference to filter form parameters
 		'''
 		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
-		fparams['server'] = self.getImagingServer()
+		fparams['server'] = self.getImagingServer()		
 
 		return fparams
 
