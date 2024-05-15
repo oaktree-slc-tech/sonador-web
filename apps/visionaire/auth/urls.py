@@ -20,7 +20,7 @@ from .views.service import OrthancServiceAuthorizationView, OrthancSecureUriRedi
 
 from .views.cred import SonadorUserCredentialManagementView, SonadorUserTokenManagementView, SonadorUserCredentialRestView
 from .forms.cred import SonadorApiAccessTokenForm, SonadorApiAccessCredentialForm
-from .helpers import orthancserver_basicauth
+from .helpers import orthancserver_basicauth, bearertoken_api_request_authentication
 
 
 urlpatterns_openid_auth = [
@@ -75,6 +75,7 @@ urlpatterns_auth_management = [
 	# Sonador CSRF token obtain view
 	re_path(r'^cred/csrf-token/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+					api_request_authentication=bearertoken_api_request_authentication,
 					allowed_http_methods_url_signature=('GET',),
 					request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			CSRFTokenObtainView.as_view()),
@@ -83,6 +84,7 @@ urlpatterns_auth_management = [
 	# Credentials Management: access token
 	re_path(r'^cred/token/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=SonadorApiAccessToken, 
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
 				allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
@@ -93,6 +95,7 @@ urlpatterns_auth_management = [
 	# Credentials Management: access ID/secret
 	re_path(r'^cred/access/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=SonadorApiAccessToken, 
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
 				allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
@@ -101,6 +104,7 @@ urlpatterns_auth_management = [
 		name='cred-management-access-secret'),
 	re_path(r'^cred/access/(?P<objectid>[a-zA-Z0-9]+)/?$',
 		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=SonadorApiAccessToken, allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			SonadorUserCredentialRestView.as_view(model=SonadorApiAccess, modelform=SonadorApiAccessCredentialForm)),
