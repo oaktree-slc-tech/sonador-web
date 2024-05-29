@@ -6,11 +6,16 @@ from django.forms.models import model_to_dict
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
+from core.search import SonadorUnifiedSearchForm, SonadorUnifiedSearchView
+
+from guru.errors import ConfigurationError
 from guru.helpers.user import user_displayname
 from guru.filter.forms import GuruFilterForm
 from guru.filter.views import GuruQueryParamFilterFormMixin, GuruFilterView
+from guru.helpers.compatability import guru_page_not_found
 
 from ...views.base import SonadorApiObjectManagementView, SonadorApiRestView
+from ..models.user import SonadorProxyUser, SonadorProxyGroup
 from ..forms import UserCreationForm, UserChangeForm, GroupForm
 
 from .service.base import OrthancServiceImagingServerMixin
@@ -23,7 +28,7 @@ class UserFilterBaseForm(GuruFilterForm):
 	username = forms.CharField(max_length=256, required=False)
 	first_name = forms.CharField(max_length=512, required=False)
 	last_name = forms.CharField(max_length=512, required=False)
-	email = forms.CharField(max_length=2048, required=False)
+	email = forms.CharField(max_length=2048, required=False)	
 
 
 class UserApiMixin:
@@ -88,7 +93,7 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 	'''
 	filtermodel = get_user_model()
 
-	filterkey_transforms = {
+	filterkey_transforms = {		
 		'first_name': 'first_name__icontains',
 		'last_name': 'last_name__icontains',
 		'email': 'email__icontains',
@@ -180,3 +185,76 @@ class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFil
 		fparams['server'] = self.getImagingServer()
 
 		return fparams
+
+
+class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
+	'''	Search form which can be used to execute full text searches across the user and group models.
+	'''
+	searchmodels = {
+		'user': SonadorProxyUser, 'group': SonadorProxyGroup,
+	}
+	searchmodel_filter_fieldmap = {
+		'user': ('username', 'email', 'first_name', 'last_name'),
+		'group': ('name',)
+	}
+
+	# User filter fields
+	username = forms.CharField(max_length=256, required=False)
+	first_name = forms.CharField(max_length=512, required=False)
+	last_name = forms.CharField(max_length=512, required=False)
+	email = forms.CharField(max_length=2048, required=False)
+
+	# Group filter fields
+	name = forms.CharField(max_length=256, required=False)
+
+	# Filter key transforms for the search form {model}.{field}
+	filterkey_transforms = {
+		'user.username': 'username__icontains',
+		'user.email': 'email__icontains',
+		'user.first_name': 'first_name__icontains',
+		'user.last_name': 'last_name__icontains',
+		'group.name': 'name__icontains',
+	}
+
+	def __init__(self, *args, server=None, **kwargs):
+		self.server = server
+		super().__init__(*args, **kwargs)
+
+		if not self.server:
+			raise ConfigurationError('Unable to initialize unified auth form, no imaging server provided')
+
+	def _get_filter_params(self, mlabel):
+		fparams = super()._get_filter_params(mlabel)
+
+		# Add imaging server to the query filter parameters
+		if mlabel == 'user':
+			fparams['groups__server_authorizations__server'] = self.server
+		elif mlabel == 'group':
+			fparams['server_authorizations__server'] = self.server
+
+		return fparams
+
+
+class PacsImagingUnifiedAuthModelSearchView(OrthancServiceImagingServerMixin, SonadorUnifiedSearchView):
+	'''	Search view which can be used to execute full text search across user and group models.
+	'''
+	formclass = PacsImagingUnifiedAuthModelSearchForm
+
+	def get_form_kwargs(self, *args, **kwargs):
+		'''	Retrieve optional keyword arguments for the form
+
+			@returns dict or OrderedDict
+		'''
+		form_kwargs = super().get_form_kwargs(*args, **kwargs)
+		form_kwargs['server'] = self.getImagingServer(*args, **kwargs)
+
+		return form_kwargs
+
+	def post(self, request, *args, **kwargs):
+		'''	Execute search requests
+		'''
+		try: server = self.getImagingServer(*args, **kwargs)
+		except self.imagingserver_class.DoesNotExist as err:
+			return guru_page_not_found(required, err)
+
+		return super().post(request, *args, **kwargs)

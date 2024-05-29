@@ -28,14 +28,14 @@ from ..auth.views.service import SecureApiLoginView
 from ..auth.views.service.orthanc import PacsImagingServerAuthUserProfileView
 from ..auth.views.service.integrations import UserProfileAuthorizationView
 from ..auth.views.user import UserManagementView, UserRestView, GroupManagementView, GroupRestView, \
-	PacsImagingServerUserFilterView, PacsImagingServerGroupFilterView
+	PacsImagingServerUserFilterView, PacsImagingServerGroupFilterView, PacsImagingUnifiedAuthModelSearchView
 from ..auth.views import cred as sonador_cred
 from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
 from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
 from ..auth.views.acl import PacsImagingServerGroupAuthorizationManagementView, PacsImagingServerGroupAuthorizationRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify, \
-	bearertoken_api_request_authentication
+	api_permission_imageserver_user_has_access, bearertoken_api_request_authentication
 
 
 urlpatterns_api = [
@@ -129,7 +129,7 @@ urlpatterns_api = [
 
 	# Imaging Server API: Group Access Control Management
 	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/?$",
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=('GET', "POST"),
@@ -138,13 +138,24 @@ urlpatterns_api = [
 		name="group-access-control-management",
 	),
 	re_path("^pacs/(?P<serverid>[a-zA-Z0-9]+)/acl/(?P<objectid>[a-zA-Z0-9]+)/?$",
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerGroupAuthorizationRestView.as_view()),
 		name="group-access-control-update",
+	),
+
+	# Imaging Server API: Unified auth (user and group) search
+	re_path(r'^pacs/(?P<serverid>\w+)/auth/search/?$',
+		api_request(lambda user, request, vargs, vkwargs: api_permission_imageserver_user_has_access(user, request, vargs, vkwargs, server_url_param='serverid'),
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingUnifiedAuthModelSearchView.as_view()),
+		name='pacs-auth-unified-search'
 	),
 
 	# Image Server API: User/group endpoints for service integration, token introspection, and user/group search
@@ -157,7 +168,7 @@ urlpatterns_api = [
 			PacsImagingServerAuthUserProfileView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='pacs-user-token-introspect'
 	),
-	re_path(r'^pacs/(?P<serverid>\w+)/user/search/?$', api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
+	re_path(r'^pacs/(?P<serverid>\w+)/user/search/?$', api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=('POST',),
@@ -166,7 +177,7 @@ urlpatterns_api = [
 		name="pacs-user-search",
 	),
 	re_path(r'^pacs/(?P<serverid>\w+)/group/search/?$',
-		api_request(lambda user, request, vargs, vkwags: user is not None and user.is_authenticated,
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("POST",),
@@ -176,7 +187,7 @@ urlpatterns_api = [
 	),
 
 	# User Management API
-	path("user", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+	path("user", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "POST",),
@@ -185,7 +196,7 @@ urlpatterns_api = [
 		name="admin-user-management",
 	),
 	path("user/<int:objectid>",
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "PATCH", "PUT", "DELETE"),
@@ -207,7 +218,7 @@ urlpatterns_api = [
 
 	# Admin Credentials Management: API token
 	re_path(r'^user/(?P<userid>[0-9]+)/cred/token/?$',			# Admin Credentials Management: access token
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=sonador_cred.SonadorApiAccessToken,
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'),
@@ -219,7 +230,7 @@ urlpatterns_api = [
 
 	# Admin Credentials Management: access ID/secret
 	re_path(r'^user/(?P<userid>[0-9]+)/cred/access/?$',
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=sonador_cred.SonadorApiAccessToken,
 				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
@@ -229,7 +240,7 @@ urlpatterns_api = [
 				model=sonador_cred.SonadorApiAccess, modelform=SonadorApiAccessCredentialForm)),
 		name='admin-cred-management-access-secret'),
 	re_path(r'^user/(?P<userid>[0-9]+)/cred/access/(?P<objectid>[a-zA-Z0-9]+)/?$',
-		api_request(lambda user, request, vargs, vkwags: user.is_authenticated,
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=sonador_cred.SonadorApiAccessToken,
 				allowed_http_methods_token_access=('GET', 'PATCH', 'PUT', 'DELETE'),
@@ -240,7 +251,7 @@ urlpatterns_api = [
 
 
 	# Group Management API
-	path("group", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+	path("group", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "POST",),
@@ -248,7 +259,7 @@ urlpatterns_api = [
 			GroupManagementView.as_view()),
 		name="admin-group-management",
 	),
-	path("group", api_request(lambda user, request, vargs, vkwags: user.is_authenticated and user.is_superuser,
+	path("group", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("GET", "POST",),

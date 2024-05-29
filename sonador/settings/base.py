@@ -177,6 +177,7 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres.search',
     'corsheaders',
 
     # Oak-Tree Base Applications

@@ -262,6 +262,19 @@ def api_permission_imageserver_user_readonly_admin_modify(user, request, vargs, 
 	return False
 
 
+def api_permission_imageserver_user_has_access(user, request, vargs, vkwargs,
+	imageserver_model=PacsImagingServer, server_url_param='objectid'):
+	'''	Permissions helper for api_request which allows access to imaging server instances
+		for which a user is authorized.
+	'''
+	# Authorize all admin access requests
+	if user.is_active and user.is_authenticated and user.is_superuser:
+		return True
+
+	return imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).filter(
+		Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
+
+
 # OpenID Connect helper methods: these methods are used by the workflow views
 # and by the Orthanc token validation views in order to enable validation of
 # remote tokens
