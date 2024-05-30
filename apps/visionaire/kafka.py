@@ -3,106 +3,123 @@ from datetime import datetime
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
-def generate_hl7_audit_event(form_data, username, expiration_minutes):
-    current_time = datetime.now().isoformat() + 'Z'
-    outcome_code = "success"
-    outcome_detail = "Authentication success"
-    return {
-        "resourceType": "AuditEvent",
-        "type": {
-            "system": "http://terminology.hl7.org/CodeSystem/audit-event-type",
-            "code": "110126",
-            "display": "Authentication Decision"
-        },
-        "action": "E",
-        "recorded": current_time,
-        "outcome": {
-            "value": outcome_code,
-            "detail": outcome_detail
-        },
-        "agent": [
-            {
-                "who": {
-                    "identifier": {
-                        "value": username
-                    }
-                },
-                "altId": "User ID",
-                "network": {
-                    "address": form_data.get('token_value', 'unknown'),
-                    "type": "5"
-                },
-                "purposeOfUse": [
-                    {
-                        "coding": [
-                            {
-                                "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
-                                "code": "HOPERAT",
-                                "display": "Operational Use"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ],
-        "source": {
-            "site": "Sonador Platform",
+from fhir.resources.auditevent import AuditEvent, AuditEventAgent, AuditEventSource, AuditEventEntity
+from fhir.resources.fhirtypes import CodingType, ReferenceType
+from datetime import datetime
+
+def create_audit_event(payload):
+    current_time = datetime.utcnow().isoformat() + 'Z'  # HL7 prefers timestamps in UTC with a 'Z' suffix
+
+    # Create the event type coding
+    event_type = CodingType({
+        "system": "http://terminology.hl7.org/CodeSystem/audit-event-type",
+        "code": "110110",  # Example code for Orthanc resource authorization
+        "display": "Orthanc Resource Authorization"
+    })
+
+    # Define the agent (user)
+    agent_user = AuditEventAgent({
+        "who": ReferenceType({
             "identifier": {
-                "value": "Sonador Web Application" 
+                "value": payload.get('user')
             },
-            "type": [
-                {
-                    "system": "http://terminology.hl7.org/CodeSystem/security-source-type",
-                    "code": "4",  # Code '4' represents an application
-                    "display": "Application"
-                }
-            ],
-            "observer": {
-                "reference": form_data.get('dicom_uid', ''),
-                "display": "DICOM Study UID"
-            }
+            "display": payload.get('user')
+        }),
+        "network": {
+            "address": payload.get('ip_address', 'unknown'),
+            "type": "2"  # 2 represents an IP address
         },
-        "entity": [
+        "requestor": True
+    })
+
+    # Optionally, you can add more agents like the system agent
+    agent_system = AuditEventAgent({
+        "who": ReferenceType({
+            "display": "Django Application"
+        }),
+        "requestor": False
+    })
+
+    # Define the source of the event
+    source = AuditEventSource({
+        "site": "Web Server",
+        "observer": ReferenceType({
+            "display": "Django Application"
+        })
+    })
+
+    # Define the entity involved in the event
+    entity = AuditEventEntity({
+        "what": ReferenceType({
+            "identifier": {
+                "value": payload.get('orthanc_id', '')
+            }
+        }),
+        "type": CodingType({
+            "code": "2",
+            "display": "Session"
+        }),
+        "description": "User session identifier",
+        "detail": [
             {
-                "what": {
-                    "identifier": {
-                        "value": form_data.get('session', 'unknown')
-                    }
-                },
-                "type": {
-                    "code": "2",
-                    "display": "Session"
-                },
-                "description": "User session identifier",
-                "detail": [
-                    {
-                        "type": "Token expiration",
-                        "valueString": f"{expiration_minutes} minutes"
-                    },
-                    {
-                        "type": "Access Level",
-                        "valueString": form_data.get('level', '')
-                    },
-                    {
-                        "type": "Method",
-                        "valueString": form_data.get('method', '')
-                    },
-                    {
-                        "type": "DICOM UID",
-                        "valueString": form_data.get('dicom_uid', '')
-                    },
-                    {
-                        "type": "Orthanc ID",
-                        "valueString": form_data.get('orthanc_id', '')
-                    },
-                    {
-                        "type": "URI",
-                        "valueString": form_data.get('uri', '')
-                    }
-                ]
+                "type": "Token expiration",
+                "valueString": f"{payload.get('validity')} minutes"
+            },
+            {
+                "type": "Access Level",
+                "valueString": payload.get('level', 'system')
+            },
+            {
+                "type": "Method",
+                "valueString": payload.get('method', '')
+            },
+            {
+                "type": "DICOM UID",
+                "valueString": payload.get('dicom_uid', '')
+            },
+            {
+                "type": "URI",
+                "valueString": payload.get('uri', '/dicom-web/studies')
+            },
+            {
+                "type": "Authorization Granted",
+                "valueString": str(payload.get('granted', ''))
             }
         ]
-    }
+    })
+
+    # Create the AuditEvent
+    audit_event = AuditEvent({
+        "type": event_type,
+        "subtype": [CodingType({
+            "system": "http://hl7.org/fhir/restful-interaction",
+            "code": payload.get('method').lower(),
+            "display": payload.get('method').upper()
+        })],
+        "action": payload.get('method')[0].upper(),
+        "recorded": current_time,  # Timestamp in UTC
+        "outcome": "0" if payload.get('granted') else "4",  # 0 for success, 4 for failure
+        "outcomeDesc": "Authorization success" if payload.get('granted') else "Authorization failure",
+        "agent": [agent_user, agent_system],
+        "source": source,
+        "entity": [entity]
+    })
+
+    return audit_event
+
+# Example usage
+payload = {
+    'event': 'orthanc_resource_authorization',
+    'orthanc_id': 'orthanc12345',
+    'method': 'GET',
+    'level': 'system',
+    'dicom_uid': 'unique_dicom_uid',
+    'uri': '/dicom-web/studies',
+    'user': 'john_doe',
+    'granted': True,
+    'validity': 30,
+    'ip_address': '192.168.1.1'  # Assuming you have this information
+}
 
 class KafkaManager:
     '''https://docs.confluent.io/kafka-clients/python/current/overview.html
@@ -145,8 +162,8 @@ class KafkaManager:
                 print(f"Failed to create topic '{topic_name}': {e}")
                 return False
 
-    def send_audit_event(self, topic, form_data, username, expiration_minutes):
-        audit_event_json = generate_hl7_audit_event(form_data, username, expiration_minutes)
+    def send_audit_event(self, topic, data):
+        audit_event_json = create_audit_event(data)
         self.send_message(topic, audit_event_json)
 
     def send_message(self, topic, message):
