@@ -35,6 +35,7 @@ from ...apisettings import SONADOR_PERMS, ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICO
 
 from ..helpers import parse_resource_policy
 from .integrations import DataService
+from .user import SonadorProxyUser, SonadorProxyGroup
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbid
 from django.contrib import auth
 
 from guru import apisettings as gapi
-from guru.apisettings import HTTP_GET
+from guru.apisettings import HTTP_GET, HTTP_AUTHORIZATION_HEADER
 from guru.helpers import create_token
 from guru.helpers.utils.object import pick
 from guru.helpers.compatability import guru_page_not_found
@@ -70,6 +70,34 @@ def parse_resource_policy(resource_pollicy, sep_policy=' ', sep_resource=',', se
 
 	return policy
 
+
+def bearertoken_api_request_authentication(request, vargs, vkwargs):
+	'''	API authorization method for use with secure.helpers.api_request. Introspects bearer tokens from the Authorization
+		header and matches them to the user with which they are associated.	If no user instance can be matched to the
+		token, None is returned.
+
+		@input request (WSGI Request Instance): Django request instance
+		@input vargs (tuple): positional arguments provided to the view
+		@input vkwargs (dict): keyword arguments provided to the view
+
+		@returns user instance or None
+	'''
+	from .forms.integrations import IntegrationAuthorizationForm
+	
+	# Check authorization header to determine if a bearer token was provided
+	if request.headers.get(HTTP_AUTHORIZATION_HEADER):
+
+		# Initialize form with payload of the authorization header
+		_auth_form = IntegrationAuthorizationForm({
+			'token_key': HTTP_AUTHORIZATION_HEADER,
+			'token_value': request.headers.get(HTTP_AUTHORIZATION_HEADER) or ''
+		}, cache_validation=False)
+
+		# Introspect token to retrieve user
+		if _auth_form.is_valid():
+			return getattr(_auth_form, 'user', None)
+
+	return None
 
 
 # Decorator Functions
@@ -232,6 +260,19 @@ def api_permission_imageserver_user_readonly_admin_modify(user, request, vargs, 
 			Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
 
 	return False
+
+
+def api_permission_imageserver_user_has_access(user, request, vargs, vkwargs,
+	imageserver_model=PacsImagingServer, server_url_param='objectid'):
+	'''	Permissions helper for api_request which allows access to imaging server instances
+		for which a user is authorized.
+	'''
+	# Authorize all admin access requests
+	if user.is_active and user.is_authenticated and user.is_superuser:
+		return True
+
+	return imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).filter(
+		Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
 
 
 # OpenID Connect helper methods: these methods are used by the workflow views

@@ -25,7 +25,7 @@ class OrthancServiceImagingServerMixin:
 
 		# Retrieve imaging server
 		iserver = kwargs.get('server')
-		if iserver is None:
+		if not iserver:
 			iserver = self.imagingserver_class.objects.get(
 				pk=kwargs.get(self.imagingserver_request_param))
 			kwargs['server'] = iserver
