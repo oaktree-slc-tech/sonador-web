@@ -45,6 +45,7 @@ urlpatterns_service_auth = [
 	# Plugin: https://orthanc.uclouvain.be/book/plugins/authorization.htm. For authentication
 	# view instances use Sonador credentials (either a username/token or an access ID/secret) sent
 	# as basic credentials.
+    # TODO SIGNAL VIEWS
 	re_path(r'^orthanc/(?P<serverid>\w+)/introspect/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
 			OrthancServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), name='service-orthanc'),

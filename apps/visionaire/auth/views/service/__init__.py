@@ -45,6 +45,8 @@ from ...helpers import create_session_token
 from ...forms.base import ServiceAuthorizationRequest
 from ...forms.orthanc import OrthancServiceAuthorizationForm
 
+from ...signals.signals import orthanc_resource_authorization_event
+
 from .base import SonadorServiceAuthorizationBaseView, OrthancServiceImagingServerMixin
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,7 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 	def get_data(self, context):
 		'''	Process the authorization request.
 		'''
+		print("GET DATA ORTHANC SERVICE AUTHORIZATION VIEW")
 		adata = super().get_data(context)		
 
 		# Request components
@@ -103,7 +106,7 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 						self.form.user, self.form.cleaned_data.get('uri'), self.form.cleaned_data.get('orthanc_id'),
 						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'), 
 						dicom_uid=self.form.cleaned_data.get('dicom_uid'))
-
+						
 				if granted:
 
 					if validity is None:
@@ -124,7 +127,12 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 					'token_value': masked_value(self.form.cleaned_data.get('token_value')) if self.form.cleaned_data.get('token_value') else '(null)',
 				}
 			))
-		
+		print("ORTHANC AUTH VIEW", orthanc_id=_orthanc_id, method=_method, level=_level, \
+											dicom_uid=self.form.cleaned_data.get('dicom_uid'), uri=_resource, user=_user, \
+												granted=adata.get('granted'), validity=adata.get('validity'), **adata)
+		orthanc_resource_authorization_event.send(sender=self.__class__, orthanc_id=_orthanc_id, method=_method, level=_level, \
+											dicom_uid=self.form.cleaned_data.get('dicom_uid'), uri=_resource, user=_user, \
+												granted=adata.get('granted'), validity=adata.get('validity'), **adata)
 		return adata
 
 	def post(self, request, *args, **kwargs):

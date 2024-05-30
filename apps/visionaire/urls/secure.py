@@ -67,7 +67,7 @@ urlpatterns_api = [
 				allowed_http_methods_url_signature=('POST',),
 				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',), allow_formencoded=True,
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			DataServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
+			DataServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), # TODO SIGNAL
 		name='data-service-token-introspect'),
 
 
