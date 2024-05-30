@@ -33,4 +33,7 @@ googleapis-common-protos==1.53.0
 tabulate==0.8.7
 
 # Streaming
-kafka-python==2.02
+confluent-kafka==2.4.0
+
+# HIPPA Compliance
+fhir.resources==7.1.0
