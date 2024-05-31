@@ -149,7 +149,7 @@ class SonadorUnifiedSearchView(JSONFormApiView):
 		'''
 		response = super().get_data(context)
 
-		# Retrieve 
+		# Retrieve form and serialize search results to JSON
 		form = context.get('form') or self.get_form()
 		if form.is_valid():
 

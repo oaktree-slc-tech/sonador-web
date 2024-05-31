@@ -1,12 +1,17 @@
+import logging
+
 from django.core import signing
 from django.http import JsonResponse
 from django.views.generic.base import TemplateView
 from django.shortcuts import reverse
 
+from guru import apisettings as gapi
 from guru.views import GuruApiRequestMixin, GuruApiObjectMixin, GuruApiObjectManagementView, GuruApiRestView
 from guru.helpers import operation_results, gsetting
 from guru.helpers.utils.object import pick
 from guru.errors import OperationError
+
+logger = logging.getLogger(__name__)
 
 
 class SonadorApiObjectMixin(GuruApiObjectMixin):
@@ -41,7 +46,7 @@ class JSONResponseMixin:
 		Returns a JSON response, transforming 'context' to make the payload.
 		"""
 		return operation_results(self.get_data(context), 
-			pick(response_kwargs, ('status', 'operation', 'badrequest', 'content_type')))
+			**pick(response_kwargs, ('status', 'operation', 'badrequest', 'content_type')))
 
 	def get_data(self, context):
 		"""
@@ -94,6 +99,18 @@ class JSONFormApiView(GuruApiRequestMixin, JSONBaseView):
 		
 		return super().get_context_data(**kwargs)
 
+	def get_data(self, *args, **kwargs):
+		'''	If form validation failed, retrieve the errors for the form.
+		'''
+		response = super().get_data(*args, **kwargs)
+
+		# Retrieve error list from form
+		form = kwargs.get('form') or self.get_form()
+		if not form.is_valid():
+			response[gapi.API_ERRORS] = form.errors.as_json()
+
+		return response
+
 	def form_valid(self, form):
 		return self.render_to_response(self.get_context_data(form=form))
 
@@ -101,7 +118,7 @@ class JSONFormApiView(GuruApiRequestMixin, JSONBaseView):
 		return self.render_to_response(self.get_context_data(form=form), badrequest=True)
 
 	def get(self, request, *args, **kwargs):
-		return self.http_method_not_allowed(request, *args, **kwargs)
+		return self.http_method_not_allowed(request, *args, **kwargs)	
 
 	def post(self, request, *args, **kwargs):
 		'''	Handle API POST requests:
