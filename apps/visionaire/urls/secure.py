@@ -183,7 +183,7 @@ urlpatterns_api = [
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			PacsImagingServerUserLookupView.as_view()),
+			PacsImagingServerUserLookupView.as_view(include_permissions=False)),
 		name="pacs-user-lookup",
 	),
 	re_path(r'^pacs/(?P<serverid>\w+)/group/search/?$',
