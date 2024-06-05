@@ -126,9 +126,14 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 					'token_value': masked_value(self.form.cleaned_data.get('token_value')) if self.form.cleaned_data.get('token_value') else '(null)',
 				}
 			))
-		orthanc_resource_authorization_event.send(sender=self.__class__, orthanc_id=_orthanc_id, method=_method, level=_level, \
+			
+		try: 
+			orthanc_resource_authorization_event.send(sender=self.__class__, orthanc_id=_orthanc_id, method=_method, level=_level, \
 											dicom_uid=self.form.cleaned_data.get('dicom_uid'), uri=_resource, user=_user, \
 												granted=adata.get('granted'), validity=adata.get('validity'))
+		except Exception as err:
+			print("Error sending orthanc resource authorization event: ", err)
+		
 		return adata
 
 	def post(self, request, *args, **kwargs):

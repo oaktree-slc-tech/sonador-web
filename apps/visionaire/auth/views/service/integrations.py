@@ -11,8 +11,7 @@ from ...forms.integrations import IntegrationAuthorizationForm, DataServiceAutho
 
 from .base import SonadorServiceAuthorizationBaseView
 
-from ...signals.signals import token_authorization_event, data_service_authorization_event_handler
-
+from ...signals.signals import token_authorization_event, data_service_authorization_event
 
 class UserProfileAuthorizationView(SonadorServiceAuthorizationBaseView):
     ''' API view which can be used to retrieve the profile for a user by introspecting an API token.
@@ -53,9 +52,17 @@ class UserProfileAuthorizationView(SonadorServiceAuthorizationBaseView):
             adata.update(self.createProfileResponse(*args, **kwargs))
 
             if not isinstance(self.form.user, str) and self.form.user.pk:
-                adata = self.getUserProfileJson(self.form.user, adata)
-        print("adata", adata, self.form.is_valid())
-        token_authorization_event.send(sender=type(self), **adata)
+                adata = self.getUserProfileJson(self.form.user, adata)        
+        
+        validity = adata['validity']
+        username = adata['user']['username'] if 'user' in adata and 'username' in adata['user'] else adata['name']
+        granted = self.form.is_valid()
+        
+        try: 
+            token_authorization_event.send(sender=UserProfileAuthorizationView, user=username, granted=granted, validity=validity)
+        except Exception as err:
+            print("Error sending token authorization event: ", err)
+            
         return adata
 
     def user_has_perm(self, user):
@@ -132,7 +139,7 @@ class DataServiceAuthorizationView(UserProfileAuthorizationView):
         # Cache auth data
         setattr(self.form, 'service_authdata', adata)
         # TODO validate data service authorization gets logged
-        data_service_authorization_event_handler.send(sender=type(self), **adata)
+        data_service_authorization_event.send(sender=type(self), **adata)
         return adata
 
     def post(self, request, *args, **kwargs):

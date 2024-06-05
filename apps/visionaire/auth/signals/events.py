@@ -50,6 +50,22 @@ def revoke_openid_access_token(sender, user=None, request=None, **kwargs):
 					logger.error('Unable to revoke OpenID token %s from social provider %s due to an error:\n%s\n%s'
 						% (openid_access_token, authserver.label_credentials, err, traceback.format_exc()))
 					
+@receiver(token_authorization_event, sender=UserProfileAuthorizationView)
+def token_authorization_event_handler(sender, user=None, granted=None, \
+												validity=None, **kwargs):
+	'''	Handle Orthanc user token authorization events
+	'''
+	logger.info('token_authorization_event_handler: %s' % kwargs)
+
+	kafka_manager.send_audit_event('audit-event-log', {
+		'event': 'User Token Authorization',
+		'user': user,
+		'granted': granted,
+		'validity': validity,
+		'level': 'user',
+	})
+
+
 @receiver(orthanc_resource_authorization_event, sender=OrthancServiceAuthorizationView)
 def orthanc_resource_authorization_event_handler(sender, orthanc_id=None, method=None, level=None, \
 													dicom_uid=None, uri=None, user=None, granted=None, \
@@ -59,28 +75,7 @@ def orthanc_resource_authorization_event_handler(sender, orthanc_id=None, method
 	logger.info('Orthanc Resource Authorization Event: %s' % kwargs)
 
 	kafka_manager.send_audit_event('audit-event-log', {
-		'event': 'orthanc_resource_authorization',
-		'orthanc_id': orthanc_id,
-		'method': method,
-		'level': level,
-		'dicom_uid': dicom_uid,
-		'uri': uri,
-		'user': user,
-		'granted': granted,
-		'validity': validity
-	})
-
-@receiver(token_authorization_event, sender=UserProfileAuthorizationView)
-def token_authorization_event_handler(sender, orthanc_id=None, method=None, level=None, \
-													dicom_uid=None, uri=None, user=None, granted=None, \
-													validity=None, **kwargs):
-	'''	Handle Orthanc resource authorization events
-	'''
-	logger.info('token_authorization_event_handler: %s' % kwargs)
-	print("token_authorization_event_handler", kwargs)
-
-	kafka_manager.send_audit_event('audit-event-log', {
-		'event': 'orthanc_resource_authorization',
+		'event': 'Orthanc Resource Authorization',
 		'orthanc_id': orthanc_id,
 		'method': method,
 		'level': level,

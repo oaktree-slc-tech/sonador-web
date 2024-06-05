@@ -20,7 +20,7 @@ def create_audit_event(payload):
         coding=[Coding(
             system="http://terminology.hl7.org/CodeSystem/audit-event-type",
             code="110110",  # Example code for Orthanc resource authorization
-            display="Orthanc Resource Authorization"
+            display=payload.get('event', 'Orthanc Resource Authorization')
         )]
     )
 
@@ -96,8 +96,8 @@ def create_audit_event(payload):
         create_audit_event_entity_detail("Access Level", payload.get('level', 'system')),
         create_audit_event_entity_detail("Method", payload.get('method', '')),
         create_audit_event_entity_detail("DICOM UID", payload.get('dicom_uid', '')),
-        create_audit_event_entity_detail("URI", payload.get('uri', '/dicom-web/studies')),
-        create_audit_event_entity_detail("Authorization Granted", str(payload.get('granted', '')))
+        create_audit_event_entity_detail("URI", payload.get('uri', '')),
+        create_audit_event_entity_detail("Authorization Granted", str(payload.get('granted')))
     ]
     entity_details = [detail for detail in entity_details if detail is not None]
 
@@ -132,14 +132,14 @@ def create_audit_event(payload):
     audit_event = AuditEvent(
         category=[event_type],
         code=event_type,
-        action=payload.get('method')[0].upper(),
+        action=payload.get('method', 'GET')[0].upper(),
         recorded=current_time,  # Timestamp in UTC
         outcome=outcome,
         agent=[agent_user, agent_system],
         source=source,
         entity=[entity]
     )
-
+    print("audit event", payload.get('event', audit_event))
     return audit_event
 
 
