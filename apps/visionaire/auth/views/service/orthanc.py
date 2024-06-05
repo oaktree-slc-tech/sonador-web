@@ -215,7 +215,6 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 					'redirect-url': server_controlurl(
 						self.form.server, 'ui/app/index.html?token=%s' % create_session_token(self.form.session.session_key))
 				})
-
 		return adata
 
 	def post(self, request, *args, **kwargs):

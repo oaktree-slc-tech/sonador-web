@@ -3,123 +3,145 @@ from datetime import datetime
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
-from fhir.resources.auditevent import AuditEvent, AuditEventAgent, AuditEventSource, AuditEventEntity
-from fhir.resources.fhirtypes import CodingType, ReferenceType
+from fhir.resources.auditevent import AuditEvent, AuditEventAgent, AuditEventSource, AuditEventEntity, AuditEventOutcome
+from fhir.resources.coding import Coding
+from fhir.resources.reference import Reference
+from fhir.resources.codeableconcept import CodeableConcept
+from fhir.resources.identifier import Identifier
+from fhir.resources.auditevent import AuditEventEntityDetail
 from datetime import datetime
 
+
 def create_audit_event(payload):
-    current_time = datetime.utcnow().isoformat() + 'Z'  # HL7 prefers timestamps in UTC with a 'Z' suffix
+    current_time = datetime.now().isoformat() + 'Z'  # HL7 prefers timestamps in UTC with a 'Z' suffix
 
     # Create the event type coding
-    event_type = CodingType({
-        "system": "http://terminology.hl7.org/CodeSystem/audit-event-type",
-        "code": "110110",  # Example code for Orthanc resource authorization
-        "display": "Orthanc Resource Authorization"
-    })
+    event_type = CodeableConcept(
+        coding=[Coding(
+            system="http://terminology.hl7.org/CodeSystem/audit-event-type",
+            code="110110",  # Example code for Orthanc resource authorization
+            display="Orthanc Resource Authorization"
+        )]
+    )
 
     # Define the agent (user)
-    agent_user = AuditEventAgent({
-        "who": ReferenceType({
-            "identifier": {
-                "value": payload.get('user')
-            },
-            "display": payload.get('user')
-        }),
-        "network": {
-            "address": payload.get('ip_address', 'unknown'),
-            "type": "2"  # 2 represents an IP address
-        },
-        "requestor": True
-    })
+    user_value = str(payload.get('user')).strip()
+    if not user_value:
+        raise ValueError("User value cannot be empty")
+
+    agent_user = AuditEventAgent(
+        who=Reference(
+            identifier=Identifier(
+                value=user_value
+            ),
+            display=user_value
+        ),
+        requestor=True,
+    )
 
     # Optionally, you can add more agents like the system agent
-    agent_system = AuditEventAgent({
-        "who": ReferenceType({
-            "display": "Django Application"
-        }),
-        "requestor": False
-    })
+    agent_system = AuditEventAgent(
+        who=Reference(
+            display="Sonador Web Application"
+        ),
+        requestor=False
+    )
 
     # Define the source of the event
-    source = AuditEventSource({
-        "site": "Web Server",
-        "observer": ReferenceType({
-            "display": "Django Application"
-        })
-    })
+    source = AuditEventSource(
+        observer=Reference(
+            display="Sonador Web Application"
+        ),
+        site=Reference(
+            display="Web Server"
+        ),
+        type=[CodeableConcept(
+            coding=[Coding(
+                system="http://terminology.hl7.org/CodeSystem/security-source-type",
+                code="4",  # 4 represents an application
+                display="Application"
+            )]
+        )]
+    )
 
     # Define the entity involved in the event
-    entity = AuditEventEntity({
-        "what": ReferenceType({
-            "identifier": {
-                "value": payload.get('orthanc_id', '')
-            }
-        }),
-        "type": CodingType({
-            "code": "2",
-            "display": "Session"
-        }),
-        "description": "User session identifier",
-        "detail": [
-            {
-                "type": "Token expiration",
-                "valueString": f"{payload.get('validity')} minutes"
-            },
-            {
-                "type": "Access Level",
-                "valueString": payload.get('level', 'system')
-            },
-            {
-                "type": "Method",
-                "valueString": payload.get('method', '')
-            },
-            {
-                "type": "DICOM UID",
-                "valueString": payload.get('dicom_uid', '')
-            },
-            {
-                "type": "URI",
-                "valueString": payload.get('uri', '/dicom-web/studies')
-            },
-            {
-                "type": "Authorization Granted",
-                "valueString": str(payload.get('granted', ''))
-            }
-        ]
-    })
+    orthanc_id_value = str(payload.get('orthanc_id', '')).strip()
+    entity_reference = None
+    if orthanc_id_value:
+        entity_reference = Reference(
+            identifier=Identifier(
+                value=orthanc_id_value,
+                type=CodeableConcept(
+                    coding=[Coding(
+                        system="http://terminology.hl7.org/CodeSystem/identifier-type",
+                        code="ORTH",
+                        display="Orthanc UID"
+                    )],
+                    text="Orthanc UID"
+                )
+                
+            )
+        )
+
+    def create_audit_event_entity_detail(type_text, value):
+        if value:
+            return AuditEventEntityDetail(
+                type=CodeableConcept(text=type_text),
+                valueString=value
+            )
+        return None
+
+    entity_details = [
+        create_audit_event_entity_detail("Token expiration", f"{payload.get('validity')} minutes"),
+        create_audit_event_entity_detail("Access Level", payload.get('level', 'system')),
+        create_audit_event_entity_detail("Method", payload.get('method', '')),
+        create_audit_event_entity_detail("DICOM UID", payload.get('dicom_uid', '')),
+        create_audit_event_entity_detail("URI", payload.get('uri', '/dicom-web/studies')),
+        create_audit_event_entity_detail("Authorization Granted", str(payload.get('granted', '')))
+    ]
+    entity_details = [detail for detail in entity_details if detail is not None]
+
+    entity = AuditEventEntity(
+        what=entity_reference,
+        role=CodeableConcept(
+            coding=[Coding(
+                code="2",
+                display="Session"
+            )]
+        ),
+        securityLabel=[CodeableConcept(
+            coding=[Coding(
+                code="1",
+                display="Confidential"
+            )]
+        )],
+        detail=entity_details
+    )
+
+    # Create the outcome
+    outcome = AuditEventOutcome(
+        code=Coding(
+            system="http://hl7.org/fhir/audit-event-outcome",
+            code="0" if payload.get('granted') else "4",  # 0 for success, 4 for failure
+            display="Success" if payload.get('granted') else "Failure"
+        ),
+        detail=[CodeableConcept(text="Authorization success" if payload.get('granted') else "Authorization failure")]
+    )
 
     # Create the AuditEvent
-    audit_event = AuditEvent({
-        "type": event_type,
-        "subtype": [CodingType({
-            "system": "http://hl7.org/fhir/restful-interaction",
-            "code": payload.get('method').lower(),
-            "display": payload.get('method').upper()
-        })],
-        "action": payload.get('method')[0].upper(),
-        "recorded": current_time,  # Timestamp in UTC
-        "outcome": "0" if payload.get('granted') else "4",  # 0 for success, 4 for failure
-        "outcomeDesc": "Authorization success" if payload.get('granted') else "Authorization failure",
-        "agent": [agent_user, agent_system],
-        "source": source,
-        "entity": [entity]
-    })
+    audit_event = AuditEvent(
+        category=[event_type],
+        code=event_type,
+        action=payload.get('method')[0].upper(),
+        recorded=current_time,  # Timestamp in UTC
+        outcome=outcome,
+        agent=[agent_user, agent_system],
+        source=source,
+        entity=[entity]
+    )
 
     return audit_event
 
-# Example usage
-payload = {
-    'event': 'orthanc_resource_authorization',
-    'orthanc_id': 'orthanc12345',
-    'method': 'GET',
-    'level': 'system',
-    'dicom_uid': 'unique_dicom_uid',
-    'uri': '/dicom-web/studies',
-    'user': 'john_doe',
-    'granted': True,
-    'validity': 30,
-    'ip_address': '192.168.1.1'  # Assuming you have this information
-}
 
 class KafkaManager:
     '''https://docs.confluent.io/kafka-clients/python/current/overview.html
@@ -163,7 +185,7 @@ class KafkaManager:
                 return False
 
     def send_audit_event(self, topic, data):
-        audit_event_json = create_audit_event(data)
+        audit_event_json = create_audit_event(data).json()
         self.send_message(topic, audit_event_json)
 
     def send_message(self, topic, message):

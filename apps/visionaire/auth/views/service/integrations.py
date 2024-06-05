@@ -11,6 +11,8 @@ from ...forms.integrations import IntegrationAuthorizationForm, DataServiceAutho
 
 from .base import SonadorServiceAuthorizationBaseView
 
+from ...signals.signals import token_authorization_event, data_service_authorization_event_handler
+
 
 class UserProfileAuthorizationView(SonadorServiceAuthorizationBaseView):
     ''' API view which can be used to retrieve the profile for a user by introspecting an API token.
@@ -45,7 +47,6 @@ class UserProfileAuthorizationView(SonadorServiceAuthorizationBaseView):
         ''' Retrieve data for the user profile
         '''
         adata = super().get_data(*args, **kwargs)
-        print("get data user auth view", adata, *args, **kwargs)
         # Authorize oAuth 2.0 token validation requests
         if getattr(self, 'form', None) and self.form.is_valid() and getattr(self.form, 'user', None) \
             and self.user_has_perm(self.form.user):
@@ -54,6 +55,7 @@ class UserProfileAuthorizationView(SonadorServiceAuthorizationBaseView):
             if not isinstance(self.form.user, str) and self.form.user.pk:
                 adata = self.getUserProfileJson(self.form.user, adata)
         print("adata", adata, self.form.is_valid())
+        token_authorization_event.send(sender=type(self), **adata)
         return adata
 
     def user_has_perm(self, user):
@@ -78,8 +80,6 @@ class DataServiceAuthorizationView(UserProfileAuthorizationView):
 
     nginx_auth_request_query_parameter_name = NGINX_AUTH_REQUEST_QUERY_PARAM
 
-    # TODO Override Get_Data method, super init, Audit Event trigger
-
     def getDataService(self, *args, **kwargs):
         ''' Retrieve the data service associated with the request. After being retrieved from
             the database, subsequent calls retrieve a cahced copy of the data.
@@ -102,7 +102,6 @@ class DataServiceAuthorizationView(UserProfileAuthorizationView):
     def user_has_perm(self, *args, **kwargs):
         ''' Ensure that the user has access to the data service
         '''
-        print("SERVICE USER HAS PERMS", self.form.service.user_has_perm(self.form.user))
         return self.form.service.user_has_perm(self.form.user)
 
     def createProfileResponse(self, *args, **kwargs):
@@ -132,6 +131,8 @@ class DataServiceAuthorizationView(UserProfileAuthorizationView):
 
         # Cache auth data
         setattr(self.form, 'service_authdata', adata)
+        # TODO validate data service authorization gets logged
+        data_service_authorization_event_handler.send(sender=type(self), **adata)
         return adata
 
     def post(self, request, *args, **kwargs):
