@@ -139,7 +139,6 @@ def create_audit_event(payload):
         source=source,
         entity=[entity]
     )
-    print("audit event", payload.get('event', audit_event))
     return audit_event
 
 
