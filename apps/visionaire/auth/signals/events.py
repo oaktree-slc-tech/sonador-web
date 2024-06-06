@@ -16,7 +16,7 @@ from ..views.service.integrations import UserProfileAuthorizationView, DataServi
 logger = logging.getLogger(__name__)
 
 from ...kafka import KafkaManager
-kafka_manager = KafkaManager(bootstrap_servers='kafka:9092', client_id='django_service_producer')
+kafka_manager = KafkaManager(bootstrap_servers='kafka:29092', client_id='django_service_producer')
 kafka_manager.create_topic('audit-event-log')
 
 
