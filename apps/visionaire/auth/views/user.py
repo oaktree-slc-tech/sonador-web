@@ -53,6 +53,31 @@ class PacsImagingServerFormMixin(OrthancServiceImagingServerMixin):
 		return super().post(request, *args, **kwargs)
 
 
+class LookupViewFormMixin:
+	'''	View mixin class which provides a get_data method that can execute lookups and will serialize
+		the results to JSON.
+	'''
+	form_lookup_field = None
+
+	def init_lookup_mixin(self, *args, **kwargs):
+		self.form_lookup_field = kwargs.get('form_lookup_field', self.form_lookup_field)
+
+		if not self.form_lookup_field:
+			raise ConfigurationError('Unable to initialize view instance, no form lookup field defined.')
+
+	def get_data(self, context):
+		'''	Execute the form search return the results list
+		'''
+		response = super().get_data(context)
+
+		# Retrieve form and serialize lookup results to JSON
+		form = context.get('form') or self.get_form()
+		if form.is_valid():
+			response['results'] = [self.getModelJsonData(_u, self.request) for _u in form.cleaned_data.get(self.form_lookup_field, [])]
+
+		return response
+
+
 
 # User Management and Lookup Views
 
@@ -176,6 +201,12 @@ class PacsImagingServerUserFilterView(OrthancServiceImagingServerMixin, UserApiM
 		return fparams
 
 
+class SonadorUserLookupForm(forms.Form):
+	'''	Form class which can be used to lookup Sonador users by ID
+	'''
+	users = forms.ModelMultipleChoiceField(queryset=get_user_model().objects.all())
+
+
 class PacsImagingServerUserLookupForm(forms.Form):
 	'''	Form class which can be used to lookup users by ID
 	'''
@@ -193,28 +224,44 @@ class PacsImagingServerUserLookupForm(forms.Form):
 		self.fields['users'].queryset = get_user_model().objects.filter(groups__server_authorizations__server=self.server)
 
 
-class PacsImagingServerUserLookupView(UserApiMixin, PacsImagingServerFormMixin, JSONFormApiView):
-	'''	Sonador API view which can be used to lookup users by ID
+class SonadorUserLookupView(UserApiMixin, LookupViewFormMixin, JSONFormApiView):
+	'''	Sonador API view which can be used to lookup users by ID: lookup requests include all users on the platform.
 	'''
-	formclass = PacsImagingServerUserLookupForm
+	formclass = SonadorUserLookupForm
+	form_lookup_field = 'users'
+	
+	# User JSON serialization options
 	include_groups = True
 	include_permissions = True
 
-	def get_data(self, context):
-		'''	Execute the form search return the results list
-		'''
-		response = super().get_data(context)
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.init_lookup_mixin(*args, **kwargs)
 
-		# Retrieve form and serialize lookup results to JSON
-		form = context.get('form') or self.get_form()
-		if form.is_valid():
-			response['results'] = [self.getModelJsonData(_u, self.request) for _u in form.cleaned_data.get('users', [])]
 
-		logger.critical('User lookup response:\n%s' % response)
-		return response
+class PacsImagingServerUserLookupView(UserApiMixin, LookupViewFormMixin, PacsImagingServerFormMixin, JSONFormApiView):
+	'''	Sonador API view which can be used to lookup users by ID: lookup requests are scoped to the imaging server
+		retrieved by the view.
+	'''
+	formclass = PacsImagingServerUserLookupForm
+	form_lookup_field = 'users'
+
+	# User JSON serialization options
+	include_groups = True
+	include_permissions = True
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.init_lookup_mixin(*args, **kwargs)
 
 
 # Group Management and Lookup Views
+
+class GroupApiMixin:
+	'''	Mixin class which provides methods for working with group models.
+	'''
+	def getModelJsonData(self, instance, request, *args, **kwargs):
+		return model_to_dict(instance) if instance else {}
 
 
 class GroupFilterBaseForm(GuruFilterForm):
@@ -278,6 +325,12 @@ class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFil
 		return fparams
 
 
+class SonadorGroupLookupForm(forms.Form):
+	'''	Form class which can be used to lookup Sonador groups by ID
+	'''
+	groups = forms.ModelMultipleChoiceField(queryset=Group.objects.all())
+
+
 class PacsImagingServerGroupLookupForm(forms.Form):
 	'''	Form class which can be used to lookup users by ID
 	'''
@@ -295,26 +348,26 @@ class PacsImagingServerGroupLookupForm(forms.Form):
 		self.fields['groups'].queryset = SonadorProxyGroup.objects.filter(server_authorizations__server=self.server)
 
 
-class PacsImagingServerGroupLookupView(PacsImagingServerFormMixin, JSONFormApiView):
+class SonadorGroupLookupView(GroupApiMixin, LookupViewFormMixin, JSONFormApiView):
+	'''	Sonador API view which can be used to lookup groups by ID: lookup requests include all groups on the platform.
+	'''
+	formclass = SonadorGroupLookupForm
+	form_lookup_field = 'groups'
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.init_lookup_mixin(*args, **kwargs)
+
+
+class PacsImagingServerGroupLookupView(GroupApiMixin, LookupViewFormMixin, PacsImagingServerFormMixin, JSONFormApiView):
 	'''	Sonador API view which can be used to lookup users by ID
 	'''
 	formclass = PacsImagingServerGroupLookupForm
+	form_lookup_field = 'groups'
 
-	def getModelJsonData(self, instance, request, *args, **kwargs):
-		return model_to_dict(instance) if instance else {}
-
-	def get_data(self, context):
-		'''	Execute the form search return the results list
-		'''
-		response = super().get_data(context)
-
-		# Retrieve form and serialize lookup results to JSON
-		form = context.get('form') or self.get_form()
-		if form.is_valid():
-			response['results'] = [self.getModelJsonData(_g, self.request) for _g in form.cleaned_data.get('groups', [])]
-
-		logger.critical('Group lookup response:\n%s' % response)
-		return response
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.init_lookup_mixin(*args, **kwargs)
 
 
 # Auth Model Unified Search

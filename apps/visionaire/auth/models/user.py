@@ -17,7 +17,7 @@ class SonadorUserSearchManager(DjangoModelManager):
 
 		# Search across username, first_name, last_name, email, and group names
 		_vector = SearchVector('username', weight='A') + SearchVector('email', weight='A') \
-			+ SearchVector('first_name', weight='C') + SearchVector('last_name', weight='B') \
+			+ SearchVector('first_name', weight='B') + SearchVector('last_name', weight='B') \
 			+ SearchVector('groups__name', weight='C')
 		
 		# Execute search, filter by the manager search relevance, and return distinct entities

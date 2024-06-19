@@ -27,8 +27,8 @@ from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
 from ..auth.views.service.orthanc import PacsImagingServerAuthUserProfileView
 from ..auth.views.service.integrations import UserProfileAuthorizationView
-from ..auth.views.user import UserManagementView, UserRestView, PacsImagingServerUserFilterView, PacsImagingServerUserLookupView, \
-	GroupManagementView, GroupRestView, PacsImagingServerGroupFilterView, PacsImagingServerGroupLookupView, \
+from ..auth.views.user import UserManagementView, UserRestView, PacsImagingServerUserFilterView, SonadorUserLookupView, PacsImagingServerUserLookupView, \
+	GroupManagementView, GroupRestView, PacsImagingServerGroupFilterView, SonadorGroupLookupView, PacsImagingServerGroupLookupView, \
 	PacsImagingUnifiedAuthModelSearchView
 from ..auth.views import cred as sonador_cred
 from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
@@ -234,6 +234,15 @@ urlpatterns_api = [
 			UserProfileAuthorizationView.as_view(include_groups=True, cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='admin-user-token-introspect'
 	),
+	re_path(r'^user/lookup/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_superuser,
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			SonadorUserLookupView.as_view(include_permissions=False)),
+		name="admin-user-lookup",
+	),
 
 	# Admin (System) Credentials Management: API token
 	re_path(r'^user/(?P<userid>[0-9]+)/cred/token/?$',			# Admin Credentials Management: access token
@@ -278,12 +287,21 @@ urlpatterns_api = [
 			GroupManagementView.as_view()),
 		name="admin-group-management",
 	),
-	path("group", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+	path("group/<int:objectid>", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
-				allowed_http_methods_token_access=("GET", "POST",),
+				allowed_http_methods_token_access=("GET", "PUT", "DELETE"),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
-			GroupManagementView.as_view()),
-		name="admin-group-management",
+			GroupRestView.as_view()),
+		name="admin-group-update",
+	),
+	re_path(r'^group/lookup/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_superuser,
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			SonadorGroupLookupView.as_view()),
+		name="admin-group-lookup",
 	),
 ]
