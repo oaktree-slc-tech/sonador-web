@@ -31,6 +31,10 @@ class ServerAuthorization:
 		elif method.lower() == gapicodes.HTTP_POST.lower() and resource == orthanc_api.ORTHANC_TOOLS_FIND_SECURE:
 			return True
 
+		# DICOMweb worklist study query endpoint (ACL mediated)
+		elif method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_DICOMWEB_WORKLIST_STUDY_QUERY:
+			return True
+
 		return None
 
 	def query_perm(self, resource, method):
