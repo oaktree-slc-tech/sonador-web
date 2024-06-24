@@ -34,7 +34,6 @@ from .credential_providers.remote import SonadorRemoteCredentialProvider
 
 logger = logging.getLogger(__name__)
 
-
 class SonadorServiceAuthorizationBaseForm(forms.Form):
 	''' Form instance which can be used to decode and verify token requests from services
 		integrated with Sonador.

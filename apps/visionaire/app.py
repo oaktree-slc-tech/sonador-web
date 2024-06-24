@@ -20,3 +20,4 @@ class VisionaireAppConfig(AppConfig):
 
 		# Enable Visionaire signals
 		from . import signals
+		from .auth.signals import events
