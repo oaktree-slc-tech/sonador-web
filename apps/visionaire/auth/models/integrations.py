@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import Group
 
 from guru.models import GuruTokenModel
+from guru.helpers import gsetting
 from guru.helpers.utils.object import pick, omit
 
 

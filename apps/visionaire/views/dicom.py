@@ -40,6 +40,14 @@ class PacsImagingServerChildObjectMixin(object):
 		return super(PacsImagingServerChildObjectMixin, self).saveObjectData(
 			request, forminstance, vargs=vargs, vkwargs=vkwargs)
 
+	def getFormKeywordArguments(self, request, vargs=None, vkwargs=None):
+		'''	Retrieve optional keyword arguments for the form
+		'''	
+		form_kwargs = super().getFormKeywordArguments(request, vargs=vargs, vkwargs=vkwargs)
+		form_kwargs['server'] = self.getServer(request=request, vargs=vargs, vkwargs=vkwargs)
+
+		return form_kwargs
+
 	def get(self, request, *args, **kwargs):
 		try: server = self.getServer(request, vargs=args, vkwargs=kwargs)
 		except PacsImagingServer.DoesNotExist as err: return guru_page_not_found(request, err)
