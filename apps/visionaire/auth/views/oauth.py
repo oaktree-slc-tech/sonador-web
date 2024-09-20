@@ -37,20 +37,17 @@ from wgtauth.registration.views import RegistrationView, RegistrationSuccessView
 
 from ...views.base import JSONBaseView
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
-from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM
+from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM, \
+	OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM, OPENID_AUTH_TOKEN_SESSION_PARAM, \
+	OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM, OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
+from ..helpers import openid_get_django_user
 from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
 
 from .base import get_default_authserver, OpenIDAuthServerMixin
 
 logger = logging.getLogger(__name__)
-
-
-OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM = 'openid-auth-provider'
-OPENID_AUTH_TOKEN_SESSION_PARAM = 'openid-auth-token'
-OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM = 'openid-auth-token-type'
-OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM = 'openid-auth-scope'
 
 
 class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):
@@ -176,54 +173,8 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 		'''	Retrieve the social auth profile associated with the OpenID username, and
 			from that, fetch the user model.
 		'''
-		authserver = self.get_auth_server(request, vargs, vkwargs)
-
-		# Attempt to retrieve social user profile via the unique provider ID (openid_username)
-		try: socialuser_profile = authserver.social_user_profiles.get(social_user_id=openid_username)
-		except self.socialuser_model.DoesNotExist:
-
-			# Determine if there is currently a user logged in (link social profile to existing accout)
-			if request.user.is_authenticated:
-				django_user = request.user
-				created = False
-
-			# User not yet logged in: create a new account from the user data
-			else:
-
-				# Construct a username for the account:
-				# 1. If available, parse the user handle portion of the email and use that
-				# 2. For accounts without email data, convert the first name and last name to lowercase
-				#    and then append them with a dot.
-				# 3. For accounts without first name and last name, use the full name and replace
-				#    spaces with a dot.
-				# 4. For accounts without any identifiers, generate a random string to use as the username
-				django_username = \
-					authtoken.user.django_username if hasattr(authtoken.user, 'django_username') \
-					else openid_username if openid_username \
-					else authtoken.user.email.split('@')[0] \
-						if hasattr(authtoken.user, 'email') and '@' in authtoken.user.email \
-					else '.'.join((authtoken.user.first_name.lower(), authtoken.user.last_name.lower())) \
-						if hasattr(authtoken.user, 'first_name') and hasattr(authtoken.user, 'last_name') \
-					else authtoken.user.name.replace(' ', '.') if hasattr(authtoken.user, 'name') \
-					else create_token()
-
-				# Check if a user with the derived username already exists, if so, append the service
-				# instance ID to the username in order to make it unique
-				if auth.get_user_model().objects.filter(username=django_username).count():
-					django_username = '%s.%s' % (django_username, authserver.pk)
-
-				django_user = auth.get_user_model().objects.create(username=django_username,
-					**pick(authtoken.user, ('first_name', 'last_name', 'email')))
-				created = True
-
-			# User profile does not exist, create a new user and profile from the service data,
-			# trigger first login signal
-			socialuser_profile = self.socialuser_model.objects.create(
-				social_provider=authserver, user=django_user,
-				social_user_id=openid_username, email=getattr(authtoken.user, 'email', None))
-			socialuser_profile.signal_first_login(request=request, registration=created)
-
-		return socialuser_profile.user
+		return openid_get_django_user(self.get_auth_server(request, vargs, vkwargs),
+			self.socialuser_model, openid_username, authtoken, request=request)
 
 	def cache_openid_tokendata(self, authtoken, user, request, vargs, vkwargs):
 		'''	Cache the local token and other associated params in the session

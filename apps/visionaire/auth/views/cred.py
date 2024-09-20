@@ -1,5 +1,8 @@
 '''	Sonador API views for working with and managing access credentials
 '''
+import logging
+from django.contrib.auth import get_user_model
+
 from guru import apisettings as gapicodes
 from guru.helpers.utils.object import pick
 from guru.helpers import operation_results
@@ -11,6 +14,8 @@ from secure.views import UserCredentialManagementView, UserCredentialRestView
 
 from ...admin.auth import SonadorApiAccess, SonadorApiAccessToken
 from ...views.base import SonadorApiObjectMixin
+
+logger = logging.getLogger(__name__)
 
 
 class SonadorUserCredentialManagementView(SonadorApiObjectMixin, UserCredentialManagementView):
@@ -109,3 +114,35 @@ class SonadorUserTokenManagementView(GuruApiObjectUpdateMixin, SonadorUserCreden
 		objectid = self.getToken(request=request, vargs=args, vkwargs=kwargs)
 		return super().delete(request, objectid, *args, **kwargs)
 
+
+class SonadorAdminUserCredentialsManagementMixin(object):
+	'''	Mixin class which provides a getUser method which retrieves the user from a URL 
+		parameter rather than from the request. 
+	'''
+	user_model = get_user_model()
+	request_user_fieldname = 'userid'
+
+	def getUser(self, *args, **kwargs):
+		'''	Retrieve user instance
+		'''
+		vkwargs = kwargs.get('vkwargs', {}) or self.kwargs or {}
+		return self.user_model.objects.get(pk=vkwargs.get(self.request_user_fieldname))
+
+
+class SonadorAdminUserCredentialManagementView(
+		SonadorAdminUserCredentialsManagementMixin, SonadorUserCredentialManagementView):
+	'''	API view which can be used by an admin user for managing user credentials in Sonador.
+		User instance is retrieved via a URL parameter rather than from the active request.
+	'''
+
+
+class SonadorAdminUserCredentialRestView(SonadorAdminUserCredentialsManagementMixin, SonadorUserCredentialRestView):
+	'''	API REST view which can be used by an admin user to manage user credentials in Sonador.
+		User instance is retrieved via a URL parameter rather than from the active request.
+	'''
+
+
+class SonadorAdminUserTokenManagementView(SonadorAdminUserCredentialsManagementMixin, SonadorUserTokenManagementView):
+	'''	Admin view which can be used by an admin user for managing token credentials.
+		User instance is retrieved via a URL parameter rather than from the active request.
+	'''

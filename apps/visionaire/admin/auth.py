@@ -1,4 +1,5 @@
 from django.db import models
+from django import forms
 
 from django.shortcuts import reverse
 from django.utils.html import format_html
@@ -12,10 +13,14 @@ from secure.models import ApiAccess, ApiAccessToken
 from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
 from secure.helpers import masked_value
 
+from core.forms import SonadorBaseForm
+
 from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization, \
 	DataService
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
 
+
+# cred: Credential Management
 
 class SonadorApiAccess(ApiAccess):
 	'''	Subclass model which allows for the API access (access ID/secret) to appear in the same model
@@ -87,6 +92,8 @@ class SonadorApiAccessToken(ApiAccessToken):
 		return jdata
 
 
+# idp: oAuth2/OIDC Identity Provider (IdP) Management
+
 class ProxySecureSocialAuthorizationServer(SocialAuthorizationServer):
 	'''	Proxy model which allows for the social authorization server to appear
 		in the same admin group as API and Access Tokens
@@ -109,11 +116,40 @@ class ProxyDataService(DataService):
 		verbose_name_plural = 'Data Services'
 
 
+class SocialAuthorizationServerForm(SonadorBaseForm):
+	''' Form instance providing validation of Sonador authorization server instances
+	'''
+	class Meta:
+		model = ProxySecureSocialAuthorizationServer
+		fields = '__all__'
+
+	def clean(self, *args, **kwargs):
+		'''	Ensure that IdP provider instances with IdP token validation enabled are associated
+			with a provider which provides a `validate_token` method.
+		'''
+		cleaned_data = super().clean(*args, **kwargs)
+
+		# Ensure that IdP token provider supports remote token validation
+		if cleaned_data.get('enable_idp_token_validation') and not cleaned_data.get('provider').validate_token:
+			raise forms.ValidationError({
+					'enable_idp_token_validation': [
+						"Remote IdP token validation requires a provider with a `validate_token` method.",
+						'Provider "%s" does not support remote token validation' % cleaned_data.get('provider').name,
+					]
+				})
+
+
+		return cleaned_data
+
+
 class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 	'''	Django admin structure for manging settings associated with Sonador Social authentication instances.
 	'''
-	list_display = ('token', 'provider', 'description', 'url_login', 'url_callback', 'default')
+	list_display = ('token', 'provider', 'description', 'url_login', 'url_callback', 'default', 'enable_idp_token_validation')
+	form = SocialAuthorizationServerForm
 
+
+# integrations: Data Services
 
 class DataServiceAdmin(admin.ModelAdmin):
 	'''	Django admin structure for managing settings associated with Data Services
@@ -121,8 +157,6 @@ class DataServiceAdmin(admin.ModelAdmin):
 	list_display = ('service_id',  'description', 'active', 'acl_allow_staff',)
 	filter_horizontal = ('groups',)
 
-	@admin.display(
-	    description='Service ID'
-	)
+	@admin.display(description='Service ID')
 	def service_id(self, obj):
 		return obj.pk
