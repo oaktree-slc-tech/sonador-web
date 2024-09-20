@@ -2,10 +2,35 @@ import logging, six, copy, base64
 from six.moves.urllib import parse as urlparse
 
 from guru.apisettings import HTTP_CONTENT_JSON, HTTP_CONTENT_FORM_ENCODED
+from guru.helpers import gsetting
 
 from ....views import JSONFormApiView
 
+from ....models import PacsImagingServer
+
 logger = logging.getLogger(__name__)
+
+
+class OrthancServiceImagingServerMixin:
+	'''	Mixin class used for retrieving image server instances
+	'''
+	imagingserver_class = PacsImagingServer
+	imagingserver_request_param = 'serverid'
+
+	def getImagingServer(self, *args, **kwargs):
+		''' Retrieve the imaging server associated with the request. After being retrieved
+			from the database, subsequent calls retrieve a cached copy of the data.
+		'''
+		kwargs = kwargs or self.kwargs
+
+		# Retrieve imaging server
+		iserver = kwargs.get('server')
+		if not iserver:
+			iserver = self.imagingserver_class.objects.get(
+				pk=kwargs.get(self.imagingserver_request_param))
+			kwargs['server'] = iserver
+		
+		return iserver
 
 
 class SonadorServiceAuthorizationBaseView(JSONFormApiView):
@@ -13,6 +38,18 @@ class SonadorServiceAuthorizationBaseView(JSONFormApiView):
 		services integrated with Sonador.
 	'''
 	formclass = None
+	cache_validation = False
+
+	def get_form_kwargs(self, *args, **kwargs):
+		'''	Retrieve keyword arguments for the form instance.
+		'''
+		form_kwargs = super().get_form_kwargs(*args, **kwargs)
+
+		# Add authorization cache setting to form
+		if form_kwargs.get('cache_validation') is None:
+			form_kwargs['cache_validation'] = self.cache_validation
+
+		return form_kwargs
 
 	def getRequestJsonData(self, *args, **kwargs):
 		'''	Retrieve the data from the request. The service view is able
