@@ -3,6 +3,7 @@ from os.path import exists
 from google.oauth2 import service_account
 
 from .base import *
+from .base import LOG_CONFIG_LOGGERS, LOG_CONFIG_HANDLERS, APPLICATION_LOG_FORMAT
 
 # Object storage configuration
 import largefiles.apisettings as ofapicodes
@@ -113,3 +114,46 @@ elif siteconfig_storage_type == 'GCS':
 	STATIC_URL = 'https://storage.googleapis.com/{}/'.format(GS_STATIC_BUCKET)
 	DEFAULT_FILE_STORAGE = 'visionaire.storages.gcp.GoogleCloudMediaStorage'
 	STATICFILES_STORAGE = 'visionaire.storages.gcp.GoogleCloudStaticStorage'
+
+
+# Disable debug configuration
+DEBUG = False
+
+
+# Production Logging Configuration
+LOGGING = {
+	'version': 1,
+	'disable_existing_loggers': False,
+	'formatters': {
+		'application': { 'format': APPLICATION_LOG_FORMAT },
+	}
+}
+
+
+# Default developemnt logging handlers
+if not LOGGING.get('handlers'):
+	LOGGING_HANDLERS = LOGGING['handlers'] = {}
+else: LOGGING_HANDLERS = LOGGING['handlers']
+
+LOGGING_HANDLERS.update(LOG_CONFIG_HANDLERS or {})
+
+
+# Add console handler
+if not LOGGING_HANDLERS.get('console'):
+	LOGGING_HANDLERS['console'] = {
+		'class': 'logging.StreamHandler', 'formatter': 'application',
+	}
+
+
+# Root logging configuration
+if not LOGGING.get('root'):
+	LOGGING['root'] = {
+		'handlers': ['console'],
+		'level': LOG_LEVEL,
+		'formatter': 'application',
+	}
+
+
+# Root Logger
+LOGGING_LOGGERS = LOGGING['loggers'] = { '': { 'level': LOG_LEVEL, 'handlers': ['console'] }}
+LOGGING_LOGGERS.update(LOG_CONFIG_LOGGERS or {})
