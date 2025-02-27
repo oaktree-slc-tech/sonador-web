@@ -10,18 +10,9 @@
 [submodule "apps/visionaire/jslib/ohif"]
 	path = apps/visionaire/jslib/ohif
 	url = https://code.oak-tree.tech/oak-tree/medical-imaging/ohif-viewers.git
-[submodule "lib/sassycss"]
-	path = lib/sassycss
-	url = https://code.oak-tree.tech/django-apps/sassy-css.git
 [submodule "lib/microservices"]
 	path = lib/microservices
 	url = https://code.oak-tree.tech/django-apps/guru-microservices.git
-[submodule "lib/wgtauth"]
-	path = lib/wgtauth
-	url = https://code.oak-tree.tech/django-apps/wagtail-auth.git
 [submodule "lib/content"]
 	path = lib/content
 	url = https://code.oak-tree.tech/django-apps/contently.git
-[submodule "lib/largefiles"]
-	path = lib/largefiles
-	url = https://code.oak-tree.tech/django-apps/large-files.git
