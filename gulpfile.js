@@ -111,7 +111,7 @@ function jsBuildOHIFViewer(done){
 
 				// Execute Foundation build script
 				console.info('Build OHIF with default options');
-				execSync('yarn build:package', { maxBuffer: 209715200 });
+				execSync('yarn build:package', { maxBuffer: 2000000000 });
 				console.info('Build of OHIF completed successfully');
 
 				process.chdir(sonador_rootdir);
