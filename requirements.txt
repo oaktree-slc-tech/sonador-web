@@ -19,7 +19,7 @@ acorn-secure>=0.1.1
 acorn-content>=0.1.1
 acorn-microservices>=0.1.1
 acorn-sassycss>=0.1.1
-acorn-wgtauth>=0.1.1
+acorn-wgtauth>=0.1.2
 acorn-largefiles>=0.1.1
 
 

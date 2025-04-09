@@ -134,7 +134,7 @@ function jsBuildOHIFViewer(done){
 var ohif_jsfolders = {
 	viewer: {
 		src: visionaire_jslib_ohif, 
-		build: visionaire_jslib_ohif+'platform/viewer/dist/*',
+		build: visionaire_jslib_ohif+'platform/viewer/dist/**/*',
 		dst: visionaire_static_js+'ohif/'
 	},
 }
