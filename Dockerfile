@@ -7,6 +7,7 @@ ARG CI_COMMIT_SHA
 RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
   && mkdir -p /srv/www/sonador \
   && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador \
+  && mkdir -p /srv/www/sonador/docroot/static \
   && chown 1000:1000 -R /srv/www/sonador 
 RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-build-secrets \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
@@ -47,5 +48,12 @@ RUN apt-get install -y sudo \
 
 EXPOSE 8070
 USER 1000
+
+# Collect static assets
+RUN cd /srv/www/sonador/sonador/ \
+  && SONADOR_SITECONFIG=/srv/www/sonador/sonador/config/sonador.site.config \
+    DJANGO_SETTINGS_MODULE=sonador.settings \
+    python3 manage.py collectstatic
+
 WORKDIR /srv/www/sonador
 CMD /srv/www/sonador/entrypoint.sh
