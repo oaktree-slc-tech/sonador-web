@@ -134,7 +134,7 @@ function jsBuildOHIFViewer(done){
 var ohif_jsfolders = {
 	viewer: {
 		src: visionaire_jslib_ohif, 
-		build: visionaire_jslib_ohif+'platform/viewer/dist/*',
+		build: visionaire_jslib_ohif+'platform/viewer/dist/**/*',
 		dst: visionaire_static_js+'ohif/'
 	},
 }
@@ -151,131 +151,13 @@ function deployOHIF(done) {
 }
 
 
-function jsBuildAce(done) {
-	console.log('Compile and minify ACE code editor: ', content_jslib_ace);
-	var content_jslib_ace_node_deps = content_jslib_ace+'node_modules/';
-	var ace_deps, build_ace;
-
-	try{
-
-		//
-		ace_deps = fs.lstatSync(content_jslib_ace_node_deps);
-		build_ace = true;
-
-	} catch (err) {
-
-		// Dependencies not yet installed, cahnge to jslib directory and install
-		try {
-
-			console.info('Dependencies for ACE JS have not yet been installed. Install to ',
-				content_jslib_ace_node_deps);
-			process.chdir(content_jslib_ace);
-			execSync('npm install');
-			console.info('ACE JS depdencies installed succesfully');
-			build_ace = true;
-			process.chdir(sonador_rootdir);
-		} catch (err) {
-
-			// Indicate that an error occurred, stop build
-			console.log('Error while trying to install node dependencies: ', err);
-			process.chdir(sonador_rootdir);
-			done();
-		}
-	} finally {
-
-		if (build_ace) {
-			try {
-				process.chdir(content_jslib_ace);
-
-				// Execue ACE build script
-				console.log('Build ACE JS with default options');
-				execSync('node ./Makefile.dryice.js');
-				console.info('Build of ACE JS completed succesfully');
-
-				process.chdir(sonador_rootdir);
-			} catch (err) {
-
-				// Indicate that an error occurred, stop build
-				console.log('Error while trying to build ACE JS: ', err);
-				process.chdir(sonador_rootdir);
-				done();
-			}
-		} else { done(); }
-	}
-
-	return gulp.src(content_jslib_ace+'build/src/**/*.js')
-		.pipe(gulp.dest(content_static_js+'ace/'));
-}
-
-
-function jsBuildMagnificLightbox(done) {
-
-	console.log('Compile and minify Magnific Popup to static folder: ', guru_jslib_mlightbox);
-	var guru_jslib_mlightbox_node_deps = guru_jslib_mlightbox+'node_modules/';
-	var mlightbox_deps, build_mlightbox;
-
-	try {
-		// Determine if necessary dependencies are installed
-		mlightbox_deps = fs.lstatSync(guru_jslib_mlightbox_node_deps);
-		build_mlightbox = true;
-	
-	} catch(err) {
-
-		// Dependencies not yet installed, change to jslib directory and install
-		try {
-
-			console.info('Dependencies for Magnific Popup have not yet been installed. Install to ', 
-				guru_jslib_mlightbox_node_deps);
-			process.chdir(guru_jslib_mlightbox);
-			execSync('npm install');
-			console.info('Magnific Popup dependencies installed successfully');
-			build_mlightbox = true;
-			process.chdir(sonador_rootdir);
-
-		} catch (err) {
-
-			// Indicate that an error occurred, stop build
-			console.log('Error while trying to install node dependencies: ', err);
-			process.chdir(sonador_rootdir);
-			done();
-		}
-	
-	} finally {
-
-		if (build_mlightbox) {
-			try {
-				process.chdir(guru_jslib_mlightbox);
-
-				// Execute Highlight.js build script
-				console.info('Build Magnific Popup with default options');
-				execSync('grunt mfpbuild');
-				console.info('Build of Magnific Popup completed succesfully');
-
-				process.chdir(sonador_rootdir);
-			} catch (err) {
-
-				// Indicate that an error occurred, stop build
-				console.log('Error while trying to build Magnific Popup: ', err);
-				process.chdir(sonador_rootdir);
-				done();
-			}
-		} else { done(); }
-	}
-
-	return gulp.src(guru_jslib_mlightbox+'dist/*.js').pipe(gulp.dest(guru_static_js+'mlightbox/'));
-
-}
-
-
 // Compile 
-const js = gulp.series(jsBuildOHIFViewer, deployOHIF, jsBuildAce, jsBuildMagnificLightbox);
 const jsOHIF = gulp.series(jsBuildOHIFViewer, deployOHIF)
+const js = gulp.series(jsBuildOHIFViewer, deployOHIF);
 
 
 // Gulp Tasks
 exports.jsBuildOHIFViewer = jsBuildOHIFViewer;
 exports.deployOHIF = deployOHIF;
-exports.jsBuildAce = jsBuildAce;
-exports.jsBuildMagnificLightbox = jsBuildMagnificLightbox;
 exports.jsOHIF = jsOHIF;
 exports.js = js;
