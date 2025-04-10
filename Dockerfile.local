@@ -7,6 +7,7 @@ ARG CI_COMMIT_SHA
 RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
   && mkdir -p /srv/www/sonador \
   && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador \
+  && mkdir -p /srv/www/sonador/docroot/static \
   && chown 1000:1000 -R /srv/www/sonador
 USER 1000
 RUN export CI_COMMIT_SHA=${CI_COMMIT_SHA:-master} \
@@ -31,7 +32,7 @@ RUN npm install -g gulp yarn@1.22.19 \
   && npm install gulp yarn@1.22.19 && npm install
 
 # Build OHIF and viewer components
-RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce && gulp jsBuildMagnificLightbox \
+RUN cd /srv/www/sonador/sonador/ \
   && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif \
   && yarn install && yarn build:package \
   && cd /srv/www/sonador/sonador/ && gulp deployOHIF
@@ -47,5 +48,12 @@ RUN apt-get install -y sudo \
 
 EXPOSE 8070
 USER 1000
+
+# Collect static assets
+RUN cd /srv/www/sonador/sonador/ \
+  && SONADOR_SITECONFIG=/srv/www/sonador/sonador/config/sonador.site.config \
+    DJANGO_SETTINGS_MODULE=sonador.settings \
+    python3 manage.py collectstatic
+
 WORKDIR /srv/www/sonador
 CMD /srv/www/sonador/entrypoint.sh

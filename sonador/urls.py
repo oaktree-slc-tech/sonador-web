@@ -2,7 +2,6 @@ import os
 
 from django.urls import include
 from django.urls import path, re_path
-from django.conf.urls.static import static
 from django.views.generic.base import TemplateView
 
 from django.contrib import admin
@@ -29,10 +28,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 ]
 
-
-# Development URL patterns
-if gsetting('DEBUG') and gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDIA_ROOT')):
-	urlpatterns.extend(static(gsetting('MEDIA_URL'), document_root=gsetting('MEDIA_ROOT')))
 
 # Accounts: Login, logout, service authorization
 urlpatterns.extend([
@@ -75,3 +70,18 @@ urlpatterns.extend([
     # Sonador Root Viewer
     re_path(r'^.*$', login_required(OhifDicomViewer.as_view()), name='ohif-viewer'),
 ])
+
+
+# Development URL patterns
+if gsetting('DEBUG'):
+
+    from django.conf.urls.static import static
+    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+
+    # Static files for development
+    if gsetting('STATIC_URL') and os.path.exists(gsetting('STATIC_ROOT')):
+        urlpatterns += staticfiles_urlpatterns()        
+
+    # Serve media files from local media path
+    if gsetting('MEDIA_URL') and os.path.exists(gsetting('MEDIA_ROOT')):
+       urlpatterns.extend(static(gsetting('MEDIA_URL'), document_root=gsetting('MEDIA_ROOT')))

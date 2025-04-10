@@ -1,5 +1,4 @@
-import posixpath
-from os.path import exists
+import posixpath, os
 from google.oauth2 import service_account
 
 from .base import *
@@ -45,52 +44,8 @@ if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_
 	if not AWS_S3_MEDIA_CONTAINER:
 		raise ValueError('Invalid media S3 container: %r' % AWS_S3_MEDIA_CONTAINER)
 
-	STATICFILES_STORAGE = 'visionaire.storages.s3.SonadorS3StaticFilesStorage'
 	DEFAULT_FILE_STORAGE = 'visionaire.storages.s3.SonadorS3MediaFilesStorage'
-
-	STATIC_URL = posixpath.join(AWS_S3_SERVICE_URL, AWS_S3_STATIC_CONTAINER, '')
 	MEDIA_URL = posixpath.join(AWS_S3_SERVICE_URL, AWS_S3_MEDIA_CONTAINER, '')
-
-# OpenStack Swift Storage Configuration
-elif siteconfig_storage_type == ofapicodes.API_OBJECT_STORAGE_SWIFT:
-
-	siteconfig_openstack_swift = siteconfig.get('OpenStack-Swift', {})
-	SWIFT_AUTH_URL = siteconfig_openstack_swift.get('SWIFT_AUTH_URL')
-	SWIFT_AUTH_VERSION = siteconfig_openstack_swift.get('SWIFT_AUTH_VERSION')
-	SWIFT_TENANT = siteconfig_openstack_swift.get('SWIFT_TENANT') or siteconfig_openstack_swift.get('SWIFT_PROJECT')
-	SWIFT_PROJECT = siteconfig_openstack_swift.get('SWIFT_PROJECT') or SWIFT_TENANT
-	SWIFT_PROJECT_DOMAIN = siteconfig_openstack_swift.get('SWIFT_PROJECT_DOMAIN')
-	SWIFT_USERNAME = siteconfig_openstack_swift.get('SWIFT_USERNAME')
-	SWIFT_USER_DOMAIN = siteconfig_openstack_swift.get('SWIFT_USER_DOMAIN')
-	SWIFT_KEY = siteconfig_openstack_swift.get('SWIFT_KEY') or siteconfig_openstack_swift.get('SWIFT_PASSWORD')
-	SWIFT_SIGNING_KEY = siteconfig_openstack_swift.get('SWIFT_SIGNING_KEY')
-	SWIFT_DEFAULT_CONTAINER = siteconfig_openstack_swift.get('SWIFT_DEFAULT_CONTAINER')
-	SWIFT_ENDPOINT_URL = siteconfig_openstack_swift.get('SWIFT_ENDPOINT_URL')
-	_SWIFT_AUTH_VERSION = float(SWIFT_AUTH_VERSION)
-
-	# Verify Swift 2.0 Configuration
-	if 2.0 <= _SWIFT_AUTH_VERSION <= 3.0:
-		if not SWIFT_TENANT:
-			raise ValueError(
-				'Invalid tenant %r. For installations using OpenStack Swift auth version %s, a valid tenant must be provided.'
-				% (SWIFT_TENANT, SWIFT_AUTH_VERSION))
-	elif 3.0 <= _SWIFT_AUTH_VERSION:
-		if not SWIFT_USER_DOMAIN:
-			raise ValueError((
-			 	'Invalid user domain %r. For installations using OpenStack Swift auth version %s, the OpenStack user domain must '
-		 		+ 'be specified.') % (SWIFT_USER_DOMAIN, SWIFT_AUTH_VERSION))
-		if not SWIFT_PROJECT:
-			raise ValueError(
-				'Invalid project %r. For installations using OpenStack Swift auth version %s, the OpenStack project must be specified'
-				% (SWIFT_PROJECT, SWIFT_AUTH_VERSION))
-		if not SWIFT_PROJECT_DOMAIN:
-			raise ValueError((
-			 	'Invalid project domain %r. For installations using OpenStack Swift auth version %s, the OpenStack project domain '
-			 	+ 'must be specified') % (SWIFT_PROJECT_DOMAIN, SWIFT_AUTH_VERSION))
-
-	# Application storage provider
-	DEFAULT_FILE_STORAGE = 'visionaire.storages.openstack_swift.OpenStackSwiftMediaFilesStorage'
-	STATICFILES_STORAGE = 'visionaire.storages.openstack_swift.OpenStackSwiftStaticFilesStorage'
 
 elif siteconfig_storage_type == 'GCS':
 
@@ -109,11 +64,29 @@ elif siteconfig_storage_type == 'GCS':
 
 
 	# GS_CREDENTIALS = gsetting('GOOGLE_APPLICATION_CREDENTIALS')
-
 	MEDIA_URL = 'https://storage.googleapis.com/{}/'.format(GS_MEDIA_BUCKET)
-	STATIC_URL = 'https://storage.googleapis.com/{}/'.format(GS_STATIC_BUCKET)
 	DEFAULT_FILE_STORAGE = 'visionaire.storages.gcp.GoogleCloudMediaStorage'
-	STATICFILES_STORAGE = 'visionaire.storages.gcp.GoogleCloudStaticStorage'
+
+
+# Static files configuration: Sonador hosts complex front-end applications which
+# utilize background workers and must be served from the same domain that the
+# web application runs from. For a production deployment of Sonador the
+# files are served by a specialized FastAPI instance deployed alongside the
+# core Django app within Uvicorn.
+siteconfig_static = siteconfig.get('Resource-Files')
+
+# Ensure that the provided static root folder exists. The static root folder
+# is used to aggregate all assets prior to deployment. It should be present,
+# even for development deployments. (The development module from Sonador)
+# consumes from this settings file.
+STATIC_ROOT = siteconfig_static.get('STATIC_ROOT')
+if not os.path.exists(STATIC_ROOT or ''):
+	raise ValueError('Invalid static files root folder. "%s" does not exist.' % STATIC_ROOT)
+
+# Static URL root
+STATIC_URLROOT = 'static'
+STATIC_URL = posixpath.join('/', STATIC_URL)
+
 
 
 # Disable debug configuration
