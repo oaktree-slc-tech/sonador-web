@@ -13,6 +13,7 @@ from guru.helpers.user import user_displayname
 from guru.filter.forms import GuruFilterForm
 from guru.filter.views import GuruQueryParamFilterFormMixin, GuruFilterView
 from guru.helpers.compatability import guru_page_not_found
+from guru.helpers.utils.object import pick, omit
 
 from core.views import JSONFormApiView
 
@@ -81,6 +82,29 @@ class LookupViewFormMixin:
 
 # User Management and Lookup Views
 
+def permission2json(permission):
+	'''	Convert the provided permission instance to JSON
+	'''
+	return pick(permission, ('id', 'name', 'codename'))
+
+
+
+def group2json(group, json_data=None, include_group_permissions=False):
+	'''	Convert the provided group instance to 
+	'''
+	json_data = json_data or (model_to_dict(group) if group else {})
+
+	# Remove sensitive details from response
+	if not include_group_permissions:
+		json_data.pop('permissions')
+
+	# Encode permissions to JSON
+	if json_data.get('permissions'):
+		_permissions = json_data.get('permissions')
+		json_data['permissions'] = [permission2json(p) for p in _permissions]
+
+	return json_data
+
 
 def user2json(user, json_data=None, include_groups=False, include_permissions=False):
 	'''	Create JSON response structure for the provided user instance
@@ -98,7 +122,7 @@ def user2json(user, json_data=None, include_groups=False, include_permissions=Fa
 	if not include_groups:
 		json_data.pop('groups', None)
 
-	# Remove sensitive details from resonse
+	# Remove sensitive details from response
 	if not include_permissions:
 		json_data.pop('user_permissions', None)
 		json_data.pop('is_active', None)
@@ -110,6 +134,11 @@ def user2json(user, json_data=None, include_groups=False, include_permissions=Fa
 	# Add user name to JSON
 	if user:
 		json_data['name'] = user_displayname(user)
+
+	# Convert permissions to JSON
+	if json_data.get('user_permissions'):
+		_permissions = json_data.get('user_permissions')
+		json_data['user_permissions'] = [permission2json(p) for p in _permissions]
 
 	return json_data
 
