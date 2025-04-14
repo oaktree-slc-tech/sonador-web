@@ -88,7 +88,6 @@ def permission2json(permission):
 	return pick(permission, ('id', 'name', 'codename'))
 
 
-
 def group2json(group, json_data=None, include_group_permissions=False):
 	'''	Convert the provided group instance to 
 	'''
@@ -116,7 +115,7 @@ def user2json(user, json_data=None, include_groups=False, include_permissions=Fa
 
 	# Convert group models to JSON
 	if json_data.get('groups') and include_groups:
-		json_data['groups'] = [g for g in map(model_to_dict, json_data['groups'])]
+		json_data['groups'] = [group2json(g) for g in json_data['groups']]
 
 	# Scrub groups and permissions from response if indicated
 	if not include_groups:
@@ -289,8 +288,10 @@ class PacsImagingServerUserLookupView(UserApiMixin, LookupViewFormMixin, PacsIma
 class GroupApiMixin:
 	'''	Mixin class which provides methods for working with group models.
 	'''
+	include_group_permissions = False
+
 	def getModelJsonData(self, instance, request, *args, **kwargs):
-		return model_to_dict(instance) if instance else {}
+		return group2json(instance, include_group_permissions=self.include_group_permissions) if instance else {}
 
 
 class GroupFilterBaseForm(GuruFilterForm):
@@ -327,31 +328,49 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		'name': 'name__icontains'
 	}
 
-	def __init__(self, *args, server=None, **kwargs):
+	def __init__(self, *args, server=None, user=None, **kwargs):
 		self.server = server
 		if not server:
 			raise ValueError('Unable to initialize group filter form, invalid imaging server instance')
+
+		self.user = user
+		if not user:
+			raise ValueError('Unable to intiialize group filter form, invalid user instance')
 			
 		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
 		'''	Filter user list to only those which have access to ther server 
 		'''
-		return super().getObjectManager().filter(server_authorizations__server=self.server).distinct()
+		_groups = super().getObjectManager().filter(server_authorizations__server=self.server)
+
+		# Filter response by group membership
+		if not self.user.is_superuser:
+			_groups = _groups.filter(user=self.user)
+
+		return _groups.distinct()
 
 
 class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFilterView):
-	'''	Sonador API view which can be used to search/filter Sonador groups
+	'''	Sonador API view which can be used to search/filter Sonador groups. Only groups which the user
+		is a member of are included in the response.
 	'''
 	filterform = PacsImagingServerFrontendGroupFilterForm
+	include_group_permissions = False
 
 	def getFilterFormParams(self, request=None, vargs=None, vkwargs=None):
 		'''	Add imaging server reference to filter form parameters
 		'''
 		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
 		fparams['server'] = self.getImagingServer()
+		fparams['user'] = getattr(request, 'user', None)
 
 		return fparams
+
+	def getModelJsonData(self, instance, request, *args, **kwargs):
+		'''	Return group JSON data
+		'''
+		return group2json(instance, include_group_permissions=self.include_group_permissions)
 
 
 class SonadorGroupLookupForm(forms.Form):
@@ -397,6 +416,57 @@ class PacsImagingServerGroupLookupView(GroupApiMixin, LookupViewFormMixin, PacsI
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.init_lookup_mixin(*args, **kwargs)
+
+
+class PacsImagingServerFrontendGroupMembershipFilterForm(PacsImagingServerFrontendUserFilterForm):
+	'''	Filter form instance used by frontend API views for search/filter of Sonador users which belong
+		to a specific group. Inherits from PacsImagingServerFrontendUserFilterForm which filters
+		based on users which are associated with the imaging server.
+	'''
+	def __init__(self, *args, group=None, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self.group = group
+		if not group:
+			raise ValueError('Unable to initialize frontend group membership lookup form, invalid gropu instance')
+
+	def getObjectManager(self):
+		'''	Filter user list to only those who belong to the provided group.
+		'''
+		print(self.group)
+		return super().getObjectManager().filter(groups__in=[self.group]).distinct()
+
+
+class PacsImagingServerGroupMembershipLookupView(PacsImagingServerUserFilterView):
+	'''	Sonador API view which can be used to search/filter Sonador users which belong to a specific group
+		associated with an imaging server.
+	'''
+	filterform = PacsImagingServerFrontendGroupMembershipFilterForm
+
+	group_class = Group
+	group_request_param = 'groupid'
+
+	def getGroup(self, *args, **kwargs):
+		'''	Retrieve the group assocaited with the request. After being retrieved from the database, subsequent
+			calls retrieve a cached copy of the data
+		'''
+		kwargs = kwargs or self.kwargs
+
+		# Retrieve group
+		group = kwargs.get('group')
+		if not group:
+			group = self.group_class.objects.get(pk=kwargs.get(self.group_request_param))
+			kwargs['group'] = group
+
+		return group
+
+	def getFilterFormParams(self, request=None, vargs=None, vkwargs=None):
+		'''	Add group instance (parsed from the URL) to the search/filter form parameters
+		'''
+		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
+		fparams['group'] = self.getGroup()
+
+		return fparams
 
 
 # Auth Model Unified Search

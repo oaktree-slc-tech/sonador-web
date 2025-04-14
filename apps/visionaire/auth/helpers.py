@@ -275,6 +275,21 @@ def api_permission_imageserver_user_has_access(user, request, vargs, vkwargs,
 		Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
 
 
+def api_permission_group_member(user, request, vargs, vkwargs, group_url_param='groupid'):
+	'''	Permission helper for api_request which checks to see if the provided user is a member
+		specified in the URL.
+	'''
+	try: group_pk = int(vkwargs.get(group_url_param))
+	except ValueError:
+		return False
+
+	# Ensure that the user is a member of the provided group
+	if user.is_superuser or user.groups.filter(pk=group_pk).exists():
+		return True
+
+	return False
+
+
 # OpenID Connect helper methods: these methods are used by the workflow views
 # and by the Orthanc token validation views in order to enable validation of
 # remote tokens

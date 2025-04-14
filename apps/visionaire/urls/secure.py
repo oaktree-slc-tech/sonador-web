@@ -28,7 +28,7 @@ from ..auth.views.service import SecureApiLoginView
 from ..auth.views.service.orthanc import PacsImagingServerAuthUserProfileView
 from ..auth.views.service.integrations import UserProfileAuthorizationView
 from ..auth.views.user import UserManagementView, UserRestView, PacsImagingServerUserFilterView, SonadorUserLookupView, PacsImagingServerUserLookupView, \
-	GroupManagementView, GroupRestView, PacsImagingServerGroupFilterView, SonadorGroupLookupView, PacsImagingServerGroupLookupView, \
+	GroupManagementView, GroupRestView, PacsImagingServerGroupFilterView, SonadorGroupLookupView, PacsImagingServerGroupLookupView, PacsImagingServerGroupMembershipLookupView, \
 	PacsImagingUnifiedAuthModelSearchView
 from ..auth.views import cred as sonador_cred
 from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTokenForm
@@ -36,7 +36,7 @@ from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
 from ..auth.views.acl import PacsImagingServerGroupAuthorizationManagementView, PacsImagingServerGroupAuthorizationRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify, \
-	api_permission_imageserver_user_has_access, bearertoken_api_request_authentication
+	api_permission_imageserver_user_has_access, bearertoken_api_request_authentication, api_permission_group_member
 
 
 urlpatterns_api = [
@@ -187,12 +187,24 @@ urlpatterns_api = [
 		name="pacs-user-lookup",
 	),
 	re_path(r'^pacs/(?P<serverid>\w+)/group/search/?$',
-		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated \
+					and api_permission_imageserver_user_has_access(user, request, vargs, vkwargs, server_url_param='serverid'),
 				api_request_authentication=bearertoken_api_request_authentication,
 				apiaccess_token_model=ApiAccessToken,
 				allowed_http_methods_token_access=("POST",),
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			PacsImagingServerGroupFilterView.as_view()),
+		name="pacs-group-search",
+	),
+	re_path(r'^pacs/(?P<serverid>\w+)/group/(?P<groupid>[0-9]+)/membership/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated \
+					and api_permission_imageserver_user_has_access(user, request, vargs, vkwargs, server_url_param='serverid') \
+					and api_permission_group_member(user, request, vargs, vkwargs),
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=ApiAccessToken,
+				allowed_http_methods_token_access=("POST",),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			PacsImagingServerGroupMembershipLookupView.as_view()),
 		name="pacs-group-search",
 	),
 	re_path(r'^pacs/(?P<serverid>\w+)/group/lookup/?$',
@@ -204,6 +216,7 @@ urlpatterns_api = [
 			PacsImagingServerGroupLookupView.as_view()),
 		name="pacs-group-lookup",
 	),
+
 
 	# User Management API
 	path("user", api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
