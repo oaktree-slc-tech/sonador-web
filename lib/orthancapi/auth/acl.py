@@ -5,6 +5,8 @@ import logging
 import guru.apisettings as gapicodes
 from .. import apisettings as orthanc_api
 
+logger = logging.getLogger(__name__)
+
 
 class ServerAuthorization:
 	'''	Helper class which can be used to assess Sonador server permissions.
@@ -127,7 +129,9 @@ class ResourceAuthorization:
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
 			return self.view
 
-		# Check modify permissions
+		# Check modify permissions for resource type:
+		# 1. POST request for patient, series, or study
+		# 2. POST request for study worklist
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
 			return self.modify
 

@@ -49,6 +49,8 @@ class PacsImagingServerAuthUserProfileView(OrthancServiceImagingServerMixin, Use
 		return form_kwargs
 
 	def user_has_perm(self, *args, **kwargs):
+		'''	Determine whether the user has access to the resource that they are attempting retrieve
+		'''
 		return self.form.server.user_has_access(self.form.user)
 
 	def createProfileResponse(self, *args, **kwargs):
@@ -70,6 +72,7 @@ class PacsImagingServerAuthUserProfileView(OrthancServiceImagingServerMixin, Use
 		return response
 
 	def post(self, request, *args, **kwargs):
+
 		# Retrieve imaging server from cache
 		try: server = self.getImagingServer(*args, **kwargs)
 		except self.imagingserver_class.DoesNotExist as err:

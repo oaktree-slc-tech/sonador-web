@@ -192,6 +192,8 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		verbose_name='View Comments', default=False, help_text='View resource comments')
 	acl = models.BooleanField(
 		verbose_name='Access Control', default=False, help_text='View and modify resource access control permissions')
+	worklist = models.BooleanField(
+		verbose_name='Worklist Access', default=False, help_text='Allow members of the group to create worklist items.')
 
 	# Duration of the grant
 	duration = models.IntegerField(verbose_name='Grant Duration', default=15, 
@@ -237,9 +239,10 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 			# Retrieve Sonador local permissions for the request
 			elif _orthanc_auth := self.orthanc_resource_auth(user, resource, orthanc_id, method, level, dicom_uid=dicom_uid):
-				logger.warning('Orthanc local permissions: user=%s level="%s" orthanc-id="%s" resource="%s" method="%s"\n%s' % (
+				logger.debug('Orthanc local permissions: user=%s level="%s" orthanc-id="%s" resource="%s" method="%s"\n%s' % (
 					user, level, orthanc_id, resource, method, _orthanc_auth,
 				))
+
 				_auth = OrthancResourceAuthorization(**_orthanc_auth)
 				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
 					return True
@@ -315,7 +318,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			user=OrthancSonadorUser(id=user.pk, **pick(user, ('username', 'email'))),
 			group=OrthancSonadorGroup(id=self.group.pk, name=self.group.name),
 			level=level, method=method, uri=resource, **{ 'orthanc-id': orthanc_id, 'dicom-uid': dicom_uid })
-		logger.warning('Sonador/Orthanc resource authorization request:\n%s' % _auth_request.json())
+		logger.debug('Sonador/Orthanc resource authorization request:\n%s' % _auth_request.json())
 		_rdata = json.loads(_auth_request.json())
 
 		# Ensure that keys contain a dash instead of an underscore
@@ -407,6 +410,6 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	def json(self):
 		_json = {
 			'token': self.pk, 'server': self.server.pk, 'group': self.group.pk,
-			**pick(self, ('query', 'upload', 'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration'))
+			**pick(self, ('query', 'upload', 'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration', 'worklist'))
 		}
 		return _json
