@@ -210,7 +210,7 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
-		'''	Filter user list to only those which have access to ther server 
+		'''	Filter user list to only those which have access to the server 
 		'''
 		return super().getObjectManager().filter(groups__server_authorizations__server=self.server).distinct()
 
@@ -320,14 +320,19 @@ class GroupRestView(SonadorApiRestView):
 
 
 class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
-	'''	Filter form instance used by frontend API views for search/filter of Sonador groups
+	''' Filter form for frontend API views to search and filter Sonador groups.
+		
+		@field worklist (Boolean/Null): filter groups by worklist permission.
 	'''
+	worklist = forms.NullBooleanField(required=False)
+
 	filtermodel = Group
 
 	filterkey_transforms = {
-		'name': 'name__icontains'
+		'name': 'name__icontains',
+		'worklist': 'server_authorizations__worklist'
 	}
-
+ 
 	def __init__(self, *args, server=None, user=None, **kwargs):
 		self.server = server
 		if not server:
@@ -340,7 +345,7 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
-		'''	Filter user list to only those which have access to ther server 
+		'''	Filter user list to only those which have access to ther server
 		'''
 		_groups = super().getObjectManager().filter(server_authorizations__server=self.server)
 
