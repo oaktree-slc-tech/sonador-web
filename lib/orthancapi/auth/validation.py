@@ -3,16 +3,18 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 
-from .. import apisettings
+from .. import apisettings as orthanc_api
 
 
 class ResourceLevels(str, Enum):
-    PATIENT = 'patient'
-    STUDY = 'study'
-    SERIES = 'series'
-    INSTANCE = 'instance'
+    PATIENT = orthanc_api.ORTHANC_RESOURCE_PATIENT
+    STUDY = orthanc_api.ORTHANC_RESOURCE_STUDY
+    SERIES = orthanc_api.ORTHANC_RESOURCE_SERIES
+    INSTANCE = orthanc_api.ORTHANC_RESOURCE_INSTANCE
 
-    SYSTEM = 'system'
+    # Sonador / Orthanc Integration APIs
+    SYSTEM = orthanc_api.ORTHANC_SYSTEM
+    GROUP = orthanc_api.ORTHANC_RESOURCE_GROUP
 
 
 class ResourceRequestMethods(str, Enum):

@@ -91,7 +91,7 @@ class ResourceAuthorization:
 		* `comment_view`: view (but not modify) comments
 	'''
 	def __init__(self, view=None, modify=None, remove=None, comment_edit=None, comment_view=None, acl=None,
-			**kwargs):
+			worklist=None, **kwargs):
 		'''	Initialize permission set
 		'''
 		self.view = view
@@ -100,6 +100,7 @@ class ResourceAuthorization:
 		self.comment_edit = comment_edit
 		self.comment_view = comment_view
 		self.acl = acl
+		self.worklist = worklist
 
 	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None):
 		'''	Evaluate the resource request and return the appropriate permision.
