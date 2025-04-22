@@ -179,6 +179,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	# Global permissions
 	query = models.BooleanField(default=False, help_text='Submit global DICOM resource queries to the server')
 	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
+	worklist = models.BooleanField(
+		verbose_name='Worklist', default=False, help_text='Allow members of the group to create worklist items.')
+	tag = models.BooleanField(
+		verbose_name='Tags', default=False, help_text='Allow members of the group to view tags.')
+	tag_modify = models.BooleanField(
+		verbose_name='Manage Tags', default=False, help_text='Allow members of the group to manage tags.')
 
 	# Resource permissions
 	resource = models.CharField(max_length=2048, default='*',
@@ -192,8 +198,6 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		verbose_name='View Comments', default=False, help_text='View resource comments')
 	acl = models.BooleanField(
 		verbose_name='Access Control', default=False, help_text='View and modify resource access control permissions')
-	worklist = models.BooleanField(
-		verbose_name='Worklist Access', default=False, help_text='Allow members of the group to create worklist items.')
 
 	# Duration of the grant
 	duration = models.IntegerField(verbose_name='Grant Duration', default=15, 
@@ -211,7 +215,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	def __str__(self, *args, **kwargs):
 		return 'Group Authorization: %s for %s (%s:%s)' \
 			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
-	
+
 	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
@@ -237,15 +241,36 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			elif _server_auth.upload_perm(resource, method) is not None:
 				return self.upload
 
-			# Retrieve Sonador local permissions for the request
-			elif _orthanc_auth := self.orthanc_resource_auth(user, resource, orthanc_id, method, level, dicom_uid=dicom_uid):
-				logger.debug('Orthanc local permissions: user=%s level="%s" orthanc-id="%s" resource="%s" method="%s"\n%s' % (
-					user, level, orthanc_id, resource, method, _orthanc_auth,
-				))
+			# Check local permissions for patient, study, series, and instance requests. Integration
+			# permissions, such as those associated with group APIs should be processed by the
+			# authorization API.
+			elif level in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES or level == orthanc_api.ORTHANC_SYSTEM:
 
-				_auth = OrthancResourceAuthorization(**_orthanc_auth)
-				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
-					return True
+				# Retrieve Sonador local permissions
+				if _orthanc_auth := self.orthanc_resource_auth(user, resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+					
+					logger.debug('Orthanc local permissions: user=%s level="%s" orthanc-id="%s" resource="%s" method="%s"\n%s' % (
+						user, level, orthanc_id, resource, method, _orthanc_auth,
+					))
+
+					# Parse "local" permisisons from Orthanc and authorize request
+					_auth = OrthancResourceAuthorization(**_orthanc_auth, worklist=self.worklist)
+					if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+						return True
+
+			# Group API requests
+			elif level == orthanc_api.ORTHANC_RESOURCE_GROUP:
+
+				# Tags request
+				if orthanc_api.ORTHANC_RESOURCE_TAG in resource and orthanc_id == self.group.pk:
+
+					# Read tags
+					if method and method.lower() in (gapicodes.HTTP_GET.lower()):
+						return self.tag
+
+					# Change or modify tags
+					elif method and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
+						return self.tag_modify
 
 			# If no other authorization was successful, check if resource UID is within global scope of the user
 			if self.resource == WILDCARD \

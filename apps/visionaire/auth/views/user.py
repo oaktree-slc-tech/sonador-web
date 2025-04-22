@@ -325,12 +325,14 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		@field worklist (Boolean/Null): filter groups by worklist permission.
 	'''
 	worklist = forms.NullBooleanField(required=False)
+	tag = forms.NullBooleanField(required=False)
 
 	filtermodel = Group
 
 	filterkey_transforms = {
 		'name': 'name__icontains',
-		'worklist': 'server_authorizations__worklist'
+		'worklist': 'server_authorizations__worklist',
+		'tag': 'server_authorizations__tag',
 	}
  
 	def __init__(self, *args, server=None, user=None, **kwargs):
@@ -438,7 +440,6 @@ class PacsImagingServerFrontendGroupMembershipFilterForm(PacsImagingServerFronte
 	def getObjectManager(self):
 		'''	Filter user list to only those who belong to the provided group.
 		'''
-		print(self.group)
 		return super().getObjectManager().filter(groups__in=[self.group]).distinct()
 
 

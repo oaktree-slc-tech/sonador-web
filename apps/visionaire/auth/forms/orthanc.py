@@ -25,6 +25,8 @@ from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 from wgtauth.forms import oAuthTokenAuthorizationForm
 
+from orthancapi import apisettings as orthanc_api
+
 from ...views.base import JSONFormApiView
 from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
@@ -54,7 +56,7 @@ class ImagingServerFormMixin:
 		self.server = kwargs.pop("server", None)
 
 		if not self.server:
-			raise ValueError("Unable to initialize authorization form: imaging server not provided")
+				raise ValueError("Unable to initialize authorization form: imaging server not provided")
 
 
 class ImagingServerIntegrationAuthorizationForm(ImagingServerFormMixin, IntegrationAuthorizationForm):
@@ -150,4 +152,44 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 
 		# Parse authentication data
 		cleaned_data = self.clean_authdata(cleaned_data)
+		cleaned_data = self.clean_auth_request(cleaned_data)
+		return cleaned_data
+
+	def clean_auth_request(self, cleaned_data):
+		'''	Apply transforms to the advanced authorization data to ensure that requests are processed correctly.
+
+			1.	Detect DICOMweb requests incorrectly classified as system requests.
+			2.	Parse resource components, such as UIDs, from URLs and back-fill when needed.
+			3.	Detect gorup and other Sonador <-> Orthanc integration API calls, such as the tags API
+				and parse to components.
+		'''
+		resource = cleaned_data.get('resource')
+		uri = cleaned_data.get('uri')
+		level = cleaned_data.get('level')
+		orthanc_id = cleaned_data.get('orthanc_id')
+		dicom_uid = cleaned_data.get('dicom_uid')		
+
+		# The requested resource might be provided by the Orthanc advanced authorization
+		# plugin as a UID or a URL. Transforming system requests requries looking at both fields.
+		_resource = resource or uri or ''
+
+		# Check for DICOMweb worklist request
+		if orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_RESOURCE_WORKLIST in _resource:
+
+			# Parse DICOM UID from resource URI
+			_worklist_study = orthanc_api.ORTHANC_DICOMWEB_WORKLIST_MANAGEMENT_REGEX.match(_resource)
+
+			if _worklist_study and _worklist_study.group('uid'):
+				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_STUDY
+				cleaned_data['dicom_uid'] = _worklist_study.group('uid')
+
+		# Check for Orthanc / Sonador Integration APIs
+		elif orthanc_api.ORTHANC_GROUPS_ROOT in _resource and not orthanc_id:
+
+			# Group tags request
+			_group_tags = orthanc_api.ORTHANC_GROUP_TAGS_REGEX.match(_resource)
+			if _group_tags:
+				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_GROUP
+				cleaned_data['orthanc_id'] = int(_group_tags.group('uid'))
+						
 		return cleaned_data
