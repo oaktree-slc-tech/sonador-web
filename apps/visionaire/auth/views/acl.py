@@ -16,7 +16,7 @@ class PacsImagingServerGroupAuthorizationFilterForm(GuruFilterForm):
 	group = forms.CharField(max_length=256, required=False)
 
 	filterkey_transforms = {
-		'group': 'group__name',
+		'group': 'group__name__icontains',
 	}
 
 

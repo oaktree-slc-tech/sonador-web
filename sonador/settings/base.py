@@ -32,7 +32,7 @@ siteconfig = ConfigObj(os.environ.get('SONADOR_SITECONFIG'))
 SETTINGS_DIR = os.path.dirname(os.environ.get('SONADOR_SITECONFIG'))
 
 # Add lib and apps directories to the path
-sys.path.append(os.path.join(BASE_DIR, 'lib'))
+sys.path.insert(0, os.path.join(BASE_DIR, 'lib'))
 sys.path.append(os.path.join(BASE_DIR, 'apps'))
 if not SETTINGS_DIR in sys.path:
     sys.path.append(SETTINGS_DIR)
@@ -64,7 +64,6 @@ if isinstance(siteconfig_site.get('ALLOWED_HOSTS'), six.text_type):
     ALLOWED_HOSTS_STR = siteconfig_site.get('ALLOWED_HOSTS')
     ALLOWED_HOSTS = tuple([s.replace("'", '').replace('"', '').strip() for s in ALLOWED_HOSTS_STR.replace('\n', '').replace('\t', '').split(',')])
 else: ALLOWED_HOSTS = tuple(siteconfig_site.get('ALLOWED_HOSTS', []))
-
 
 
 # Remote Request Settings

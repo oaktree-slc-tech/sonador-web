@@ -14,6 +14,7 @@ from guru.filter.forms import GuruFilterForm
 from guru.filter.views import GuruQueryParamFilterFormMixin, GuruFilterView
 from guru.helpers.compatability import guru_page_not_found
 from guru.helpers.utils.object import pick, omit
+from guru.helpers.query import dict2_OR_query
 
 from core.views import JSONFormApiView
 
@@ -506,16 +507,29 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 		'group.name': 'name__icontains',
 	}
 
-	def __init__(self, *args, server=None, **kwargs):
+	# For searches that return no results, use the following fields to execute a 
+	# second search using the global term and the filterkey transforms to improve
+	# the initial search results.
+	fallback_user_match_fields = ('username', 'first_name', 'last_name', 'email')
+	fallback_group_match_fields = ('name',)
+
+	def __init__(self, *args, server=None, user=None, **kwargs):
+
+		# Set server and user instance
 		self.server = server
+		self.user = user
+
+		# Initialize form
 		super().__init__(*args, **kwargs)
 
 		if not self.server:
 			raise ConfigurationError('Unable to initialize unified auth form, no imaging server provided')
 
-	def _get_filter_params(self, mlabel):
-		fparams = super()._get_filter_params(mlabel)
-
+	def _get_AND_filter_params(self, mlabel, fparams=None):
+		'''	Retrieve filter parameters that should be attached to queries using an AND condition.
+		'''
+		fparams = fparams or {}
+		
 		# Add imaging server to the query filter parameters
 		if mlabel == 'user':
 			fparams['groups__server_authorizations__server'] = self.server
@@ -523,6 +537,82 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 			fparams['server_authorizations__server'] = self.server
 
 		return fparams
+
+	def _get_filter_params(self, mlabel, merge_AND_params=True):
+		'''	Default filter parameters for the provided model label.
+
+			@input merge_AND_params (bool, default=True): toggles whether query AND parameters
+				should be included in the filter dictionary. The form is able to execute
+				two searches: an "AND" search that uses full-text search and relevance
+				matching and an "OR" fallback search. When True, the AND criteria for 
+				the model instance will be included in the results. When false, only OR criteria
+				will be added to the dictionary.
+
+			@returns dict of mapped filter parameters
+		'''
+		fparams = super()._get_filter_params(mlabel)
+		if merge_AND_params:
+			fparams = self._get_AND_filter_params(mlabel, fparams=fparams)
+
+		return fparams
+
+	def _fallback_match_params(self, mlabel, fparams):
+		'''	Construct a fallback match query. Used to back-fill a query in-case the standard
+			unified search did not return any matches. By-passes limitations in PostgreSQL
+			revelance search.
+
+			IMPORTANT: should only be used if there are not any matches from the default
+			universal search.
+		'''
+		# Retrieve filter parameters from form data
+		fparams = self._get_filter_params(mlabel, merge_AND_params=False)
+
+		# Retrieve fallback fields
+		if mlabel == 'user':
+			fallback_fields = self.fallback_user_match_fields
+		elif mlabel == 'group':
+			fallback_fields = self.fallback_group_match_fields
+		else:
+			raise ValueError('Unsupported search model "%s"' % mlabel)
+
+		for _fname in fallback_fields:
+
+			for _fkey in fparams:
+
+				# Back-fill the search transform with relevant matches to the search term
+				if _fname in _fkey and not fparams.get(_fkey):
+					fparams[_fkey] = self.cleaned_data.get('term', '')
+
+		return fparams
+
+	def execute_search(self, results=None):
+		'''	Execute user and group search results
+		'''
+		search_term = self.cleaned_data.get('term', '')
+
+		# Execute full text search across the models
+		results = super().execute_search(results=results)
+
+		# If there aren't any results returned by the results, execute a second query utilizing
+		# an __icontains mapping to try and retrieve useful initial results. When executing in 
+		# this mode, results should be limited to groups to which the request user user is
+		# a member and users with which there is common membership in a group.
+		# IMPORTANT: Super admin users are able to search across all users associated with
+		# the imaging server instance.
+		print('Search results', results)
+		if not results and search_term:
+
+			# Back-fill results from fallback query
+			for _mlabel, _model in self.searchmodels.items():
+
+				# Retrieve fallback results using ICONTAINS query of the database
+				results.extend(
+					_model.objects.filter(
+							dict2_OR_query(self._fallback_match_params(_mlabel, _model)))
+						.filter(**self._get_AND_filter_params(_mlabel))
+						.distinct())
+
+		return results
 
 
 class PacsImagingUnifiedAuthModelSearchView(PacsImagingServerFormMixin, SonadorUnifiedSearchView):
