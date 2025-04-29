@@ -9,12 +9,16 @@ import largefiles.apisettings as ofapicodes
 
 siteconfig_storage = siteconfig.get('Storage', {})
 siteconfig_storage_type = siteconfig_storage.get('OBJECT_STORAGE_TYPE')
+siteconfig_site = siteconfig.get('Site', {})
 
 if not siteconfig_storage_type in ofapicodes.API_OBJECT_STORAGE_SUPPORTED + (ofapicodes.API_OBJECT_STORAGE_S3_MINIO, "GCS"):
 	raise ValueError('Unsupported object storage type: %r' % siteconfig_storage_type)
 
 OBJECT_STORAGE_ENABLED = True
 OBJECT_STORAGE_TYPE = siteconfig_storage_type
+
+X_FRAME_OPTIONS = siteconfig_site.get('X_FRAME_OPTIONS', 'SAMEORIGIN')
+XS_SHARING_ALLOWED_METHODS = siteconfig_site.get('XS_SHARING_ALLOWED_METHODS', ['POST','GET','OPTIONS', 'PUT', 'DELETE'])
 
 # Amazon S3 Storage Configuration
 if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_OBJECT_STORAGE_S3_MINIO):

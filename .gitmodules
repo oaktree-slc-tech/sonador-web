@@ -10,6 +10,7 @@
 [submodule "apps/visionaire/jslib/ohif"]
 	path = apps/visionaire/jslib/ohif
 	url = https://code.oak-tree.tech/oak-tree/medical-imaging/ohif-viewers.git
+        branch = 73-worklist-viewer
 [submodule "lib/microservices"]
 	path = lib/microservices
 	url = https://code.oak-tree.tech/django-apps/guru-microservices.git
