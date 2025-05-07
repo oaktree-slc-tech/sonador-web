@@ -599,7 +599,6 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 		# a member and users with which there is common membership in a group.
 		# IMPORTANT: Super admin users are able to search across all users associated with
 		# the imaging server instance.
-		print('Search results', results)
 		if not results and search_term:
 
 			# Back-fill results from fallback query
