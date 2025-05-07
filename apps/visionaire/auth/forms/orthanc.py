@@ -183,6 +183,26 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_STUDY
 				cleaned_data['dicom_uid'] = _worklist_study.group('uid')
 
+		# Check for DICOMweb study or series download
+		if orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_RESOURCE_ARCHIVE in _resource:
+
+			# Parse DICOM UID and resource level from URI
+			_dcmweb_archive = orthanc_api.ORTHANC_DICOMWEB_DOWNLOAD_REGEX.match(_resource)
+
+			# Parse resource type and UID from archive URL
+			if _dcmweb_archive and _dcmweb_archive.group('uid') \
+				and (_dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES 
+					or _dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL):
+
+				# Convert matched resource to type to corresponding level code in Orthanc API. If the resource type is the 
+				# plural form of the level, convert to singular before processing the ACL request
+				cleaned_data['level'] = orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL.get(_dcmweb_archive.group('resource_type')) \
+						if _dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL \
+					else _dcmweb_archive.group('resource_type')				
+
+				# DICOM UID parsed from URL
+				cleaned_data['dicom_uid'] = _dcmweb_archive.group('uid')
+
 		# Check for Orthanc / Sonador Integration APIs
 		elif orthanc_api.ORTHANC_GROUPS_ROOT in _resource and not orthanc_id:
 
