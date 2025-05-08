@@ -82,11 +82,6 @@ class Command(GuruBaseManagementCommand):
         parser.add_argument('--sonador-description', dest='sonador_description', default=SONADOR_SERVER_DESCRIPTION,
             help='Sonador server description. Added to the site record for the instance.')
 
-    def compile_scss(self):
-        '''Complile the scss
-        '''
-        print("meow")
-
     def validate_options(self, options):
         ''' Ensure that the options provided to the command are complete
         '''
