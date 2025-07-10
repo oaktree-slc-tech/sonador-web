@@ -14,7 +14,10 @@ from secure.helpers import server_encrypt_data
 from microservices.models import BaseServerModel
 from microservices.control import server_controlurl
 
-from ..apisettings import SONADOR_PERMS, SONADOR_SERVER_PERMS, SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
+from orthancapi import apisettings as orthanc_api
+
+from ..apisettings import SONADOR_PERMS, SONADOR_SERVER_PERMS, SONADOR_RESOURCE_PERMS, \
+	SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
 from ..helpers import API_ACCESS_SERVER_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -95,13 +98,33 @@ class PacsImagingServer(BaseServerModel):
 		perms = perms or pick(user, ('is_superuser', 'is_staff'))
 		perms.update(dict((p, False) for p in SONADOR_PERMS))
 
+		def get_perm(auth, perm, default=False):
+			'''	Determine whether the user has the requested permission from the provided authorization instance.
+				Permissions determined by:
+
+				1. Whether the user is a super-user
+				2. What the authorization policy provides for server permissions
+				3. What the authorization policy specifies for global wildcard permissions
+
+				@returns policy authorization (default=False)
+			'''
+			if user.is_superuser:
+				return True
+
+			elif perm in SONADOR_SERVER_PERMS:
+				return getattr(auth, perm, default)
+
+			elif perm in SONADOR_RESOURCE_PERMS and auth.resource == orthanc_api.WILDCARD:
+				return getattr(auth, perm, default)
+
+			return False
+
 		# Determine permissions based on group membership
-		for perm in SONADOR_SERVER_PERMS:
+		for perm in SONADOR_PERMS:
 
 			# User is granted a permission if they are a superuser or a part of a group with the provided permission.
 			# TODO: Add resource modifiers so that the scope of a grant can be narrowed.
-			perms[perm] = user.is_superuser \
-				or any(getattr(auth, perm, False) for auth in self.group_authorizations.filter(group__user=user))
+			perms[perm] = any(get_perm(auth, perm) for auth in self.group_authorizations.filter(group__user=user))
 
 		return perms
 
