@@ -61,8 +61,6 @@ class Command(GuruBaseManagementCommand):
             help='Skip migration of inherited/child model instances.')
         parser.add_argument('--skip-collectstatic', dest='collectstatic', default=True, action='store_false',
             help='Skip deployment of static files as part of environment initialization.')
-        parser.add_argument('--skip-compile-scss', dest='compilescss', default=True, action='store_false',
-            help='Skip compiling SCSS as part of environment initialization.')
 
         # Sonador imaging environment user credentials (defaults are taken from the environment variables)
         parser.add_argument('--username', dest='username', default=SONADOR_USER_USERNAME,
@@ -83,13 +81,6 @@ class Command(GuruBaseManagementCommand):
             help='Hostname for the Sonador server instance. Added to the site record for the instance.')
         parser.add_argument('--sonador-description', dest='sonador_description', default=SONADOR_SERVER_DESCRIPTION,
             help='Sonador server description. Added to the site record for the instance.')
-
-    def compile_scss(self):
-        '''Complile the scss
-        '''
-        try: call_command('compile-scss')
-        except Exception as err:
-            raise CommandError('Unable to compile css please ensure static files are configured and view logs for more details')
 
     def validate_options(self, options):
         ''' Ensure that the options provided to the command are complete
@@ -142,11 +133,6 @@ class Command(GuruBaseManagementCommand):
         ''' Initialize the imaging environment with the specified options
         '''
         self.validate_options(options)
-
-        if options.get('compilescss'):
-            self.compile_scss()
-        else:
-            self.stdout.write('--skip-compile-scss used, skip compiling SCSS')
 
         if options.get('dbmigrations'):
 

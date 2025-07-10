@@ -17,11 +17,13 @@ from secure.helpers import api_request
 from ..helpers import API_ACCESS_APITOKEN_QSPARAM
 from ..models.servers import PacsImagingServer
 from ..models.dicom import DicomImagingModality, RemoteDICOMwebServer
+from ..models.userpref import UserPref
 
 from ..views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..views.dicom import PacsImagingServerChildObjectManagementView, PacsImagingServerChildObjectRestView
 from ..views.servers import PacsImagingServerApiManagementView, PacsImagingServerApiRestView
 from ..views.integrations import DataServiceApiRestView
+from ..views.userpref import UserPrefApiManagementView
 
 from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
@@ -75,6 +77,18 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			DataServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='data-service-token-introspect'),
+        
+
+	# Persist user preferences/profile
+	re_path(r'^user-preferences/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefApiManagementView.as_view()),
+            name='user-pref-management'),
+	
 
 
 	# Image Server API
