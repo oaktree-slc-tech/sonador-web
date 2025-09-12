@@ -1,3 +1,4 @@
+from django import forms
 from django.shortcuts import reverse
 from django.utils.html import format_html
 from django.contrib import admin
@@ -7,6 +8,8 @@ from guru.helpers.user import user_displayname
 
 from secure.models import ApiAccess, ApiAccessToken
 from secure.admin import ApiAccessAdmin, ApiAccessTokenAdmin
+
+from content.widgets import CodeEditorAdminWidget
 
 from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization, \
 	DataService
@@ -51,13 +54,35 @@ class SonadorApiAccessAdmin(UserLabelMixin, ApiAccessAdmin):
 	list_display = ('user', 'user_display', 'user_email', 'admin_masked_access_id', 'description', 'ctime')
 
 
-# Site Managements
+# Site Management
+
+
+class SonadorSiteAdminForm(forms.ModelForm):
+	'''	ModelAdmin form which provides an ACE text editor for the site "Welcome" message.
+	'''
+	class Meta:
+		model = SonadorSite
+		fields = '__all__'
+		widgets = { 'welcome': CodeEditorAdminWidget(code_language='markdown'), }
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self.fields['welcome'].widget.attrs.update({ CodeEditorAdminWidget.code_language_attr: 'markdown' })
+
 
 @admin.register(SonadorSite)
 class SonadorSitesAdmin(admin.ModelAdmin):
 	'''	Model admin instance for managing Sonador site instances	
 	'''
 	list_display = ('id', 'name', 'domain')
+
+	fieldsets = (
+		('Site Properties', { 'fields': ('name', 'domain')}),
+		('Site Branding', { 'fields': ('logo', 'favicon', 'welcome')})
+	)
+
+	form = SonadorSiteAdminForm
 
 
 # Authorization and authentication

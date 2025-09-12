@@ -81,6 +81,8 @@
     fetch("{{ pacs_config }}") 
       .then(response => response.json())
       .then(function(rjson){
+        console.log('Config: ', rjson);
+
         window.config = rjson;
         
         // Read PACS server connection from JSON string
@@ -93,6 +95,9 @@
               rel: 'noopener noreferrer',
               className: 'header-brand',
             });
+          },
+          emptyStateMessageFn: function(React) {
+            return window.config?.branding?.empty_state || window.sonador.home.message;
           }
         }
 

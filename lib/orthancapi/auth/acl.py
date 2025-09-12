@@ -110,7 +110,7 @@ class ResourceAuthorization:
 		# Check system permissions
 		if level == orthanc_api.ORTHANC_SYSTEM:
 
-			# DICOMweb viewer permissions: view resources or retrieve metadata of specific studie
+			# DICOMweb viewer permissions: view resources or retrieve metadata of specific studies
 			if (method.lower() == gapicodes.HTTP_GET.lower() and orthanc_api.ORTHANC_DICOMWEB_STUDIES in resource) \
 				or (orthanc_api.ORTHANC_WADO in resource):
 
@@ -125,6 +125,11 @@ class ResourceAuthorization:
 			elif (orthanc_api.ORTHANC_COMMENTS in resource \
 				and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
 				return self.comment_edit
+
+		# Check worklist permission: require worklist and view. Worklist provides permission to interact with 
+		# worklist endpoint and view providers permission to interact with the resource.
+		elif orthanc_api.ORTHANC_RESOURCE_WORKLIST in resource:
+			return self.worklist and self.view
 
 		# Check view permissions
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
