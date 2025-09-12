@@ -24,7 +24,8 @@ acorn-wgtauth>=0.1.3
 acorn-largefiles>=0.1.1
 
 
-# GoogleCloudStorage
+# Google/S3 Cloud Storage
+botocore==1.32.0
 google-api-core==2.2.2
 google-auth==2.3.3
 google-cloud-core==2.1.0
