@@ -193,7 +193,7 @@ class SonadorCredentialProvider(SonadorCredentialBaseProvider):
 			else: tvalue = cleaned_data.get(tokenvalue_kw)
 
 			# Remove "api-token" and trim (if present)
-			if API_ACCESS_APITOKEN_QSPARAM in tvalue.lower():
+			if API_ACCESS_APITOKEN_QSPARAM in (tvalue or '').lower():
 				tvalue = tvalue.replace(API_ACCESS_APITOKEN_QSPARAM.lower(), '').replace(API_ACCESS_APITOKEN_QSPARAM.upper(), '').strip()
 
 			# Retrieve API token and assign user

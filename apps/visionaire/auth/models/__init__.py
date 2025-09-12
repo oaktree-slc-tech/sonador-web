@@ -162,7 +162,7 @@ class PacsImagingServerUserAuthorization(GuruTokenModel):
 		app_label = 'visionaire'
 		unique_together = ('server', 'user')
 
-	def has_perm(self, resource, method, level):
+	def has_perm(self, *args, **kwargs):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
 			@returns bool: True if the user has the permission, False otherwise
@@ -176,7 +176,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	server = models.ForeignKey('visionaire.PacsImagingServer', on_delete=models.CASCADE, related_name='group_authorizations')
 	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
 
-	# Global permissions
+	# Server permissions
 	query = models.BooleanField(default=False, help_text='Submit global DICOM resource queries to the server')
 	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
 	worklist = models.BooleanField(
@@ -185,6 +185,8 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		verbose_name='Tags', default=False, help_text='Allow members of the group to view tags.')
 	tag_modify = models.BooleanField(
 		verbose_name='Manage Tags', default=False, help_text='Allow members of the group to manage tags.')
+	devices_list = models.BooleanField(
+		verbose_name='Manage Device List', default=False, help_text='Allow members to manage the group device list.')
 
 	# Resource permissions
 	resource = models.CharField(max_length=2048, default='*',
@@ -223,8 +225,11 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		'''
 		# User has superuser permissions
 		if user.is_superuser:
+			logger.debug('Superadmin Permission Grant: group=%s resource="%s" level="%s" orthanc_id="%s" dicom_uid="%s"' % (
+				self.group.name, resource, level, orthanc_id, dicom_uid,
+			))
 			return True
-		
+
 		# User is a member of the group, check server permissions
 		elif self.group.user_set.filter(username=user.username).exists():
 			_server_auth = OrthancServerAuthorization(**pick(self, SONADOR_PERMS))
@@ -275,7 +280,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			# If no other authorization was successful, check if resource UID is within global scope of the user
 			if self.resource == WILDCARD \
 				or self.user_has_system_perm(user, level, resource) \
-				or self.user_has_resource_perm(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
+				or self.user_has_resource_access(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
 
 				# Check resource request against the policy permissions
 				_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
@@ -289,7 +294,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		'''
 		return False
 
-	def user_has_resource_perm(self, user, level, resource, orthanc_id, dicom_uid=None):
+	def user_has_resource_access(self, user, level, resource, orthanc_id, dicom_uid=None):
 		'''	Determine if the user has access to the requested resource
 		'''
 		# Authorize resource		
@@ -303,7 +308,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		for rclass,rgrant in policy.items():
 			if orthanc_id in rgrant:
 				return True
-
+		
 		# Retrieve authorization scope defined by the policy
 		auth_scope = copy.deepcopy(policy)
 		for rclass, rgrant in policy.items():
@@ -343,7 +348,6 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			user=OrthancSonadorUser(id=user.pk, **pick(user, ('username', 'email'))),
 			group=OrthancSonadorGroup(id=self.group.pk, name=self.group.name),
 			level=level, method=method, uri=resource, **{ 'orthanc-id': orthanc_id, 'dicom-uid': dicom_uid })
-		logger.debug('Sonador/Orthanc resource authorization request:\n%s' % _auth_request.json())
 		_rdata = json.loads(_auth_request.json())
 
 		# Ensure that keys contain a dash instead of an underscore
@@ -354,8 +358,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			if _val is not None:			
 				_rdata[f.replace('_', '-')] = _val		
 
-		return server_controloperation_post(self.server, _rdata, resource='system/acl/resource', 
+		_acl_rdata = server_controloperation_post(self.server, _rdata, resource='system/acl/resource', 
 			headers=self.server.sonador_auth)
+		logger.debug('<---  Sonador -> Orthanc Resource Authorization Request/Response group="%s" group-name="%s" level="%s"  --->\nrequest: %s\nresponse: %s\n<--- --->' % (
+			self.group.pk, self.group.name, level, _rdata, _acl_rdata
+		))
+		return _acl_rdata
 
 	def orthanc_resource_info(self, level, orthanc_id):
 		'''	Retrieve the resource details for the provided Orthanc ID

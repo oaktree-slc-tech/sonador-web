@@ -57,7 +57,7 @@ class PacsImagingServerApiManagementView(OhifApiObjectMixin, SonadorApiObjectMan
 			
 			# Retrieve servers for which a specific user is authorized
 			return self.model.objects.filter(active=True).filter(
-				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user))
+				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user)).distinct()
 
 		# Return empty queryset to prevent data leakage
 		return queryset.none()

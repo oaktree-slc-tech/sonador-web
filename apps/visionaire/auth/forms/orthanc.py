@@ -56,7 +56,7 @@ class ImagingServerFormMixin:
 		self.server = kwargs.pop("server", None)
 
 		if not self.server:
-				raise ValueError("Unable to initialize authorization form: imaging server not provided")
+			raise ValueError("Unable to initialize authorization form: imaging server not provided")
 
 
 class ImagingServerIntegrationAuthorizationForm(ImagingServerFormMixin, IntegrationAuthorizationForm):
@@ -123,8 +123,8 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		if cleaned_data.get('token_key') == API_REFERRER_REFERER_HEADER:
 
 			# Retrieve querystring components
-			rparts = urlparse.parse_qs(urlparse.urlparse(cleaned_data.get('token_value')).query) \
-					if getattr(urlparse.urlparse(cleaned_data.get('token_value')), 'query', None) \
+			rparts = urlparse.parse_qs(urlparse.urlparse(cleaned_data.get('token_value', '')).query) \
+					if getattr(urlparse.urlparse(cleaned_data.get('token_value', '')), 'query', None) \
 				else {}
 
 			logger.debug('Querystring parameters from referrer URL: %r' % rparts)
@@ -147,12 +147,31 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 					logger.debug('Token value in referrer URL: %s' % cleaned_data['referrer_token_value'])
 
 		# Signed session key passed as "token", add "Bearer" keyword to the token value
-		elif cleaned_data.get('token_key') == API_ACCESS_TOKEN_QSPARAM and ':' in cleaned_data.get('token_value'):
-			cleaned_data['token_value'] = '%s %s' % (OAUTH_TOKEN_TYPE_BEARER, cleaned_data.get('token_value'))
+		elif cleaned_data.get('token_key') == API_ACCESS_TOKEN_QSPARAM and ':' in cleaned_data.get('token_value', ''):
+			cleaned_data['token_value'] = '%s %s' % (OAUTH_TOKEN_TYPE_BEARER, cleaned_data.get('token_value', ''))
 
 		# Parse authentication data
 		cleaned_data = self.clean_authdata(cleaned_data)
 		cleaned_data = self.clean_auth_request(cleaned_data)
+		return cleaned_data
+
+	def _clean_dcmweb_resource_level(self, cleaned_data, dcmweb_regex):
+		''' Use the provided DICOMweb regular expression patter to to normalize the resource level
+		'''
+		# Parse resource type and UID from URL
+		if dcmweb_regex and dcmweb_regex.group('uid') \
+			and (dcmweb_regex.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES 
+				or dcmweb_regex.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL):
+
+			# Convert matched resource to type to corresponding level code in Orthanc API. If the resource type is the 
+			# plural form of the level, convert to singular before processing the ACL request
+			cleaned_data['level'] = orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL.get(dcmweb_regex.group('resource_type')) \
+					if dcmweb_regex.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL \
+				else dcmweb_regex.group('resource_type')				
+
+			# DICOM UID parsed from URL
+			cleaned_data['dicom_uid'] = dcmweb_regex.group('uid')
+
 		return cleaned_data
 
 	def clean_auth_request(self, cleaned_data):
@@ -167,7 +186,7 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		uri = cleaned_data.get('uri')
 		level = cleaned_data.get('level')
 		orthanc_id = cleaned_data.get('orthanc_id')
-		dicom_uid = cleaned_data.get('dicom_uid')		
+		dicom_uid = cleaned_data.get('dicom_uid')
 
 		# The requested resource might be provided by the Orthanc advanced authorization
 		# plugin as a UID or a URL. Transforming system requests requries looking at both fields.
@@ -183,25 +202,36 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_STUDY
 				cleaned_data['dicom_uid'] = _worklist_study.group('uid')
 
-		# Check for DICOMweb study or series download
+		# Check for DICOMweb study or series archive download
 		if orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_RESOURCE_ARCHIVE in _resource:
 
 			# Parse DICOM UID and resource level from URI
 			_dcmweb_archive = orthanc_api.ORTHANC_DICOMWEB_DOWNLOAD_REGEX.match(_resource)
+			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_archive)
 
-			# Parse resource type and UID from archive URL
-			if _dcmweb_archive and _dcmweb_archive.group('uid') \
-				and (_dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES 
-					or _dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL):
+		# Check for DICOMweb study comment request
+		elif orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_RESOURCE_COMMENT in _resource:
 
-				# Convert matched resource to type to corresponding level code in Orthanc API. If the resource type is the 
-				# plural form of the level, convert to singular before processing the ACL request
-				cleaned_data['level'] = orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL.get(_dcmweb_archive.group('resource_type')) \
-						if _dcmweb_archive.group('resource_type') in orthanc_api.ORTHANC_LOCALAUTH_RESOURCES_PLURAL \
-					else _dcmweb_archive.group('resource_type')				
+			# Parse DICOM UID and resource level from URI
+			_dcmweb_comment = orthanc_api.ORTHANC_DICOMWEB_COMMENT_REGEX.match(_resource)
+			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_comment)
 
-				# DICOM UID parsed from URL
-				cleaned_data['dicom_uid'] = _dcmweb_archive.group('uid')
+		# Check for DICOMweb ACL lookup (resource permissions)
+		elif orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_DICOMWEB_RESOURCE_ACL in _resource:
+
+			# Parse DICOM UID and resource level from URI
+			_dcmweb_resource_perms = orthanc_api.ORTHANC_DICOMWEB_ACL_PERMS_REGEX.match(_resource)
+			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_resource_perms)
+
+		# Check for DICOMweb series distortion filter
+		elif orthanc_api.ORTHANC_DICOMWEB_DISTORTION_FILTER in _resource:
+			
+			# Parse DICOMM UID and resource level
+			_dcmweb_distortion_filter = orthanc_api.ORTHANC_DICOMWEB_DISTORTION_FILTER_REGEX.match(_resource)
+
+			if _dcmweb_distortion_filter and _dcmweb_distortion_filter.group('uid'):
+				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_STUDY
+				cleaned_data['dicom_uid'] = _dcmweb_distortion_filter.group('uid')
 
 		# Check for Orthanc / Sonador Integration APIs
 		elif orthanc_api.ORTHANC_GROUPS_ROOT in _resource and not orthanc_id:
@@ -211,5 +241,39 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 			if _group_tags:
 				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_GROUP
 				cleaned_data['orthanc_id'] = int(_group_tags.group('uid'))
+
+		# Check for Orthanc Internal DICOMweb endpoint requests
+		elif orthanc_api.ORTHANC_DICOMWEB_INTERNAL in _resource:
+
+			# DICOMweb series metadata requests
+			if _dcmweb_series_meta := orthanc_api.ORTHANC_DICOMWEB_INTERNAL_SERIES_METADATA_REGEX.match(_resource):			
+				cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_series_meta)
+
+			# DICOMweb instance requests
+			elif _dcmweb_instance := orthanc_api.ORTHANC_DICOMWEB_INTERNAL_INSTANCE_REGEX.match(_resource):
+				cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_instance)
+
+			# DICOMweb instance / frame requests
+			elif _dcmweb_instance_frameimage := orthanc_api.ORTHANC_DICOMWEB_INTERNAL_INSTANCE_FRAME_REGEX.match(_resource):
+				cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_instance_frameimage)
 						
+		return cleaned_data
+
+
+class OrthancServiceResourceAuthorizationForm(OrthancServiceAuthorizationForm):
+	'''	Specialized form of OrthancServiceAuthorizationForm which enforces resource level and orthanc-uid
+		as required fields.
+	'''
+	def clean(self, *args, **kwargs):
+		cleaned_data = super().clean(*args, **kwargs)
+
+		# Ensure that a resource level was provided with the request
+		if not cleaned_data.get('level'):
+			raise forms.ValidationError('Resouce requests require a resource level in order to be valid.')
+
+		# Ensure that an Orthanc or DICOM UID was provided to identify the resource
+		if not cleaned_data.get('orthanc_id') and not cleaned_data.get('dicom_uid'):
+			raise forms.ValidationError('Invalid resource UID. Resource requests require that either an Orthanc UID or DICOM UID be '
+				+ 'provided with the request.')
+
 		return cleaned_data

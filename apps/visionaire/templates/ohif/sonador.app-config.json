@@ -7,7 +7,10 @@
   "servers": { "dicomWeb": null },
   "fuzzyMatching": false,
 
-  {% if logo %}"branding": { "logo": "{{ logo }}"},{% endif %}
+  {% if logo or empty_state %}"branding": {
+    {% if logo %}"logo": "{{ logo }}",{% endif %}
+    "empty_state": {% if empty_state %}"{{ empty_state|escapejs }}"{% else %}""{% endif %}
+  },{% endif %}
   "staticUrl": "{% static 'js' %}",
   {% if SONADOR_URL %}"sonadorUrl": "{{ SONADOR_URL }}",{% endif %}
 

@@ -16,7 +16,7 @@ from .views.oauth import OpenIDLoginRedirectView, OpenIDLoginCallbackView, oAuth
 	oAuth2TokenAuthorizationView, CSRFTokenObtainView
 
 from .views.service import orthanc
-from .views.service import OrthancServiceAuthorizationView, OrthancSecureUriRedirectView
+from .views.service import OrthancServiceAuthorizationView, OrthancSecureUriRedirectView, OrthancResourceAclIntrospectionView
 
 from .views.cred import SonadorUserCredentialManagementView, SonadorUserTokenManagementView, SonadorUserCredentialRestView
 from .forms.cred import SonadorApiAccessTokenForm, SonadorApiAccessCredentialForm
@@ -57,6 +57,17 @@ urlpatterns_service_auth = [
 	re_path(r'^orthanc/(?P<serverid>\w+)/token-decode/?$', 
 		orthancserver_basicauth(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser)(
 			orthanc.OrthancAuthTokenDecodeView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))), name='service-orthanc-token-decode'),
+
+	# Orthanc Resource ACL Introspection: endpoint to allow for Orthanc server to introspect ACL permissions
+	# for a resource (patient, study, series) taking into account both local and global policies
+	re_path(r'^orthanc/(?P<serverid>\w+)/resource-acl/?$', 
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+				api_request_authentication=bearertoken_api_request_authentication,
+				apiaccess_token_model=SonadorApiAccessToken,
+				allowed_http_methods_url_signature=('OPTIONS', 'POST'),
+				allowed_http_methods_token_access=('OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			OrthancResourceAclIntrospectionView.as_view()), name='resource-orthanc-acl'),
 	
 	# Orthanc explorer (classic) and admin (OE2)
 	re_path(r'^orthanc/(?P<serverid>\w+)/explorer/?$',

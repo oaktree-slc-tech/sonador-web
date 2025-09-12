@@ -51,7 +51,8 @@ class PacsImagingServerAuthUserProfileView(OrthancServiceImagingServerMixin, Use
 	def user_has_perm(self, *args, **kwargs):
 		'''	Determine whether the user has access to the resource that they are attempting retrieve
 		'''
-		return self.form.server.user_has_access(self.form.user)
+		_access = self.form.server.user_has_access(self.form.user)
+		return _access
 
 	def createProfileResponse(self, *args, **kwargs):
 		'''	Add authorization and validity parameters to the response
@@ -118,7 +119,7 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 		user_email = self.form.user.email if isinstance(self.form.user, get_user_model()) else None		
 
 		# Labels and permissions the user is authorized for
-		authorized_labels = ['all']
+		authorized_labels = []
 		permissions = []
 		if (isinstance(self.form.user, get_user_model()) and self.form.user.is_superuser) \
 			or (isinstance(self.form.user, str) and self.form.user == SONADOR_USERNAME):
@@ -129,6 +130,7 @@ class OrthancAuthUserProfileView(PacsImagingServerAuthUserProfileView):
 			'name': user_label, 'authorized-labels': authorized_labels, 'permissions': permissions,
 		})
 
+		logger.debug('<-- Orthanc Resource Profile -->\n%s\n<--- --->' % response)
 		return response
 
 
@@ -229,4 +231,4 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 		except self.imagingserver_class.DoesNotExist as err:
 			return guru_page_not_found(self.request, err)		
 
-		return super().post(request, *args, **kwargs) 
+		return super().post(request, *args, **kwargs)

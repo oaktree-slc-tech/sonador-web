@@ -36,11 +36,18 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		# Retrieve currently active site and any associated custom branding
 		site = get_current_site(self.request)
 		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+
+		# Add logo image
 		context['site'] = ssite if ssite else site
 		if ssite and ssite.logo:
 			context['logo'] = ssite.logo.url
 		else:
 			context['logo'] = static('images/sonador-logo.ng.svg')
+
+		# Add welcome message
+		if ssite and ssite.welcome:
+			context['empty_state'] = ssite.welcome
+		else: context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
 
 		# If enabled, add the authentication endpoint
 		if gsetting('AUTH_ENABLED'):
@@ -107,8 +114,10 @@ class OhifDicomViewer(TemplateView):
 		else:
 			context['logo'] = static('images/sonador-logo.ng.svg')
 
-		# Empty state (first-run) message
-		context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
+		# Empty state (first-run) messageo
+		if ssite and ssite.welcome:
+			context['empty_state'] = ssite.welcome
+		else: context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
 
 		# Retrieve configuration for a specific image server
 		if self.kwargs.get(self.imageserver_objectid_url_param):
@@ -151,6 +160,6 @@ class OhifDicomViewer(TemplateView):
 
 			# Retrieve servers for which a specific user is authorized
 			return self.model.objects.filter(active=True).filter(
-				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user))
+				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user)).distinct()
 
 		return self.model.objects.none()
