@@ -1,9 +1,17 @@
+import logging, posixpath, json
+
+from blake3 import blake3
 import orthancapi.apisettings as orthanc_api
+
+from django.core.cache import cache
+from guru.helpers import gsetting, create_token
 
 from ...forms.orthanc import OrthancServiceResourceAuthorizationForm
 
 from ..user import user2json
 from .orthanc_auth import OrthancServiceAuthorizationView
+
+logger = logging.getLogger(__name__)
 
 
 class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
@@ -13,11 +21,45 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 		provided resource.
 	'''
 	formclass = OrthancServiceResourceAuthorizationForm
+	auth_response_cache_prefix = 'resource-acl'
+
+	def cache_auth_response_key(self, *args, form_data=None, **kwargs):
+		'''	Create a auth response cache key for resource ACL introspection requests
+		'''
+		# Retrieve request components
+		form_data = form_data or self.getRequestJsonData(self.request)
+		_, orthanc_id, level,_,_,_ = self.get_auth_request_params(form_data=form_data, **kwargs)
+		
+		if not orthanc_id or not level:
+			raise ValueError('Unable to retrieve cache key, invalid Orthanc ID or resource level')
+
+		# Generate hash key
+		return self.auth_response_cache_key_template % (
+			(gsetting('SECRET_KEY') or create_token()).encode(self.auth_response_encoding),
+			('%s%s%s' % (form_data.get('token_key') or create_token(), self.auth_response_cache_sep, 
+				form_data.get('token_value') or create_token())).encode(self.auth_response_encoding),
+			self.auth_response_cache_prefix.encode(self.auth_response_encoding),
+			('%s%s%s' % (level, self.auth_response_cache_sep, orthanc_id)).encode(self.auth_response_encoding))
+
+	def cache_set_authorization_response(self, authorization_response, *args, **kwargs):
+		'''	Cache an authorization response from the system cache
+		'''
+		if authorization_response:
+
+			_cache_key = self.cache_auth_response_key(*args, form_data=self.form.cleaned_data, **kwargs)
+			_cache_digest = blake3(_cache_key).hexdigest()
+			cache.set(_cache_digest, json.dumps(authorization_response), self.form.expires_in)
+
+			logger.debug('Auth response cached. view="%s" cache-key="%s" digest="%s" response="%s" valid="%s"' % (
+				self.auth_response_cache_prefix, _cache_key, _cache_digest, authorization_response, self.form.expires_in
+			))
+
 
 	def get_authorization_response(self, adata, *args, **kwargs):
 		'''	Parse the authorization request and create the authorization response
 		'''
-		user, orthanc_id, level, _, resource, _ = self.get_auth_request_params()
+		user, orthanc_id, level, _, resource, _ = self.get_auth_request_params(
+			form_data=self.form.cleaned_data if self.form.is_valid() else self.form.data)
 
 		if self.form.is_valid() and self.form.server.user_has_access(self.form.user):
 			adata['user'] = user2json(self.form.user, include_groups=True, include_permissions=False)
@@ -27,9 +69,9 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 
 			# Read global policies and determine if any policies for which the user is a member grant
 			# permission to the resource.
-			for _p in self.form.server.group_authorizations.filter(group__user=self.form.user):
+			for _p in self.form.server.group_authorizations.filter(group__user=user):
 
-				if _p.user_has_resource_access(self.form.user, level, resource, orthanc_id):
+				if _p.user_has_resource_access(user, level, resource, orthanc_id):
 
 					# Check all permissions, update "false" permissions with grants from policies
 					for _rp in _perms.keys():

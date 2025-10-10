@@ -302,3 +302,13 @@ CSRF_TRUSTED_ORIGINS = siteconfig_site.get('CSRF_TRUSTED_ORIGINS', [])
 siteconfig_viewer = siteconfig.get('Viewer', {})
 VIEWER_EMPTY_STATE_MESSAGE = siteconfig_viewer.get('VIEWER_EMPTY_STATE_MESSAGE',
     'Your user account is not associated with any imaging servers. Please contact your system administrator.')
+
+
+
+# Django Response Cache
+siteconfig_cache = siteconfig.get('Cache', {})
+CACHE_ENABLED = config_str2bool(siteconfig_cache.get('CACHE_ENABLED', False))
+if CACHE_ENABLED:
+    CACHES = siteconfig_cache.get('CACHES', {})
+    if not CACHES:
+        raise ValueError('The Sonador cache backend is enabled, but no cache instances are configured.')

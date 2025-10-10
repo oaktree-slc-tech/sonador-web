@@ -186,7 +186,9 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	tag_modify = models.BooleanField(
 		verbose_name='Manage Tags', default=False, help_text='Allow members of the group to manage tags.')
 	devices_list = models.BooleanField(
-		verbose_name='Manage Device List', default=False, help_text='Allow members to manage the group device list.')
+		verbose_name='Device List', default=False, help_text='Allow members of the group to run distortion filter and device tests.')
+	devices_list_modify = models.BooleanField(
+		verbose_name='Manage Device List', default=False, help_text='Allow members of the group to manage the device list.')
 
 	# Resource permissions
 	resource = models.CharField(max_length=2048, default='*',
@@ -258,6 +260,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 						user, level, orthanc_id, resource, method, _orthanc_auth,
 					))
 
+					if resource and orthanc_api.ORTHANC_DICOMWEB_RESOURCE_ACL in resource \
+							and self.query:
+						logger.warning(('Orthanc resource-acl request for user=%s level="%s" orthanc-id="%s" resource="%s". Limited grant '
+							+ 'because policy includes "query" permission.') % (user, level, orthanc_id, resource))
+						return True
+
 					# Parse "local" permisisons from Orthanc and authorize request
 					_auth = OrthancResourceAuthorization(**_orthanc_auth, worklist=self.worklist)
 					if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
@@ -276,6 +284,17 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 					# Change or modify tags
 					elif method and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
 						return self.tag_modify
+
+				# Distortion-filter / Devices request
+				elif orthanc_api.ORTHANC_RESOURCE_DISTORTION_FILTER_DEVICE in resource and orthanc_id == self.group.pk:
+
+					# Read distortion filter devices
+					if method and method.lower() in (gapicodes.HTTP_GET.lower()):
+						return self.devices_list
+
+					# Change or modify distortion filter devices
+					elif method and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower()):
+						return self.devices_list_modify
 
 			# If no other authorization was successful, check if resource UID is within global scope of the user
 			if self.resource == WILDCARD \
@@ -443,6 +462,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	def json(self):
 		_json = {
 			'token': self.pk, 'server': self.server.pk, 'group': self.group.pk,
-			**pick(self, ('query', 'upload', 'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration', 'worklist'))
+			**pick(self, ('query', 'upload', 'tag', 'tag_modify', 'devices_list', 'devices_list_modify',
+				'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration', 'worklist'))
 		}
 		return _json

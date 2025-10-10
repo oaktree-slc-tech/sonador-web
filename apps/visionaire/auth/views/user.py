@@ -327,6 +327,7 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 	'''
 	worklist = forms.NullBooleanField(required=False)
 	tag = forms.NullBooleanField(required=False)
+	devices_list = forms.NullBooleanField(required=False)
 
 	filtermodel = Group
 
@@ -334,6 +335,7 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		'name': 'name__icontains',
 		'worklist': 'server_authorizations__worklist',
 		'tag': 'server_authorizations__tag',
+		'devices_list': 'server_authorizations__devices_list',
 	}
  
 	def __init__(self, *args, server=None, user=None, **kwargs):
@@ -357,7 +359,7 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 			_groups = _groups.filter(user=self.user)
 
 		return _groups.distinct()
-
+		
 
 class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFilterView):
 	'''	Sonador API view which can be used to search/filter Sonador groups. Only groups which the user

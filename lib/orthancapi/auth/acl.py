@@ -47,6 +47,10 @@ class ServerAuthorization:
 		elif method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_DICOMWEB_WORKLIST_STUDY_QUERY:
 			return True
 
+		# Orthanc System Endpoint: deployment details needed for config/frontend
+		elif method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_SYSTEM_ENDPOINT:
+			return True
+
 		return None
 
 	def query_perm(self, resource, method):
@@ -82,13 +86,15 @@ class ServerAuthorization:
 class ResourceAuthorization:
 	'''	Helper class which can be used to assess a set of Sonador permissions
 		to determine if access should be granted to a resource.
-
+	
 		* `view`: retrieve pixel/binary data for the resource
 		* `modify`: modify meta or binary data
 		* `remove`: delete the resource from the server
 		* `comment_edit`: edit/modify comments for the resource. When `comment_edit` is True,
 			users are also able to view other comments, regardless of the value of `comment_view`.
 		* `comment_view`: view (but not modify) comments
+		* `acl`: manage ACL permissions for the resource
+		* `worklist`: create and access worklists
 	'''
 	def __init__(self, view=None, modify=None, remove=None, comment_edit=None, comment_view=None, acl=None,
 			worklist=None, **kwargs):
