@@ -224,7 +224,7 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_resource_perms)
 
 		# Check for DICOMweb series distortion filter
-		elif orthanc_api.ORTHANC_DICOMWEB_DISTORTION_FILTER in _resource:
+		elif orthanc_api.ORTHANC_DICOMWEB_GROUPS_ROOT in _resource:
 			
 			# Parse DICOMM UID and resource level
 			_dcmweb_distortion_filter = orthanc_api.ORTHANC_DICOMWEB_DISTORTION_FILTER_REGEX.match(_resource)
@@ -232,15 +232,16 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 			if _dcmweb_distortion_filter and _dcmweb_distortion_filter.group('uid'):
 				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_STUDY
 				cleaned_data['dicom_uid'] = _dcmweb_distortion_filter.group('uid')
+				cleaned_data['group'] = int(_dcmweb_distortion_filter.group('group_uid'))
 
-		# Check for Orthanc / Sonador Integration APIs
+		# Orthanc / Sonador Integration APIs: Group Owned Resources
 		elif orthanc_api.ORTHANC_GROUPS_ROOT in _resource and not orthanc_id:
 
-			# Group tags request
-			_group_tags = orthanc_api.ORTHANC_GROUP_TAGS_REGEX.match(_resource)
-			if _group_tags:
+			# Group tags or distortion filter request
+			_group_resource = orthanc_api.ORTHANC_GROUP_UID_REGEX.match(_resource)			
+			if _group_resource:
 				cleaned_data['level'] = orthanc_api.ORTHANC_RESOURCE_GROUP
-				cleaned_data['orthanc_id'] = int(_group_tags.group('uid'))
+				cleaned_data['orthanc_id'] = int(_group_resource.group('uid'))
 
 		# Check for Orthanc Internal DICOMweb endpoint requests
 		elif orthanc_api.ORTHANC_DICOMWEB_INTERNAL in _resource:
