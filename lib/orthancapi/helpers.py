@@ -1,7 +1,7 @@
 import posixpath
 
 from .apisettings import ORTHANC_STATIC_RESOURCES, ORTHANC_OHIF_ROOT, ORTHANC_OHIF_VIEWER, ORTHANC_OHIF_SEGEDITOR, \
-	ORTHANC_OHIF_ASSETS
+	ORTHANC_OHIF_MANIFEST_JSON, ORTHANC_OHIF_ASSETS
 
 
 def orthanc_hosted_staticfile(uri=None, method=None):
@@ -18,6 +18,7 @@ def orthanc_hosted_staticfile(uri=None, method=None):
 	# Allow requests to Orthanc OHIF plugin
 	elif resource == ORTHANC_OHIF_VIEWER \
 		or resource == ORTHANC_OHIF_SEGEDITOR \
+		or resource == ORTHANC_OHIF_MANIFEST_JSON \
 		or resource.startswith(ORTHANC_OHIF_ASSETS):
 		return True
 

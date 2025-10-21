@@ -112,11 +112,34 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		self._init_server(*args, **kwargs)		
 		super().__init__(*args, **omit(kwargs, ('server',)))
 
+	def full_clean(self, *args, **kwargs):
+		'''	Run data preparation steps before executing clean. Used by credential providers to pre-opulate
+			token_key and token_value to prevent error messages. 
+		'''
+		for cred_provider in self.credential_providers:
+			try:
+
+				# Execute data prep steps
+				if getattr(cred_provider, 'clean_prep', None):
+
+					# Create a copy of the raw data
+					_data = self.data.copy()
+					_cred = cred_provider(_data, **self._get_credential_provider_kwargs(cred_provider, *kwargs))
+					_prep_data = _cred.clean_prep()
+					if _prep_data:
+						self.data.update(_prep_data)
+
+			except Exception as err:
+				logger.warning('Unable to execute data preparation logic for provider=%s.\nError: %s. Skipping data preparation.' 
+					% (cred_provider.__name__, err))
+
+		return super().full_clean()
+
 	def clean(self, *args, **kwargs):
 		'''	Clean data and convert parameters to the format required needed for session
 			or API token authorization.
 		'''
-		cleaned_data = super(OrthancServiceAuthorizationForm, self).clean(*args, **kwargs)
+		cleaned_data = super().clean(*args, **kwargs)
 		logger.debug('Authentication request data:\n%r' % cleaned_data)
 
 		# Parse authentication from "Referrer" headers
@@ -153,6 +176,7 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		# Parse authentication data
 		cleaned_data = self.clean_authdata(cleaned_data)
 		cleaned_data = self.clean_auth_request(cleaned_data)
+		
 		return cleaned_data
 
 	def _clean_dcmweb_resource_level(self, cleaned_data, dcmweb_regex):

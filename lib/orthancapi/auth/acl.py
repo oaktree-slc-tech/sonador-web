@@ -145,6 +145,11 @@ class ResourceAuthorization:
 		# 1. POST request for patient, series, or study
 		# 2. POST request for study worklist
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
+
+			# Check for comment requsts
+			if resource and orthanc_api.ORTHANC_COMMENTS in resource:
+				return self.comment_edit
+
 			return self.modify
 
 		# Check remove permissions
