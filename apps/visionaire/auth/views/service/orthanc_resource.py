@@ -54,7 +54,6 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 				self.auth_response_cache_prefix, _cache_key, _cache_digest, authorization_response, self.form.expires_in
 			))
 
-
 	def get_authorization_response(self, adata, *args, **kwargs):
 		'''	Parse the authorization request and create the authorization response
 		'''
@@ -62,7 +61,8 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 			form_data=self.form.cleaned_data if self.form.is_valid() else self.form.data)
 
 		if self.form.is_valid() and self.form.server.user_has_access(self.form.user):
-			adata['user'] = user2json(self.form.user, include_groups=True, include_permissions=False)
+			user = user or self.form.user
+			adata['user'] = user2json(user, include_groups=True, include_permissions=False)
 
 			# Start with a policy set with all permissions set to False
 			_perms = dict((_rp, False) for _rp in orthanc_api.SONADOR_RESOURCE_PERMS)
@@ -87,7 +87,7 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 
 				# Local permission are querried following global permissions since they require 
 				# API requests to be sent to the Orthanc server instance.
-				for _p in self.form.server.group_authorizations.filter(group__user=self.form.user):
+				for _p in self.form.server.group_authorizations.filter(group__user=user):
 
 					# Retrieve "local" permissions for the resource from Orthanc
 					orthanc_auth = _p.orthanc_resource_auth(

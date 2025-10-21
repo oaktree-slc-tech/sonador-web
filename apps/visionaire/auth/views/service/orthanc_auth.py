@@ -108,7 +108,7 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 			form_data=self.form.cleaned_data if self.form.is_valid() else self.form.data)
 
 		# Allow requests for static assets
-		if self.form.is_valid() and orthanc_hosted_staticfile(uri=_resource, method=_method):
+		if self.form.cleaned_data.get('token_key') == 'static-asset' and self.form.user:
 			adata.update({ 'granted': True, 'validity': 5, 
 				gapi.API_MESSAGE: 'ohif-static-asset' if 'ohif' in _resource else 'static-asset'
 			})
@@ -153,7 +153,7 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 
 		if not adata.get('granted'):
 			logger.error('Token rejected: user="%s" level="%s" orthanc-id="%s resource="%s" method="%s"\nresponse=%s\nrequest=%s' % (
-				_user, _level, _orthanc_id, _resource, _method, adata, {
+				_user or getattr(self.form, 'user', None) or '(null)', _level, _orthanc_id, _resource, _method, adata, {
 					**omit(self.form.cleaned_data, ('token_value',)),
 					'token_value': masked_value(self.form.cleaned_data.get('token_value')) if self.form.cleaned_data.get('token_value') else '(null)',
 				}
