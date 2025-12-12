@@ -83,6 +83,8 @@ siteconfig_static = siteconfig.get('Resource-Files')
 # is used to aggregate all assets prior to deployment. It should be present,
 # even for development deployments. (The development module from Sonador)
 # consumes from this settings file.
+if not siteconfig_static:
+	raise ValueError('Invalid Resource-Files section in site config, add a Resource-Files section ')
 STATIC_ROOT = siteconfig_static.get('STATIC_ROOT')
 if not os.path.exists(STATIC_ROOT or ''):
 	raise ValueError('Invalid static files root folder. "%s" does not exist.' % STATIC_ROOT)

@@ -297,6 +297,11 @@ CORS_ALLOWED_ORIGIN_REGEXES = siteconfig_site.get('CORS_ALLOWED_ORIGIN_REGEXES',
 CORS_ALLOW_CREDENTIALS = config_str2bool(siteconfig_site.get('CORS_ALLOW_CREDENTIALS', False))
 CSRF_TRUSTED_ORIGINS = siteconfig_site.get('CSRF_TRUSTED_ORIGINS', [])
 
+SECURE_CROSS_ORIGIN_OPENER_POLICY = siteconfig_site.get('SECURE_CROSS_ORIGIN_OPENER_POLICY', 'same-origin')
+if SECURE_CROSS_ORIGIN_OPENER_POLICY == 'None':
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+
+
 
 # Viewer Settings
 siteconfig_viewer = siteconfig.get('Viewer', {})
