@@ -20,32 +20,18 @@ from secure import apisettings as secureapi
 from secure.models import ApiAccess, ApiAccessToken
 
 from wgtauth.apisettings import BASIC_AUTH_TYPE
+from wgtauth import hexsigning
+from wgtauth.services.helpers import create_session_token, openid_get_django_user
 
 from orthancapi import apisettings as orthanc_api
 
 from ..models.servers import PacsImagingServer
 from ..helpers import SESSION_SALT
-from . import hexsigning
 
 logger = logging.getLogger(__name__)
 
 
-def create_session_token(session_key, token_payload=None, salt=SESSION_SALT):
-	'''	Create a session token from the provided session key and token payload.
 
-		@input session_key (str): Session key to be used for the token payload
-		@input token_payload (dict): key/value data to add to the token payload
-
-		@returns str: token value
-	'''
-	if token_payload and not isinstance(token_payload, dict):
-		raise TypeError('Invalid type "%s", token payloads must be a dictionary instance' % type(token_payload).__name__)
-
-	# Add token payload to dictionary
-	if token_payload:
-		token_payload['session'] = session_key
-
-	return 'h:%s' % hexsigning.dumps(token_payload or session_key, salt=salt)
 
 
 def parse_resource_policy(resource_pollicy, sep_policy=' ', sep_resource=',', sep_equals='='):
@@ -290,82 +276,3 @@ def api_permission_group_member(user, request, vargs, vkwargs, group_url_param='
 	return False
 
 
-# OpenID Connect helper methods: these methods are used by the workflow views
-# and by the Orthanc token validation views in order to enable validation of
-# remote tokens
-
-
-def openid_get_django_user(authserver, socialuser_model, openid_username, authtoken, request=None):
-	'''	Retrieve the auth profile associated with the OpenID username provided
-		by the auth server. From that, fetch the user model. If the user does not exist,
-		a username will be constructed from the data provided by the server.
-
-		Username processing:
-
-		1. If available, parse the user handle portion of the email and use that
-		2. For accounts without email data, convert the first name and last name to lowercase
-			and then append them with a dot.
-		3. For accounts without first name and last name, use the full name and replace
-			spaces with a dot.
-		4. For accounts without any identifiers, generate a random string to use as the username
-
-		If the user profile does not exist, one will be created and the first login signal will
-		be triggered.
-
-		@input authserver (sonador.auth.models.SocialAuthorizationServer): authorization server
-			instance and provider to be used for retrieving the user details.
-		@input socialuser_model (sonador.auth.models.SocialUserAccount): social user account class to
-			be used for creating a Django user instance and associating it with the remote
-			IdP account.
-		@input openid_username (str): OpenID username retrieved form the identity provider
-		@input authtoken (wgtauth.social.models.SocialAuthorizationToken): auth token provided
-			by the identity provider
-
-		@returns user instance
-	'''
-	# Attempt to retrieve social user profile via the unique provider ID (openid_username)
-	try: socialuser_profile = authserver.social_user_profiles.get(social_user_id=openid_username)
-	except socialuser_model.DoesNotExist:
-
-		# Determine if there is currently a user logged in (link social profile to existing accout)
-		if request and request.user.is_authenticated:
-			django_user = request.user
-			created = False
-
-		# User not yet logged in: create a new account from the user data
-		else:
-
-			# Construct a username for the account:
-			# 1. If available, parse the user handle portion of the email and use that
-			# 2. For accounts without email data, convert the first name and last name to lowercase
-			#    and then append them with a dot.
-			# 3. For accounts without first name and last name, use the full name and replace
-			#    spaces with a dot.
-			# 4. For accounts without any identifiers, generate a random string to use as the username
-			django_username = \
-				authtoken.user.django_username if hasattr(authtoken.user, 'django_username') \
-				else openid_username if openid_username \
-				else authtoken.user.email.split('@')[0] \
-					if hasattr(authtoken.user, 'email') and '@' in authtoken.user.email \
-				else '.'.join((authtoken.user.first_name.lower(), authtoken.user.last_name.lower())) \
-					if hasattr(authtoken.user, 'first_name') and hasattr(authtoken.user, 'last_name') \
-				else authtoken.user.name.replace(' ', '.') if hasattr(authtoken.user, 'name') \
-				else create_token()
-
-			# Check if a user with the derived username already exists, if so, append the service
-			# instance ID to the username in order to make it unique
-			if auth.get_user_model().objects.filter(username=django_username).count():
-				django_username = '%s.%s' % (django_username, authserver.pk)
-
-			django_user = auth.get_user_model().objects.create(username=django_username,
-				**pick(authtoken.user, ('first_name', 'last_name', 'email')))
-			created = True
-
-		# User profile does not exist, create a new user and profile from the service data,
-		# trigger first login signal
-		socialuser_profile = socialuser_model.objects.create(
-			social_provider=authserver, user=django_user,
-			social_user_id=openid_username, email=getattr(authtoken.user, 'email', None))
-		socialuser_profile.signal_first_login(request=request, registration=created)
-
-	return socialuser_profile.user

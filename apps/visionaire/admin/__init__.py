@@ -16,7 +16,8 @@ from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthor
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer 
 from ..models.branding import SonadorSite
 
-from .auth import SonadorApiAccess, SonadorApiAccessToken, ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin, \
+from .auth import SonadorApiAccess, SonadorApiAccessToken, ProxySecureSocialAuthorizationServer, \
+	SocialAuthorizationServerSearchAdmin, SocialAuthorizationServerAdmin, \
 	ProxyDataService, DataServiceAdmin
 from .servers import PacsImagingServerAdmin, ImagingServerAdminMixin
 
@@ -86,6 +87,7 @@ class SonadorSitesAdmin(admin.ModelAdmin):
 
 
 # Authorization and authentication
+admin.site.register(SocialAuthorizationServer, SocialAuthorizationServerSearchAdmin)
 admin.site.register(ProxySecureSocialAuthorizationServer, SocialAuthorizationServerAdmin)
 admin.site.register(ProxyDataService, DataServiceAdmin)
 

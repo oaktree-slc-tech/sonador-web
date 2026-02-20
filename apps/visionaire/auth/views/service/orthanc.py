@@ -20,6 +20,7 @@ from guru.helpers.utils.object import pick, omit
 from microservices.control import server_controlurl
 
 from ....apisettings import SONADOR_USERNAME, SONADOR_USER_PK, SONADOR_USER_LABEL
+from ....helpers import SESSION_SALT
 from ....views.base import SonadorApiRestView
 
 from ...helpers import create_session_token
@@ -181,7 +182,8 @@ class OrthancAuthTokenGenerateView(OrthancServiceImagingServerMixin, View):
 
 			# Generate token request from session ID and resource list
 			_token = create_session_token(
-				s.session_key, token_payload={ 'resources': [r.orthanc_id for r in rdata.resources] })
+				s.session_key, token_payload={ 'resources': [r.orthanc_id for r in rdata.resources] },
+				salt=SESSION_SALT)
 
 			return operation_results({ 'request': rdata.dict(), 'token': _token })
 
@@ -218,7 +220,7 @@ class OrthancAuthTokenDecodeView(OrthancServiceImagingServerMixin, SonadorServic
 				adata.update({
 					'token-type': orthanc_authapi.TokenType.ORTHANC_EXPLORER2,
 					'redirect-url': server_controlurl(
-						self.form.server, 'ui/app/index.html?token=%s' % create_session_token(self.form.session.session_key))
+						self.form.server, 'ui/app/index.html?token=%s' % create_session_token(self.form.session.session_key, salt=SESSION_SALT))
 				})
 
 		return adata

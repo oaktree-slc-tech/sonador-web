@@ -6,6 +6,7 @@
 	endpoints which are used for integration of the platform with Orthanc and other clients.
 '''
 from django.urls import path, re_path
+from django.contrib.auth.decorators import login_required
 
 from guru.forms import create_modelform_class
 from guru.views import GuruApiObjectManagementView, GuruApiRestView
@@ -37,6 +38,8 @@ from ..auth.forms.cred import SonadorApiAccessCredentialForm, SonadorApiAccessTo
 from ..auth.forms.acl import PacsImagingServerGroupAuthorizationForm
 from ..auth.views.acl import PacsImagingServerGroupAuthorizationManagementView, PacsImagingServerGroupAuthorizationRestView
 from ..auth.views.service.integrations import DataServiceAuthorizationView
+from ..auth.views.service.oauth import SonadorDataServiceOpenIDLoginRedirectView, SonadorDataServiceOpenIDLoginCallbackView, \
+	SonadorDataServiceOpenIDTokenAuthorizationView
 from ..auth.helpers import api_permission_user_readonly_admin_modify, api_permission_imageserver_user_readonly_admin_modify, \
 	api_permission_imageserver_user_has_access, bearertoken_api_request_authentication, api_permission_group_member
 
@@ -53,6 +56,7 @@ urlpatterns_api = [
 		name='api-client-login'),
 
 
+	
 	# Data Service API
 	re_path(r'^data/service/?$',
 		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
@@ -77,7 +81,25 @@ urlpatterns_api = [
 				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
 			DataServiceAuthorizationView.as_view(cache_validation=gsetting('AUTH_CREDENTIALS_CACHE'))),
 		name='data-service-token-introspect'),
-        
+
+	# Data Service OpenID Authentication: provides support for service applications integrated with Sonador to utilize
+	# the internal OIDC mechanisms by wrapping auth server calls. Because the data service API uses the
+	# auth server internally, all service mediated views require that the user be authenticated to prevent unintended
+	# leak of credentials or system details. (This is a departure from the traditional OpenID Connect Code workfow and a
+	# tighter security stance than an unmediated OIDC endpoint would use.)
+	re_path(r'^data/service/(?P<dataservice_id>[a-zA-Z0-9]+)/openid/?$',
+		SonadorDataServiceOpenIDLoginRedirectView.as_view(), name='data-service-openid-login'),
+	re_path(r'^data/service/(?P<dataservice_id>[a-zA-Z0-9]+)/openid/callback/?$',
+		login_required(SonadorDataServiceOpenIDLoginCallbackView.as_view()), name='data-service-openid-login-callback'),
+	re_path(r'^data/service/(?P<dataservice_id>[a-zA-Z0-9]+)/openid/token/?$',
+		api_request(lambda user, request, vargs, vkwargs: user.is_authenticated and user.is_superuser,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('POST',),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('POST',), allow_formencoded=True,
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			SonadorDataServiceOpenIDTokenAuthorizationView.as_view()),
+		name='data-service-openid-token'),
+
 
 	# Persist user preferences/profile
 	re_path(r'^user-preferences/?$',

@@ -27,6 +27,7 @@ from secure.helpers import server_decrypt_data, masked_value
 
 from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION
+from wgtauth import hexsigning
 
 from orthancapi.helpers import orthanc_hosted_staticfile
 
@@ -38,8 +39,6 @@ from ....helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
 from ....models import PacsImagingServer
-
-from ... import hexsigning
 
 from ...helpers import create_session_token
 from ...forms.base import ServiceAuthorizationRequest
@@ -89,7 +88,9 @@ class OrthancSecureUriRedirectView(RedirectView):
 		# Add parameters to redirect, including token
 		_query = copy.deepcopy(self.querystring_attrs) if self.querystring_attrs else {}
 		_query['token'] = create_session_token(
-			self.request.session.session_key, token_payload=copy.deepcopy(self.token_payload) if self.token_payload else None)
+			self.request.session.session_key, 
+			token_payload=copy.deepcopy(self.token_payload) if self.token_payload else None,
+			salt=SESSION_SALT)
 
 		# Create redirect URL
 		return merge_url_querystring(getattr(self.server, self.server_url_attr), _query)
