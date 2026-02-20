@@ -1,3 +1,4 @@
+from django.shortcuts import reverse
 from django.db import models
 from django.contrib.auth.models import Group
 
@@ -5,47 +6,38 @@ from guru.models import GuruTokenModel
 from guru.helpers import gsetting
 from guru.helpers.utils.object import pick, omit
 
+from wgtauth.services.models import AbstractDataService
 
-class DataService(GuruTokenModel):
+
+class DataService(AbstractDataService):
     ''' Data service associated with Sonador. Data services are able to utilize
         Sonador access credentials (API tokens, access ID/secret, and session tokens)
         for authentication via oAuth2.0 token introspection.
     '''
-    description = models.CharField(max_length=2048)
-    active = models.BooleanField(verbose_name='Active', default=True)
-    acl_allow_staff = models.BooleanField(verbose_name='Allow Staff', default=True,
-        help_text='Allow users with "staff" permissions to access the data service.')
-
-    groups = models.ManyToManyField(Group, help_text='Groups authorized to access the data service via API requests.')
+    authserver = models.ForeignKey('visionaire.SocialAuthorizationServer', blank=True, null=True, 
+        verbose_name='Auth Server', related_name='data_services', on_delete=models.CASCADE,
+        help_text='Sonador authorization server to be used by the data service. If blank, the default '
+            + 'auth server for the deployment will be used.')
 
     class Meta:
         app_label = 'visionaire'
         ordering = ('description',)
 
-    def __str__(self, *args, **kwargs):
-        return '%s: %s' % (self.pk, self.description)
-
-    def user_has_perm(self, user):
-        ''' Determine if the provided user has the needed permission to perform the requested action.
-            
-            @returns bool: True if the user has the permission, False otherwise
-        '''
-        # Administrative users can access all data services
-        if user.is_superuser:
-            return True
-        
-        # Allow staff users to access the service if indicated by the service settings
-        if self.acl_allow_staff and user.is_staff:
-            return True
-        
-        # Determine if the user is part of a group that has the requested permissions.
-        for auth in self.groups.filter(user=user):
-            return True
-        
-        return False
-    
     @property
-    def json(self):
-        odata = { 'service_id': self.pk }
-        odata.update(pick(self, ('description', 'active', 'acl_allow_staff')))
-        return odata
+    def url_login(self):
+        ''' Login redirect endpoint (step 1 in oAuth workflow)
+        '''
+        return reverse('visionaire-api:data-service-openid-login', args=(self.pk,)) if self.openid_allow_auth else ''
+
+    @property
+    def url_callback(self):
+        ''' Login callback endpoint (step 2 in oAuth workflow)
+        '''
+        return reverse('visionaire-api:data-service-openid-login-callback', args=(self.pk,)) if self.openid_allow_auth else ''
+
+    @property
+    def url_oidc_token_auth(self):
+        ''' OIDC token authorization endpoint for oAuth workflows
+        '''
+        return reverse('visionaire-api:data-service-openid-token', args=(self.pk,)) if self.openid_allow_auth else ''
+    

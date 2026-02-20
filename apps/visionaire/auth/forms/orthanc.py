@@ -24,6 +24,7 @@ from wgtauth.apisettings import BASIC_AUTH_TYPE, \
 	OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 from wgtauth.forms import oAuthTokenAuthorizationForm
+from wgtauth import hexsigning
 
 from orthancapi import apisettings as orthanc_api
 
@@ -32,8 +33,6 @@ from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE, \
 	API_ACCESS_SERVER_TOKEN, API_ACCESS_TOKEN_QSPARAM, API_ACCESS_APITOKEN_QSPARAM, \
 	API_REFERRER_REFERER_HEADER
 from ...models import PacsImagingServer
-
-from .. import hexsigning
 
 from .base import ServiceAuthorizationRequest, SonadorServiceAuthorizationBaseForm
 

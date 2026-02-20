@@ -29,7 +29,7 @@ from guru.helpers.utils.urls import build_url
 
 from wgtauth.forms import oAuthTokenAuthorizationForm
 from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
-	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_RESPONSE_TYPE_QUERY_PARAM, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
+	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_RESPONSE_TYPE_QUERY_PARAM, OAUTH_CODE_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
 from wgtauth.social.views import OpenIDLoginRedirectAbstractView, \
 	OpenIDLoginCallbackAbstractView
 from wgtauth.registration.views import RegistrationView, RegistrationSuccessView, ConfirmEmailView, \
@@ -81,7 +81,7 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 	def get_site_resource(self, request, vargs, vkwargs):
 		'''	Retrieve a site resource that may be encoded as part of the oAuth URL.
 
-			Special behavior: tp facilitate oAUthrequests from OHIF clients
+			Special behavior: to facilitate oAuth requests from OHIF clients
 			authenticating using the "authorization_code" workflow,
 			the redirect URI of the client is captured (taken from the "state" parameter)
 			and request URL parameters are encoded.
@@ -91,12 +91,13 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 		# Retrieve authserver for the redirect view
 		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
 
-		# Encode OHIF authorization_code requests to pass to the token endpoint after  a successful
-		# authorization_code workflow. Uses
-		if not redirect_url and OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', []):
+		# Encode OHIF authorization_code requests to pass to the token endpoint after a successful
+		# authorization_code workflow.
+		if not redirect_url and (OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])
+				or OAUTH_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])):
 			logger.debug('Authorization code request components: %r' % request.GET)
 
-			# Retrieve the OHIF provided redirect URL
+			# Retrieve the OHIF parameters provided redirect URL
 			if request.GET.get(self.ohif_redirect_fieldname):
 				ohif_redirect_url = request.GET.get(self.ohif_redirect_fieldname)
 
@@ -137,14 +138,14 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 
 			# Check user authentication, response type, and client ID
 			if request.user.is_authenticated \
-				and OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', []) \
+				and (OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])
+					or OAUTH_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])) \
 				and authserver.client_id == request.GET.get('client_id'):
 
 				# Redirect to token view for the server
 				return redirect(authserver.url_token+'?'+request.GET.urlencode())
 
 		return super(OpenIDLoginRedirectView, self).get(request, *args, **kwargs)
-
 
 
 class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbstractView):
@@ -157,6 +158,7 @@ class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbst
 		resource = super(OpenIDLoginCallbackView, self).get_site_resource(request, vargs, vkwargs)
 		if resource:
 			logger.debug('Site resource included in authentication request (state parameter):\n%s' % resource)
+		
 		return resource
 
 	def get_openid_username(self, authtoken, request, vargs, vkwargs):
@@ -225,7 +227,9 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 		else:
 			openid_config.update({
 				'authorization_endpoint': site_fullurl(authserver.url_login),
-				'response_types_supported': [OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE],
+				'response_types_supported': [
+					OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_TYPE,
+				],
 			})
 
 		logger.debug('OpenID site configuration:\n%r' % openid_config)
@@ -237,6 +241,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 	'''
 	tokenform_class = SonadorOpenIDConnectTokenAuthorizationForm
 	ohif_redirect_fieldname = SONAODR_OHIF_REDIRECT_QUERY_PARAM
+	session_salt = SESSION_SALT
 
 	def get(self, request, *args, **kwargs):
 		'''	Process an oAuth2 token request
@@ -265,7 +270,7 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		# Generate token and redirect
 		rurl_odata = {
 			'id_token': request.session.session_key,
-			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
+			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=self.session_salt),
 			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
 			OAUTH_EXPIRATION: request.session.get_expiry_age(),
 		}
@@ -292,6 +297,8 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
 	'''	oAuthAuthorization endpoint that renews a signed session token
 	'''
+	session_salt = SESSION_SALT
+
 	def get(self, request, *args, **kwargs):
 
 		# Ensure user is authenticated to the application
@@ -300,7 +307,7 @@ class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
 
 		return operation_results({
 			'id_token': request.session.session_key,
-			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=SESSION_SALT),
+			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=self.session_salt),
 			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
 			OAUTH_EXPIRATION: request.session.get_expiry_age(),
 		})

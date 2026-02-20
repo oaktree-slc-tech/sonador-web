@@ -18,6 +18,7 @@ from core.forms import SonadorBaseForm
 from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthorization, PacsImagingServerGroupAuthorization, \
 	DataService
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer
+from ..auth.views.base import get_default_authserver
 
 
 # cred: Credential Management
@@ -115,6 +116,12 @@ class ProxyDataService(DataService):
 		verbose_name = 'Data Service'
 		verbose_name_plural = 'Data Services'
 
+	def __str__(self):
+		return self.description
+
+	def __unicode__(self):
+		return self.description
+
 
 class SocialAuthorizationServerForm(SonadorBaseForm):
 	''' Form instance providing validation of Sonador authorization server instances
@@ -145,18 +152,86 @@ class SocialAuthorizationServerForm(SonadorBaseForm):
 class SocialAuthorizationServerAdmin(admin.ModelAdmin):
 	'''	Django admin structure for manging settings associated with Sonador Social authentication instances.
 	'''
-	list_display = ('token', 'provider', 'description', 'url_login', 'url_callback', 'default', 'enable_idp_token_validation')
+	list_display = ('server_id', 'provider', 'description', 'default', 'enable_idp_token_validation', 'url_login', 'url_callback',)
 	form = SocialAuthorizationServerForm
+	search_fields = ('description',)
+
+	@admin.display(description='Server ID')
+	def server_id(self, obj):
+		return obj.pk
+
+
+class SocialAuthorizationServerSearchAdmin(admin.ModelAdmin):
+	'''	Django admin structure for enabling search on SocialAuthorizationServer instances
+	'''
+	search_fields = ('description', 'provider__description')
+
+	def has_module_permission(self, request): return False
 
 
 # integrations: Data Services
 
+
+class DataServiceForm(SonadorBaseForm):
+	'''	Form instance provid9ing validation of Sonador Data services
+	'''
+	class Meta:
+		
+		fields = '__all__'
+		exclude = ('token',)
+
+	def clean(self, *args, **kwargs):
+		'''	Ensure that requried components for OIDC are enabled.
+			1. Auth server must be defined for the service or deployment.
+			2. Callback URLs are included.
+		'''
+		cleaned_data = super().clean(*args, **kwargs)
+
+		# If OIDC is enabled, make sure that an authserver and callback URLs are included.
+		if cleaned_data.get('openid_allow_auth'):
+
+			# Check for the presence of an auth server (either explicitly defined or the default for the deployment)
+			_authserver = cleaned_data.get('authserver') or get_default_authserver(ProxySecureSocialAuthorizationServer)
+			if not _authserver:
+				raise forms.ValidationError({
+					'openid_allow_auth': [
+						'OpenID Connect Authorization requires an authorization server be defined for the Sonador deployment.',
+					],
+					'authserver': ['No authorization server selected or default server defined for the deployment'],
+				})
+
+			# Ensure that redirect URLs have been populated
+			if not cleaned_data.get('openid_callback_url'):
+				raise forms.ValidationError({
+					'openid_callback_url': ['Please specify authorized callback URLs for the data service'],
+				})
+
+		return cleaned_data
+
+
 class DataServiceAdmin(admin.ModelAdmin):
 	'''	Django admin structure for managing settings associated with Data Services
 	'''
-	list_display = ('service_id',  'description', 'active', 'acl_allow_staff',)
+	list_display = ('service_id',  'description', 'active', 'acl_allow_staff', 'oidc_auth_enabled',
+		'oidc_login_url', 'oidc_callback_url')
+	list_filter = ('active', 'openid_allow_auth')
+	readonly_fields = ('openid_client_id',)
+	form = DataServiceForm
 	filter_horizontal = ('groups',)
+	autocomplete_fields = ('authserver',)
 
 	@admin.display(description='Service ID')
 	def service_id(self, obj):
 		return obj.pk
+
+	@admin.display(description='OIDC Auth Enabled', boolean=True)
+	def oidc_auth_enabled(self, obj):
+		return obj.openid_allow_auth
+
+	@admin.display(description='OpenID Login URL')
+	def oidc_login_url(self, obj):
+		return obj.url_login
+
+	@admin.display(description='OpenID Callback URL')
+	def oidc_callback_url(self, obj):
+		return obj.url_callback
