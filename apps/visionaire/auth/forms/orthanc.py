@@ -95,6 +95,10 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 	orthanc_id = forms.CharField(required=False)
 	uri = forms.CharField(required=False)
 
+	# Bounded, closed-enum operation classification emitted by the auth plugin for
+	# sub-resource routes (e.g. "comment").  Present on every level of the hierarchy.
+	action = forms.CharField(required=False)
+
 	formdata_transforms = {
 		'token-key': 'token_key',
 		'token-value': 'token_value',
@@ -202,7 +206,7 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 
 			1.	Detect DICOMweb requests incorrectly classified as system requests.
 			2.	Parse resource components, such as UIDs, from URLs and back-fill when needed.
-			3.	Detect gorup and other Sonador <-> Orthanc integration API calls, such as the tags API
+			3.	Detect group and other Sonador <-> Orthanc integration API calls, such as the tags API
 				and parse to components.
 		'''
 		resource = cleaned_data.get('resource')
@@ -249,7 +253,7 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 		# Check for DICOMweb series distortion filter
 		elif orthanc_api.ORTHANC_DICOMWEB_GROUPS_ROOT in _resource:
 			
-			# Parse DICOMM UID and resource level
+			# Parse DICOM UID and resource level
 			_dcmweb_distortion_filter = orthanc_api.ORTHANC_DICOMWEB_DISTORTION_FILTER_REGEX.match(_resource)
 
 			if _dcmweb_distortion_filter and _dcmweb_distortion_filter.group('uid'):

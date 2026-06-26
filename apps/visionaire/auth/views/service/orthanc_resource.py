@@ -28,7 +28,7 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 		'''
 		# Retrieve request components
 		form_data = form_data or self.getRequestJsonData(self.request)
-		_, orthanc_id, level,_,_,_ = self.get_auth_request_params(form_data=form_data, **kwargs)
+		_, orthanc_id, level,_,_,_,_ = self.get_auth_request_params(form_data=form_data, **kwargs)
 		
 		if not orthanc_id or not level:
 			raise ValueError('Unable to retrieve cache key, invalid Orthanc ID or resource level')
@@ -57,7 +57,7 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 	def get_authorization_response(self, adata, *args, **kwargs):
 		'''	Parse the authorization request and create the authorization response
 		'''
-		user, orthanc_id, level, _, resource, _ = self.get_auth_request_params(
+		user, orthanc_id, level, _, resource, _, _ = self.get_auth_request_params(
 			form_data=self.form.cleaned_data if self.form.is_valid() else self.form.data)
 
 		if self.form.is_valid() and self.form.server.user_has_access(self.form.user):
