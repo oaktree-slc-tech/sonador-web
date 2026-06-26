@@ -51,17 +51,21 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 		_level = form_data.get('level') or ''
 		_method = form_data.get('method') or ''
 		_resource = form_data.get('uri') or ''
+		_action = form_data.get('action') or ''
 		_,_rtype = posixpath.splitext(_resource)
 
-		return _user, _orthanc_id, _level, _method, _resource, _rtype
+		return _user, _orthanc_id, _level, _method, _resource, _rtype, _action
 
 	def cache_auth_response_key(self, *args, form_data=None, **kwargs):
 		'''	Retrieve the hashed cache key for the authorization response
 		'''
 		# Retrieve request components
 		form_data = form_data or self.getRequestJsonData(self.request)
-		_, orthanc_id, level, method, resource, _ = self.get_auth_request_params(form_data=form_data, **kwargs)
-		_components = self.auth_response_cache_sep.join(str(_c) for _c in (orthanc_id, level, method, resource) if _c)
+		_, orthanc_id, level, method, resource, _, action = self.get_auth_request_params(form_data=form_data, **kwargs)
+		# `action` MUST be part of the cache key: it can change the auth decision for the
+		# SAME resource (a comment write vs. a plain modify), so omitting it would let a
+		# grant for one action be replayed for another (cache poisoning).
+		_components = self.auth_response_cache_sep.join(str(_c) for _c in (orthanc_id, level, method, resource, action) if _c)
 
 		# Generate hash key
 		return self.auth_response_cache_key_template % (
@@ -104,7 +108,7 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 		'''	Parse the authorization request and create the authorization response
 		'''
 		# Auth request components
-		_user, _orthanc_id, _level, _method, _resource, _rtype = self.get_auth_request_params(
+		_user, _orthanc_id, _level, _method, _resource, _rtype, _action = self.get_auth_request_params(
 			form_data=self.form.cleaned_data if self.form.is_valid() else self.form.data)
 
 		# Allow requests for static assets
@@ -135,8 +139,9 @@ class OrthancServiceAuthorizationView(OrthancServiceImagingServerMixin, SonadorS
 				else:
 					granted, validity = self.form.server.user_has_perm(
 						self.form.user, self.form.cleaned_data.get('uri'), self.form.cleaned_data.get('orthanc_id'),
-						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'), 
-						dicom_uid=self.form.cleaned_data.get('dicom_uid'))
+						self.form.cleaned_data.get('method'), self.form.cleaned_data.get('level'),
+						dicom_uid=self.form.cleaned_data.get('dicom_uid'),
+						action=self.form.cleaned_data.get('action'))
 
 				if granted:
 

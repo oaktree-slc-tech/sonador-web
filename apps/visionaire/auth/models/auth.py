@@ -228,7 +228,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		return 'Group Authorization: %s for %s (%s:%s)' \
 			% (self.group.name, self.server.name, self.server.hostname, self.server.port)
 
-	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None):
+	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Check that the user has the permissions required to perfom the action on the provided resource.
 
 			@returns bool: True if the user has the permission, False otherwise
@@ -276,7 +276,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 					# Parse "local" permisisons from Orthanc and authorize request
 					_auth = OrthancResourceAuthorization(**_orthanc_auth, worklist=self.worklist)
-					if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+					if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid, action=action):
 						return True
 
 			# Group API requests
@@ -311,7 +311,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 				# Check resource request against the policy permissions
 				_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
-				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid):
+				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid, action=action):
 					return True
 
 		return False

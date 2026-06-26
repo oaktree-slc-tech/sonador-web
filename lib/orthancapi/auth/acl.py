@@ -108,8 +108,14 @@ class ResourceAuthorization:
 		self.acl = acl
 		self.worklist = worklist
 
-	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None):
+	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Evaluate the resource request and return the appropriate permision.
+
+			`action` is a bounded, closed-enum operation token (e.g. "comment") emitted by the
+			Orthanc auth plugin's trusted route parser and applied to EVERY level of the resource
+			hierarchy.  It lets us evaluate a meaningful permission at each level of a sub-resource
+			request instead of falling back to a broad "modify" check on the ancestors (which would
+			deny the whole request, since the plugin requires every level to be granted).
 
 			@returns bool or None if the method was unable to match the resource request
 		'''
@@ -137,8 +143,41 @@ class ResourceAuthorization:
 		elif orthanc_api.ORTHANC_RESOURCE_WORKLIST in resource:
 			return self.worklist and self.view
 
+		# Comment sub-resource requests (e.g. POST /series/<id>/comments).
+		#
+		# The auth plugin explodes such a request into the full resource hierarchy
+		# (patient -> study -> series) and requires EVERY level to be granted.  It tags
+		# every level with action="comment"; the leaf (the resource the comment actually
+		# lives on) additionally carries a non-empty `resource`/uri (this requires the
+		# plugin's "IncludeResourceUri" option, which is what distinguishes the leaf from
+		# its ancestors here), while the ancestors carry an empty `resource`.
+		#
+		# To satisfy the all-levels-must-pass rule without escalating ancestor access, we
+		# require the comment permission on the leaf and ordinary `view` on the ancestors:
+		# reading comments needs comment_view on the leaf, writing needs comment_edit.
+		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and action == orthanc_api.ORTHANC_ACTION_COMMENT:
+
+			# Ancestor levels only need read access so the hierarchy can resolve
+			if not resource:
+				return self.view
+
+			# Leaf level: read comments with comment_view, write them with comment_edit
+			if method.lower() == gapicodes.HTTP_GET.lower():
+				return self.comment_view
+
+			return self.comment_edit
+
 		# Check view permissions
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():
+
+			# DICOMweb comment reads arrive here with action="" (the plugin tags them as a
+			# "system" access with no action; clean_auth_request() re-derives the level to the
+			# imaging resource but cannot back-fill the action).  The standard-API comment read
+			# is handled by the action branch above; this mirrors comment_view enforcement for
+			# the DICOMweb route so a plain `view` grant cannot read comments.
+			if resource and orthanc_api.ORTHANC_COMMENTS in resource:
+				return self.comment_view
+
 			return self.view
 
 		# Check modify permissions for resource type:
@@ -154,6 +193,17 @@ class ResourceAuthorization:
 
 		# Check remove permissions
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
+
+			# Comment deletes are an edit of the comment, not a delete of the resource.
+			# The standard API arrives here with action="comment" (handled above), but the
+			# DICOMweb comment item route (/dicom-web/<type>/<uid>/comments/<id>) is sent by
+			# the plugin as a "system" access with no action; Sonador re-derives its level to
+			# the imaging resource in clean_auth_request() but cannot back-fill the action.
+			# Mirror the POST/PUT comment handling so a comment delete maps to comment_edit
+			# instead of falling through to the resource-level remove permission.
+			if resource and orthanc_api.ORTHANC_COMMENTS in resource:
+				return self.comment_edit
+
 			return self.remove
 
 		return None

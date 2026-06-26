@@ -159,6 +159,15 @@ ORTHANC_CACHE_TAGS = '%s/dcm-tags' % ORTHANC_CACHE
 ORTHANC_COMMENTS = 'comments'
 
 
+# Bounded "action" tokens emitted by the Orthanc advanced-authorization plugin.
+# The plugin's trusted route parser classifies a request into one of these closed-
+# enum tokens and tags EVERY level of the resource hierarchy (patient/study/series/
+# instance) with it.  This lets us evaluate a meaningful permission at each level of
+# a sub-resource request (e.g. a comment write) instead of falling back to a broad
+# "modify" check on the ancestors, which would deny the whole request.
+ORTHANC_ACTION_COMMENT = 'comment'
+
+
 # Wildcard Glob Pattern
 WILDCARD = '*'
 
