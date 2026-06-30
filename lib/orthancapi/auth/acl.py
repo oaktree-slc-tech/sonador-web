@@ -97,8 +97,16 @@ class ResourceAuthorization:
 		* `worklist`: create and access worklists
 	'''
 	def __init__(self, view=None, modify=None, remove=None, comment_edit=None, comment_view=None, acl=None,
-			worklist=None, **kwargs):
+			worklist=None, modify_traverse=None, remove_traverse=None, **kwargs):
 		'''	Initialize permission set
+
+			`modify_traverse`/`remove_traverse` are ancestor-traversal signals supplied by the
+			local-ACL policy builder (orthanc-sonador). The authorization plugin explodes a leaf
+			modify/remove request into the full patient -> study -> series hierarchy and requires
+			every level to be granted with the same method; under IncludeResourceUri only the leaf
+			carries a non-empty resource. These flags let an ancestor (empty-resource) POST/PUT or
+			DELETE pass for the sake of resolving the hierarchy to the leaf, WITHOUT granting the
+			real `modify`/`remove` permission on the ancestor itself (the leaf still enforces those).
 		'''
 		self.view = view
 		self.modify = modify
@@ -107,6 +115,15 @@ class ResourceAuthorization:
 		self.comment_view = comment_view
 		self.acl = acl
 		self.worklist = worklist
+
+		# Ancestor-traversal signals. When the policy builder does not supply an explicit value
+		# (e.g. the GLOBAL/pattern policy, which grants its permission uniformly at every matched
+		# level), traversal permission defaults to the real permission so global modify/remove still
+		# authorizes ancestor levels.  The LOCAL policy builder always supplies an explicit bool,
+		# which overrides this default (including an explicit False) so a descendant-only grant does
+		# not leak modify/remove onto its ancestors.
+		self.modify_traverse = modify if modify_traverse is None else modify_traverse
+		self.remove_traverse = remove if remove_traverse is None else remove_traverse
 
 	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Evaluate the resource request and return the appropriate permision.
@@ -185,6 +202,23 @@ class ResourceAuthorization:
 		# 2. POST request for study worklist
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower()):
 
+			# Ancestor levels are granted via the modify-traverse signal, NOT a blanket view.
+			#
+			# The auth plugin explodes a sub-resource request into the full hierarchy
+			# (patient -> study -> series) and requires EVERY level to be granted with the
+			# same method.  With the plugin's "IncludeResourceUri" option enabled, ONLY the
+			# leaf carries a non-empty `resource`/uri; the ancestors arrive with an empty
+			# `resource`.  A local Modify grant on the leaf does not propagate up the
+			# hierarchy.  Rather than granting `view` to ANY empty-resource POST/PUT (which also
+			# matched worklist-creation ancestors, letting a user without Modify create worklist
+			# items), the policy builder emits a separate `modify_traverse` flag that is True only
+			# when a descendant Modify grant (or the worklist exemption) justifies traversing this
+			# ancestor.  The leaf still enforces the real `modify` permission below, so this does
+			# not grant direct modify on the ancestor.  Depends on IncludeResourceUri (otherwise
+			# the leaf would also arrive with an empty resource).
+			if not resource:
+				return self.modify_traverse
+
 			# Check for comment requsts
 			if resource and orthanc_api.ORTHANC_COMMENTS in resource:
 				return self.comment_edit
@@ -193,6 +227,16 @@ class ResourceAuthorization:
 
 		# Check remove permissions
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_DELETE.lower():
+
+			# Ancestor levels are granted via the remove-traverse signal, NOT a blanket view.  As
+			# with the modify branch above, the plugin explodes a DELETE into the full hierarchy and
+			# requires every level; only the leaf carries a non-empty `resource` (under
+			# IncludeResourceUri).  A local Remove grant on the leaf does not propagate up, so the
+			# policy builder emits `remove_traverse`, True only when a descendant Remove grant
+			# justifies traversing this ancestor.  The leaf still enforces the real `remove`
+			# permission below, so this does not grant direct remove on the ancestor.
+			if not resource:
+				return self.remove_traverse
 
 			# Comment deletes are an edit of the comment, not a delete of the resource.
 			# The standard API arrives here with action="comment" (handled above), but the
