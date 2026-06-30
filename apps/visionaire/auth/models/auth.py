@@ -279,6 +279,37 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 					if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid, action=action):
 						return True
 
+					# Local ACL comment override.
+					#
+					# When a local ACL defines a CommentView/CommentEdit flag for a resource, that
+					# flag is the AUTHORITATIVE decision for comment access to it and must OVERRIDE the
+					# global policy: a local comment DENY must not fall through to a global comment
+					# grant (and a local grant is already handled by resource_perm above). The rest of
+					# this method is additive (local grants supplement the global policy); comments are
+					# the one case that also needs to restrict below a global grant, so the override is
+					# scoped here to comment actions only and does not change view/modify/remove.
+					#
+					# Only the leaf resource carries a non-empty `resource`/uri (the plugin's
+					# IncludeResourceUri option), so this targets the resource the comment lives on;
+					# ancestors are resolved by the `view` traversal in resource_perm. A flag the local
+					# ACL never set arrives as None and is intentionally skipped so the request still
+					# defers to the global policy.
+					#
+					# Detect a comment request by EITHER the `action` token OR a comment URI on the
+					# leaf resource. The action token is the precise signal, but it is only present
+					# when the authorization plugin emits it; the resource-URI fallback keeps the
+					# local comment DENY authoritative for the standard `/<type>/<id>/comments` route
+					# even when the action token is absent (mirroring the action-independent comment
+					# read enforcement in ResourceAuthorization.resource_perm). The check still
+					# requires a non-empty leaf `resource`, so non-comment requests are unaffected.
+					if resource and (action == orthanc_api.ORTHANC_ACTION_COMMENT \
+							or orthanc_api.ORTHANC_COMMENTS in resource):
+						if method.lower() == gapicodes.HTTP_GET.lower():
+							if _auth.comment_view is not None:
+								return _auth.comment_view
+						elif _auth.comment_edit is not None:
+							return _auth.comment_edit
+
 			# Group API requests
 			elif level == orthanc_api.ORTHANC_RESOURCE_GROUP:
 
