@@ -336,9 +336,20 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 						return self.devices_list_modify
 
 			# If no other authorization was successful, check if resource UID is within global scope of the user
+			#
+			# ACL policy-management requests use a DESCEND-ONLY scope (self or descendant of the
+			# scoped resource, never an ancestor) -- a series={uid} scope must not authorize policy
+			# creation on the parent study (see resource_authscope). This restriction applies only
+			# to the LEAF of an acl-management request (a non-empty `resource`, i.e. this call is
+			# itself the direct target); an ANCESTOR (empty-resource) traversal call for a
+			# DIFFERENT, deeper acl-management leaf must still use the normal ancestor-inclusive
+			# scope check below, exactly like modify/remove ancestor calls, or the plugin's
+			# all-levels-must-pass rule would deny the whole request.
 			if self.resource == WILDCARD \
 				or self.user_has_system_perm(user, level, resource) \
-				or self.user_has_resource_access(user, level, resource, orthanc_id, dicom_uid=dicom_uid):
+				or self.user_has_resource_access(user, level, resource, orthanc_id, dicom_uid=dicom_uid,
+					descend_only=bool(resource) and (action == orthanc_api.ORTHANC_ACTION_ACL
+						or orthanc_api.ORTHANC_ACL_MANAGEMENT_PATH_REGEX.search(resource))):
 
 				# Check resource request against the policy permissions
 				_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
@@ -352,10 +363,18 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		'''
 		return False
 
-	def user_has_resource_access(self, user, level, resource, orthanc_id, dicom_uid=None):
+	def user_has_resource_access(self, user, level, resource, orthanc_id, dicom_uid=None, descend_only=False):
 		'''	Determine if the user has access to the requested resource
+
+			`descend_only`, when True, excludes ANCESTOR resources from the authorized scope: a
+			scoped policy then authorizes only the resource it names plus its descendants, never
+			its parents. Used for ACL policy-management requests (a series={uid} scope must not
+			authorize policy creation on the parent study or patient -- see resource_authscope).
+			Every other caller leaves this False, preserving the existing ancestor-inclusive
+			behavior view/modify/remove/comment rely on to satisfy the auth plugin's
+			all-levels-must-pass ancestor traversal.
 		'''
-		# Authorize resource		
+		# Authorize resource
 		if self.resource == WILDCARD:
 			return True
 
@@ -366,12 +385,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		for rclass,rgrant in policy.items():
 			if orthanc_id in rgrant:
 				return True
-		
+
 		# Retrieve authorization scope defined by the policy
 		auth_scope = copy.deepcopy(policy)
 		for rclass, rgrant in policy.items():
 			for uid in rgrant:
-				for _rc, _rg in self.resource_authscope(rclass, uid).items():
+				for _rc, _rg in self.resource_authscope(rclass, uid, descend_only=descend_only).items():
 					if auth_scope.get(_rc): auth_scope[_rc].update(_rg)
 					else: auth_scope[_rc] = _rg
 
@@ -379,7 +398,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		if auth_scope.get(level) and orthanc_id in auth_scope[level]:
 			return True
 
-		# For series requests which will be authorized by patient policies, 
+		# For series requests which will be authorized by patient policies,
 		# retrieve auth scope for each child study of the patient. (This is done since
 		# retrieval of child study auth scopes can be resource intensive if there are a lot of studies.
 		if level == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower() \
@@ -389,7 +408,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 				_pr = self.orthanc_resource_info(orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower(), _p)
 
 				for _s in _pr.get('Studies', []):
-					_study_authscope = self.resource_authscope(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, _s)
+					_study_authscope = self.resource_authscope(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, _s, descend_only=descend_only)
 					if orthanc_id in _study_authscope.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower()):
 						return True
 
@@ -441,15 +460,21 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		return parse_resource_policy(
 			resource or self.resource, sep_policy=self.sep_policy, sep_resource=self.sep_resource)
 
-	def resource_authscope(self, level, orthanc_id, dicom_uid=None):
+	def resource_authscope(self, level, orthanc_id, dicom_uid=None, descend_only=False):
 		'''	Retrieve the UIDs of resources to which the user has access from a resource scope defined in the policy. The auth scope
-			is composed of resource types (patient, study, series) and authorized resources/patterns. Building a complete authorization 
+			is composed of resource types (patient, study, series) and authorized resources/patterns. Building a complete authorization
 			scope also includes inspecting resource permissions for parents/children resources. (Permissions for sibling resources
 			are not included in the set of UIDs retrieved by this method.)
 
 			* series: includes UID of study and series within auth scope (sibling series are ommitted and any request will be deined)
 			* study: includes UID of patient and child series
 			* patient: includes UIDs of child studies
+
+			`descend_only`, when True, omits ANCESTOR UIDs from the returned scope (the parent
+			study/patient of a series, or the parent patient of a study), leaving only the
+			resource's own descendants. Used for ACL policy-management requests, where a scoped
+			grant must not authorize managing policies on a resource's ancestors (a series scope
+			must not reach its parent study) -- see the docstring on user_has_resource_access.
 
 			@returns dict of UIDs keyed to study level. Values of the dictionary are a set.
 		'''
@@ -458,8 +483,10 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		# Retrieve details of authorized resource
 		_r = self.orthanc_resource_info(level, orthanc_id)
 
-		# Series related UIDs: parent study and patient
-		if level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower():
+		# Series related UIDs: parent study and patient (omitted when descend_only, since a
+		# series has no descendants of its own -- a descend-only series scope authorizes
+		# nothing beyond the series itself, which the direct-match check already covers)
+		if level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_SERIES.lower() and not descend_only:
 
 			# Study
 			s_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_STUDY)
@@ -468,19 +495,20 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 				# Patient
 				_rp = server_controloperation_get(
-					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)), 
+					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)),
 					headers=self.server.sonador_auth)
 				p_uid = _rp.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
 				if p_uid:
 					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
 
-		# Study related UIDs: parent patient and child series
+		# Study related UIDs: parent patient (omitted when descend_only) and child series
 		elif level.lower() == orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower():
 
 			# Patient
-			p_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
-			if p_uid:
-				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
+			if not descend_only:
+				p_uid = _r.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
+				if p_uid:
+					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])
 
 			# Child series
 			sx_uid = _r.get(orthanc_api.IMAGING_SERVER_RESOURCE_SERIES, [])

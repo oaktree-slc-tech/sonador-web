@@ -129,8 +129,27 @@ ORTHANC_DICOMWEB_DOWNLOAD_REGEX = re.compile(
 ORTHANC_DICOMWEB_COMMENT_REGEX = re.compile(
 	r'%s/%s/%s/comments' % (ORTHANC_DICOMWEB, ORTHANC_DICOMWEB_RESOURCE_TYPE_REGEX_STR, ORTHANC_DICOMWEB_RESOURCE_REGEX_STR))
 ORTHANC_DICOMWEB_ACL_PERMS_REGEX = re.compile(
-	r'%s/%s/%s/%s' % (ORTHANC_DICOMWEB, ORTHANC_DICOMWEB_RESOURCE_TYPE_REGEX_STR, 
+	r'%s/%s/%s/%s' % (ORTHANC_DICOMWEB, ORTHANC_DICOMWEB_RESOURCE_TYPE_REGEX_STR,
 		ORTHANC_DICOMWEB_RESOURCE_REGEX_STR, ORTHANC_DICOMWEB_RESOURCE_ACL))
+
+# DICOMweb ACL policy-management routes (create/list/get/update/revoke a resource policy
+# grant): /dicom-web/{studies|series}/{uid}/acl/{user|group}[/{policy-uid}]. This is a
+# DIFFERENT endpoint family from ORTHANC_DICOMWEB_ACL_PERMS_REGEX above (permission
+# *lookup*, "resource-acl") -- the plugin's own DICOMweb classification regexes
+# (dicomWebStudies_/dicomWebSeries_) recognize neither route, so both arrive as an
+# unclassified "system" access and Sonador must re-derive level/dicom_uid itself (see
+# clean_auth_request). Deliberately matches only ".../acl/(user|group)", never
+# ".../resource-acl" (a single, unrelated token with no "/" before "acl").
+ORTHANC_DICOMWEB_ACL_MANAGEMENT_REGEX = re.compile(
+	r'%s/%s/%s/acl/(?:user|group)(?:/[0-9a-fA-F-]+)?' % (ORTHANC_DICOMWEB, ORTHANC_DICOMWEB_RESOURCE_TYPE_REGEX_STR,
+		ORTHANC_DICOMWEB_RESOURCE_REGEX_STR))
+
+# Path-segment check for an ACL policy-management leaf resource (used by
+# ResourceAuthorization.resource_perm as a fallback for the DICOMweb route, which never
+# carries the "acl" action token -- see ORTHANC_DICOMWEB_ACL_MANAGEMENT_REGEX above).
+# Requires a literal "/acl/" segment boundary so it can never match ".../resource-acl".
+ORTHANC_ACL_MANAGEMENT_PATH_REGEX = re.compile(r'/acl/(?:user|group)(?:/|$)')
+
 ORTHANC_DICOMWEB_DISTORTION_FILTER_REGEX = re.compile(
 	r'%s/groups/(?P<group_uid>\d+)/distortion-filter/(?P<uid>(?:\d+\.)*\d+)' % ORTHANC_DICOMWEB)
 
@@ -167,6 +186,15 @@ ORTHANC_COMMENTS = 'comments'
 # "modify" check on the ancestors, which would deny the whole request.
 ORTHANC_ACTION_COMMENT = 'comment'
 ORTHANC_ACTION_WORKLIST = 'worklist'
+
+# "acl" is emitted by the plugin's route parser for the INTERNAL ACL policy-management
+# route only (/{patients|studies|series}/{orthanc-id}/acl/{user|group}[/{policy-uid}]),
+# since that route is recognized by the plugin's generic resourcesPattern_ and therefore
+# explodes into the full patient -> study -> series hierarchy like comment/worklist. The
+# DICOMweb mirror of this route is NOT recognized by the plugin's DICOMweb classification
+# regexes, so it never carries this token -- see ORTHANC_ACL_MANAGEMENT_PATH_REGEX for the
+# URI-based fallback resource_perm uses to detect that case instead.
+ORTHANC_ACTION_ACL = 'acl'
 
 
 # Wildcard Glob Pattern
