@@ -4,9 +4,9 @@
 configobj
 
 # Web Application Requirements
-Django>=4.2,<5.0
-django-cors-headers==3.5.0
-django-storages==1.12.3
+Django>=5.2,<5.3
+django-cors-headers>=4.9.0
+django-storages>=1.14.6
 fastapi[standard]==0.115.12
 pymemcache
 blake3
@@ -30,7 +30,7 @@ acorn-largefiles>=0.1.1
 botocore==1.32.0
 boto3==1.29.0
 google-api-core==2.2.2
-google-auth==2.3.3
+google-auth>=2.29
 google-cloud-core==2.1.0
 google-cloud-storage==1.42.3
 google-crc32c==1.3.0
