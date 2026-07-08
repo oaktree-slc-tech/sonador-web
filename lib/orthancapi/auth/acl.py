@@ -155,10 +155,35 @@ class ResourceAuthorization:
 				and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
 				return self.comment_edit
 
-		# Check worklist permission: require worklist and view. Worklist provides permission to interact with 
+		# Check worklist permission: require worklist and view. Worklist provides permission to interact with
 		# worklist endpoint and view providers permission to interact with the resource.
+		#
+		# This is the LEAF check: the worklist item lives directly under a study, so the study
+		# level carries the non-empty resource/uri (requires "IncludeResourceUri") and is caught
+		# here. `worklist` is a server/group-level grant (not a local per-resource permission),
+		# so it is combined here with the resolved local `view` rather than being read from the
+		# local ACL directly.
 		elif orthanc_api.ORTHANC_RESOURCE_WORKLIST in resource:
 			return self.worklist and self.view
+
+		# Worklist sub-resource ANCESTOR requests (e.g. the patient ancestor of a POST/PUT to
+		# /studies/<id>/worklists/<wid>).
+		#
+		# The auth plugin explodes a worklist request into the full patient -> study hierarchy
+		# and requires EVERY level to be granted with the same method.  Under "IncludeResourceUri"
+		# only the leaf (study, caught above) carries a non-empty resource; the patient ancestor
+		# arrives with an empty resource but IS tagged with action="worklist" (the plugin's route
+		# parser classifies on the "worklists" path segment regardless of hierarchy position -- see
+		# orthanc-authorization's ClassifyAction).
+		#
+		# Previously, this ancestor case fell through to the generic modify-traversal branch below,
+		# which meant a genuine "Modify DICOM resources" grant was required just to satisfy this
+		# hierarchy-traversal quirk -- privilege far beyond what reviewing/working a worklist
+		# actually needs. Requiring only ordinary `view` here (mirroring the comment-action branch
+		# below) removes that dependency: a reviewer needs `worklist` (server/group) + `view`
+		# (local), nothing more. The real worklist permission is still enforced at the leaf above.
+		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and action == orthanc_api.ORTHANC_ACTION_WORKLIST:
+			return self.view
 
 		# Comment sub-resource requests (e.g. POST /series/<id>/comments).
 		#

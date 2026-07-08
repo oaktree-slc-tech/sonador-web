@@ -166,6 +166,7 @@ ORTHANC_COMMENTS = 'comments'
 # a sub-resource request (e.g. a comment write) instead of falling back to a broad
 # "modify" check on the ancestors, which would deny the whole request.
 ORTHANC_ACTION_COMMENT = 'comment'
+ORTHANC_ACTION_WORKLIST = 'worklist'
 
 
 # Wildcard Glob Pattern
