@@ -48,7 +48,10 @@ if siteconfig_storage_type in (ofapicodes.API_OBJECT_STORAGE_S3, ofapicodes.API_
 	if not AWS_S3_MEDIA_CONTAINER:
 		raise ValueError('Invalid media S3 container: %r' % AWS_S3_MEDIA_CONTAINER)
 
-	DEFAULT_FILE_STORAGE = 'visionaire.storages.s3.SonadorS3MediaFilesStorage'
+	STORAGES = {
+		'default': {'BACKEND': 'visionaire.storages.s3.SonadorS3MediaFilesStorage'},
+		'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+	}
 	MEDIA_URL = posixpath.join(AWS_S3_SERVICE_URL, AWS_S3_MEDIA_CONTAINER, '')
 
 elif siteconfig_storage_type == 'GCS':
@@ -69,7 +72,10 @@ elif siteconfig_storage_type == 'GCS':
 
 	# GS_CREDENTIALS = gsetting('GOOGLE_APPLICATION_CREDENTIALS')
 	MEDIA_URL = 'https://storage.googleapis.com/{}/'.format(GS_MEDIA_BUCKET)
-	DEFAULT_FILE_STORAGE = 'visionaire.storages.gcp.GoogleCloudMediaStorage'
+	STORAGES = {
+		'default': {'BACKEND': 'visionaire.storages.gcp.GoogleCloudMediaStorage'},
+		'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+	}
 
 
 # Static files configuration: Sonador hosts complex front-end applications which
