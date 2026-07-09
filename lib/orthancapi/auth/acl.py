@@ -97,16 +97,17 @@ class ResourceAuthorization:
 		* `worklist`: create and access worklists
 	'''
 	def __init__(self, view=None, modify=None, remove=None, comment_edit=None, comment_view=None, acl=None,
-			worklist=None, modify_traverse=None, remove_traverse=None, **kwargs):
+			worklist=None, modify_traverse=None, remove_traverse=None, acl_traverse=None, **kwargs):
 		'''	Initialize permission set
 
-			`modify_traverse`/`remove_traverse` are ancestor-traversal signals supplied by the
-			local-ACL policy builder (orthanc-sonador). The authorization plugin explodes a leaf
-			modify/remove request into the full patient -> study -> series hierarchy and requires
-			every level to be granted with the same method; under IncludeResourceUri only the leaf
-			carries a non-empty resource. These flags let an ancestor (empty-resource) POST/PUT or
-			DELETE pass for the sake of resolving the hierarchy to the leaf, WITHOUT granting the
-			real `modify`/`remove` permission on the ancestor itself (the leaf still enforces those).
+			`modify_traverse`/`remove_traverse`/`acl_traverse` are ancestor-traversal signals
+			supplied by the local-ACL policy builder (orthanc-sonador). The authorization plugin
+			explodes a leaf modify/remove/acl request into the full patient -> study -> series
+			hierarchy and requires every level to be granted with the same method; under
+			IncludeResourceUri only the leaf carries a non-empty resource. These flags let an
+			ancestor (empty-resource) POST/PUT or DELETE pass for the sake of resolving the
+			hierarchy to the leaf, WITHOUT granting the real `modify`/`remove`/`acl` permission on
+			the ancestor itself (the leaf still enforces those).
 		'''
 		self.view = view
 		self.modify = modify
@@ -118,12 +119,13 @@ class ResourceAuthorization:
 
 		# Ancestor-traversal signals. When the policy builder does not supply an explicit value
 		# (e.g. the GLOBAL/pattern policy, which grants its permission uniformly at every matched
-		# level), traversal permission defaults to the real permission so global modify/remove still
-		# authorizes ancestor levels.  The LOCAL policy builder always supplies an explicit bool,
-		# which overrides this default (including an explicit False) so a descendant-only grant does
-		# not leak modify/remove onto its ancestors.
+		# level), traversal permission defaults to the real permission so global modify/remove/acl
+		# still authorizes ancestor levels.  The LOCAL policy builder always supplies an explicit
+		# bool, which overrides this default (including an explicit False) so a descendant-only
+		# grant does not leak modify/remove/acl onto its ancestors.
 		self.modify_traverse = modify if modify_traverse is None else modify_traverse
 		self.remove_traverse = remove if remove_traverse is None else remove_traverse
+		self.acl_traverse = acl if acl_traverse is None else acl_traverse
 
 	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Evaluate the resource request and return the appropriate permision.
@@ -208,6 +210,54 @@ class ResourceAuthorization:
 				return self.comment_view
 
 			return self.comment_edit
+
+		# ACL policy-management sub-resource requests (create/list/get/update/revoke a
+		# resource policy grant), e.g. POST /studies/<id>/acl/group or
+		# GET /dicom-web/series/<uid>/acl/user/<policy-uid>.
+		#
+		# Detection uses TWO signals because the two route families propagate
+		# differently:
+		#   - The INTERNAL route (/<type>/<orthanc-id>/acl/...) is recognized by the
+		#     auth plugin's own resource pattern, so it explodes into the full
+		#     patient -> study -> series hierarchy exactly like modify/remove/comment,
+		#     and the plugin's route parser tags every level with action="acl"
+		#     (mirroring "comment"/"worklist"). This is the primary, precise signal.
+		#   - The DICOMweb route (/dicom-web/<type>/<uid>/acl/...) is NOT one of the
+		#     plugin's recognized DICOMweb sub-resource patterns (only a closed enum of
+		#     suffixes -- series/metadata/instances/rendered/thumbnail -- is
+		#     recognized), so the plugin classifies it as an unclassified "system"
+		#     access and never tags it with an action at all. Sonador's
+		#     clean_auth_request() re-derives level/dicom_uid for this case from the
+		#     raw URI (mirroring the existing worklist/comment/resource-acl handling),
+		#     but it cannot invent an action token the plugin never computed.
+		#     Critically, the DICOMweb route also never explodes into ancestor calls
+		#     (the plugin's system-access fallback creates exactly one resource entry,
+		#     not a hierarchy) -- there is only ever a single, leaf-equivalent call to
+		#     authorize, so detecting it directly from the leaf resource URI is safe.
+		#     The path-segment regex requires "/acl/user" or "/acl/group"; it
+		#     deliberately never matches "resource-acl" (a single, unrelated token with
+		#     no "/" before "acl"), so the separate permission-lookup endpoint is
+		#     untouched.
+		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and (
+				action == orthanc_api.ORTHANC_ACTION_ACL
+				or (resource and orthanc_api.ORTHANC_ACL_MANAGEMENT_PATH_REGEX.search(resource))):
+
+			# Ancestor levels (internal route only -- see above) are granted via
+			# acl_traverse, mirroring modify_traverse/remove_traverse: a DESCENDANT's
+			# acl grant justifies traversing this ancestor. `acl` does not propagate
+			# upward (a series-only grant contributes nothing to its parent study), so
+			# the ancestor's own `acl` would otherwise incorrectly deny traversal to a
+			# legitimately-authorized leaf.
+			if not resource:
+				return self.acl_traverse
+
+			# Leaf level: acl gates BOTH reads and writes of policy-management
+			# requests (create/list/get/update/revoke) uniformly. Per the "acl does
+			# not imply view" design decision (sonador#73, note_32715), this NEVER
+			# falls back to view/modify/remove, and reading vs writing policies makes
+			# no difference -- both facets of managing access to a resource are the
+			# same permission.
+			return self.acl
 
 		# Check view permissions
 		elif level in orthanc_api.ORTHANC_IMAGING_RESOURCES and method.lower() == gapicodes.HTTP_GET.lower():

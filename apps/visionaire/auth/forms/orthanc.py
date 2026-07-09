@@ -243,6 +243,20 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 			_dcmweb_comment = orthanc_api.ORTHANC_DICOMWEB_COMMENT_REGEX.match(_resource)
 			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_comment)
 
+		# Check for DICOMweb ACL policy management (create/list/get/update/revoke a
+		# resource policy grant). The plugin's DICOMweb classification regexes do not
+		# recognize this sub-route (only a closed enum of suffixes -- series/metadata/
+		# instances/rendered/thumbnail -- is recognized), so it arrives as an
+		# unclassified "system" access with the raw URI; re-derive level/dicom_uid here
+		# exactly as for the other DICOMweb extension routes below. Checked BEFORE the
+		# resource-acl (permission lookup) branch below, and the path-segment regex
+		# never matches "resource-acl", so the two routes cannot be confused.
+		elif orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_ACL_MANAGEMENT_PATH_REGEX.search(_resource):
+
+			# Parse DICOM UID and resource level from URI
+			_dcmweb_acl_mgmt = orthanc_api.ORTHANC_DICOMWEB_ACL_MANAGEMENT_REGEX.match(_resource)
+			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_acl_mgmt)
+
 		# Check for DICOMweb ACL lookup (resource permissions)
 		elif orthanc_api.ORTHANC_DICOMWEB in _resource and orthanc_api.ORTHANC_DICOMWEB_RESOURCE_ACL in _resource:
 
