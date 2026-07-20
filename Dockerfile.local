@@ -1,7 +1,12 @@
 # syntax = docker/dockerfile:experimental
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 ARG PYTHONUNBUFFERED=1
 ARG CI_COMMIT_SHA
+
+# Ubuntu 26.04 ships Python 3.14 and marks the system interpreter as externally
+# managed (PEP 668), which blocks system-wide pip installs. This is a
+# single-purpose application image, so allow pip to install into it.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Install Python runtime and dependencies
 RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
