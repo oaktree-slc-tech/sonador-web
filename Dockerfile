@@ -8,12 +8,16 @@ ARG CI_COMMIT_SHA
 # single-purpose application image, so allow pip to install into it.
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
-# Install Python runtime and dependencies
+# Install Python runtime and dependencies. Ubuntu 24.04+ base images ship a default
+# UID 1000 'ubuntu' user, so instead of creating a colliding user we repoint that
+# account to the sonador home directory and rename it (the app runs as UID 1000
+# throughout); the useradd fallback covers any base that doesn't ship the user.
 RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
   && mkdir -p /srv/www/sonador \
-  && useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador \
+  && ( usermod -l sonador -d /srv/www/sonador -s /bin/bash ubuntu \
+       || useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador ) \
   && mkdir -p /srv/www/sonador/docroot/static \
-  && chown 1000:1000 -R /srv/www/sonador 
+  && chown 1000:1000 -R /srv/www/sonador
 RUN --mount=type=secret,id=auto-devops-build-secrets . /run/secrets/auto-devops-build-secrets \
   && echo "Build container for Sonador $CI_COMMIT_SHA" \
   && mkdir -p /srv/www/sonador/config \ 

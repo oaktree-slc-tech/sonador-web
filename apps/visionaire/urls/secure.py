@@ -24,7 +24,8 @@ from ..views.base import SonadorApiObjectManagementView, SonadorApiRestView
 from ..views.dicom import PacsImagingServerChildObjectManagementView, PacsImagingServerChildObjectRestView
 from ..views.servers import PacsImagingServerApiManagementView, PacsImagingServerApiRestView
 from ..views.integrations import DataServiceApiRestView
-from ..views.userpref import UserPrefApiManagementView
+from ..views.userpref import UserPrefApiManagementView, UserPrefSectionApiView
+from ..forms.userpref import GeneralPrefForm, HotkeysPrefForm, WindowLevelPrefForm, ViewerMetaPrefForm, StudylistPrefForm
 
 from ..auth.models import DataService, PacsImagingServerGroupAuthorization
 from ..auth.views.service import SecureApiLoginView
@@ -101,7 +102,51 @@ urlpatterns_api = [
 		name='data-service-openid-token'),
 
 
-	# Persist user preferences/profile
+	# Persist user preferences/profile: section-scoped endpoints (FR-1). These MUST be
+	# registered above the whole-document `^user-preferences/?$` route below, otherwise
+	# that pattern shadows them. Each reuses the `user-pref-management` wrapper arguments.
+	re_path(r'^user-preferences/general/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefSectionApiView.as_view(section='general', formclass=GeneralPrefForm, field='viewer')),
+			name='user-pref-general'),
+	re_path(r'^user-preferences/hotkeys/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefSectionApiView.as_view(section='hotkeys', formclass=HotkeysPrefForm, field='viewer')),
+			name='user-pref-hotkeys'),
+	re_path(r'^user-preferences/window-level/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefSectionApiView.as_view(section='windowLevel', formclass=WindowLevelPrefForm, field='viewer')),
+			name='user-pref-window-level'),
+	re_path(r'^user-preferences/viewer-meta/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefSectionApiView.as_view(section='viewerMetadata', formclass=ViewerMetaPrefForm, field='viewer')),
+			name='user-pref-viewer-meta'),
+	re_path(r'^user-preferences/studylist/?$',
+		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
+				api_request_authentication=bearertoken_api_request_authentication,
+				allowed_http_methods_url_signature=('GET', 'OPTIONS', 'POST'),
+				apiaccess_token_model=ApiAccessToken, allowed_http_methods_token_access=('GET', 'OPTIONS', 'POST'),
+				request_header_accesstoken=API_ACCESS_APITOKEN_QSPARAM)(
+			UserPrefSectionApiView.as_view(section=None, formclass=StudylistPrefForm, field='studylist')),
+			name='user-pref-studylist'),
+
+	# Persist user preferences/profile: whole-document endpoint (backward compatible, FR-5)
 	re_path(r'^user-preferences/?$',
 		api_request(lambda user, request, vargs, vkwargs: user is not None and user.is_authenticated,
 				api_request_authentication=bearertoken_api_request_authentication,
