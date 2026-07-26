@@ -21,6 +21,15 @@ class UserPrefApiManagementView(GuruApiDetailsMixin, GuruApiCreateView):
 		document (`viewer` + `studylist`) and POST accepts a whole-document write via
 		the reworked (now user-bound, optional-field) UserPrefForm. Section-scoped
 		writes should use UserPrefSectionApiView.
+
+		AR-6 (server-bound identity) governs both paths: the record operated on is
+		always the caller's own, resolved from `request.user`. `UserPrefForm` excludes
+		`user` from its fields, so a `user` supplied in the request body is ignored.
+
+		Whole-document POST semantics, both fields being optional (§5.2, "fields now
+		optional"): a field the body omits leaves the stored document unchanged, while
+		a field present but empty (`null` or `{}`) clears it. A partial write therefore
+		cannot silently destroy the document it did not mention.
 	'''
 	model = UserPref
 	modelform = UserPrefForm
@@ -31,6 +40,35 @@ class UserPrefApiManagementView(GuruApiDetailsMixin, GuruApiCreateView):
 
 	def get(self, request, *args, **kwargs):
 		return super().get(request, *args, objectid=None, **kwargs)
+
+	def getObjectForm(self, request, request_data, instance=None, vargs=None, vkwargs=None):
+		'''	Bind the whole-document write to the caller's own record (AR-6).
+
+			GuruApiCreateView.post calls validateData without an objectid, so the form is
+			otherwise built unbound and saved as an INSERT with `user_id` NULL -- AR-6 was
+			applied to the form in !93 but not here. Resolving the row exactly as
+			getObject does turns the write into an UPDATE of the caller's record, which
+			also keeps a repeat POST from tripping the OneToOne unique constraint.
+
+			Binding the instance is additionally what supplies the retention semantics
+			documented on the class: guru's prepareModelData seeds the form data with the
+			stored record (model_to_dict) and overlays the request body on top, so a field
+			the body omits keeps its stored value.
+		'''
+		if instance is None:
+			# Mirrors the section view's FR-6 pattern: ensure the row exists, then hold it
+			# under a row lock for the read-modify-write prepareModelData performs.
+			self.model.objects.get_or_create(user=request.user)
+			instance = self.model.objects.select_for_update().get(user=request.user)
+
+		return super().getObjectForm(request, request_data, instance=instance, vargs=vargs, vkwargs=vkwargs)
+
+	def post(self, request, *args, **kwargs):
+		'''	Run the write inside a transaction so the select_for_update in getObjectForm
+			holds the row from resolution through save (FR-6).
+		'''
+		with transaction.atomic():
+			return super().post(request, *args, **kwargs)
 
 
 class UserPrefSectionApiView(JSONFormApiView):
