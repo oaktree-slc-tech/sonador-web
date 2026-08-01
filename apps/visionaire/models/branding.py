@@ -13,6 +13,9 @@ class SonadorSite(Site):
 	welcome = MarkupField(verbose_name='Welcome Message', markup_type='markdown', null=True, blank=True,
 		help_text='Message displayed to new users who have not yet been granted to access to data or resources.')
 
+	farewell = MarkupField(verbose_name='Farewell Message', markup_type='markdown', null=True, blank=True,
+		help_text='Message displayed on the sign-out confirmation page after a user ends their session.')
+
 	class Meta:
 		app_label = 'sites'
 		verbose_name = 'Site'

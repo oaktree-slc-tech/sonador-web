@@ -1,7 +1,83 @@
 {% extends 'content/base.html' %}
 
+{% comment %}
+Server rendered sign-out confirmation. This is the fallback surface: users who sign out from the
+viewer land on the viewer's own sign-out page (the OpenID `post_logout_redirect_uri`), which renders
+the site's configurable farewell message. This page covers direct hits on the logout URL and
+relying parties that ask for no post-logout destination, so it is deliberately self-contained and
+carries no viewer dependency.
+{% endcomment %}
+
+
+{% block head_title %}<title>Signed Out | Sonador</title>{% endblock head_title %}
+
+{% block extra_head %}
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    background-color: #151a1f;
+    color: #d8dde3;
+    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 300;
+  }
+
+  .signout-shell {
+    box-sizing: border-box;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  .signout-message {
+    margin: 0 auto;
+    max-width: 1024px;
+    width: 100%;
+  }
+
+  .signout-brand {
+    height: 56px;
+    width: 175px;
+    margin-bottom: 2rem;
+    background-image: url('{{ logo }}');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: left;
+  }
+
+  .signout-message h1 {
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1.1;
+    margin: 20px 0 10px;
+    color: #fff;
+  }
+
+  .signout-message p {
+    font-weight: 300;
+    font-size: 22px;
+    line-height: 2rem;
+    padding: 0.5rem 0;
+  }
+
+  .signout-message a { color: #20a5d6; }
+</style>
+{% endblock extra_head %}
+
 
 {% block content %}
-<h1>Logged Out Successfully</h1>
-<a href="{% url 'login' %}">Sign In</a>
+<div class="signout-shell">
+  <div class="signout-message">
+    {% if logo %}<div class="signout-brand" role="img" aria-label="{{ site.name }}"></div>{% endif %}
+
+    <h1>Signed Out</h1>
+    <p>
+      You have been logged out of Sonador successfully. Your session has ended and the imaging
+      data on this device is no longer accessible.
+    </p>
+    <p><a href="{% url 'login' %}">Sign in again</a></p>
+  </div>
+</div>
 {% endblock content %}
