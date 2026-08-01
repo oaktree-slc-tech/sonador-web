@@ -7,9 +7,12 @@ from django.core import signing
 from django.middleware import csrf
 
 from django.shortcuts import redirect, resolve_url
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.base import View, TemplateView
+
+from django.contrib.sites.shortcuts import get_current_site
 
 from django.contrib import auth
 from django.contrib.auth import views as auth_views
@@ -40,6 +43,8 @@ from ...helpers import SESSION_SALT, ACCESS_TOKEN_MAX_AGE
 from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PARAM, \
 	OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM, OPENID_AUTH_TOKEN_SESSION_PARAM, \
 	OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM, OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM
+
+from ...models.branding import SonadorSite
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
 from ..helpers import openid_get_django_user
@@ -312,6 +317,201 @@ class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
 			OAUTH_EXPIRATION: request.session.get_expiry_age(),
 		})
 
+
+
+class OpenIDEndSessionView(OpenIDAuthServerMixin, View):
+	'''	OpenID Connect RP-Initiated Logout endpoint for Sonador. This is the view published as
+		`end_session_endpoint` by `oAuth2EndpointsView`, and it is what the viewer navigates to
+		when a user picks "Logout" (oidc-client issues a top level GET to the end session
+		endpoint, carrying `id_token_hint` and `post_logout_redirect_uri`).
+
+		It replaces `django.contrib.auth.views.LogoutView` at the `logout` URL for two reasons:
+
+		1.	`LogoutView` is POST-only from Django 5.0 onwards, so the spec mandated top level GET
+			navigation from the relying party answers 405 and the session survives. The viewer then
+			silently re-authenticates against the still-valid session cookie, which is the
+			"logout does nothing" behavior reported in ohif-viewers#31.
+
+		2.	`LogoutView` only honors its own `next` redirect field, so the `post_logout_redirect_uri`
+			the relying party sends is discarded.
+
+		The Django session is the authentication of record here: the bearer token the viewer holds
+		is a signed copy of the session key (see `oAuth2TokenAuthorizationView`), so flushing the
+		session is what actually signs the user out.
+
+		NOTE: honoring GET means this endpoint is not CSRF protected, which is inherent to redirect
+		based RP-initiated logout. The worst an attacker can force is an unwanted logout.
+	'''
+	http_method_names = ['get', 'head', 'post', 'options']
+	redirect_uri_fieldname = 'post_logout_redirect_uri'
+	state_fieldname = 'state'
+
+	def get(self, request, *args, **kwargs):
+		return self.end_session(request, *args, **kwargs)
+
+	def post(self, request, *args, **kwargs):
+		return self.end_session(request, *args, **kwargs)
+
+	def end_session(self, request, *args, **kwargs):
+		'''	Destroy the Sonador session and return the user to the post logout page
+		'''
+		# Resolve the redirect target *before* the session is destroyed: validating it reads
+		# request state, and `auth.logout()` swaps in a fresh anonymous session.
+		redirect_to, client_redirect = self.get_post_logout_redirect_url(request, args, kwargs)
+
+		if getattr(request.user, 'is_authenticated', False):
+			logger.debug('Ending Sonador session for "%s". Post logout redirect: %s'
+				% (request.user, redirect_to))
+
+		auth.logout(request)
+
+		# RP-Initiated Logout 1.0 (section 2) requires `state` to be echoed back to the relying
+		# party, but only when returning to an endpoint the relying party asked for.
+		state = self.get_request_param(request, self.state_fieldname)
+		if client_redirect and state:
+			# `query_lowercase` must stay off: it lowercases the whole query string, which would
+			# corrupt the opaque state value the relying party expects back verbatim.
+			redirect_to = merge_url_querystring(
+				redirect_to, {self.state_fieldname: state}, query_lowercase=False)
+
+		return redirect(redirect_to)
+
+	def get_request_param(self, request, fieldname):
+		'''	Read a logout parameter from either the query string or a form post
+		'''
+		return request.POST.get(fieldname) or request.GET.get(fieldname)
+
+	def get_default_redirect_url(self):
+		'''	Page shown when the relying party does not ask for (or is not allowed) a specific
+			destination. Confirms to the user that the logout completed.
+		'''
+		return resolve_url(gsetting('LOGOUT_REDIRECT_URL') or 'logout-success')
+
+	def get_post_logout_redirect_url(self, request, vargs, vkwargs):
+		'''	Resolve the destination for the user once the session has been destroyed.
+
+			@returns tuple:
+				1.	(str) URL to redirect to
+				2.	(bool) True when the URL was requested by the relying party, False when it is
+					the Sonador default. Only relying party destinations get `state` echoed back.
+		'''
+		requested = self.get_request_param(request, self.redirect_uri_fieldname)
+		if not requested:
+			return self.get_default_redirect_url(), False
+
+		if not self.is_safe_redirect_url(request, vargs, vkwargs, requested):
+			logger.warning(('Rejected post_logout_redirect_uri "%s": not a Sonador URL and not '
+				+ 'registered with the authorization server. Falling back to the logout notice page.')
+				% requested)
+			return self.get_default_redirect_url(), False
+
+		return requested, True
+
+	def is_safe_redirect_url(self, request, vargs, vkwargs, url):
+		'''	Determine whether the requested post logout destination may be redirected to.
+			Guards the endpoint against being used as an open redirect.
+		'''
+		# `ALLOWED_HOSTS` may be a wildcard, which is meaningless for redirect validation. Check
+		# against the host actually serving the request instead.
+		allowed_hosts = set(gsetting('ALLOWED_HOSTS') or [])
+		allowed_hosts.discard('*')
+		allowed_hosts.add(request.get_host())
+
+		# Relative URLs and fully qualified URLs belonging to the Sonador site itself
+		if url_has_allowed_host_and_scheme(url, allowed_hosts=allowed_hosts, require_https=request.is_secure()):
+			return True
+
+		# Origins the platform already trusts as application endpoints. This is what lets the
+		# viewer -- rather than Sonador -- finish the logout when it is not being served by
+		# Sonador itself (a development server, or a standalone build on its own host). Without
+		# it those deployments can never be returned to their own sign-out page, and every logout
+		# ends on Sonador's fallback notice instead.
+		if self.is_trusted_client_origin(url):
+			return True
+
+		# Endpoints registered verbatim with any of the configured authorization servers
+		return any(authserver.is_safe_url(url, allowed_hosts=allowed_hosts)
+			for authserver in self.get_auth_servers())
+
+	def get_auth_servers(self):
+		'''	Every authorization server configured for the platform.
+
+			Deliberately not just the default/requested server: a viewer may be registered against
+			any of them, and the destination is being validated, not authenticated.
+		'''
+		return self.authserver_model.objects.all()
+
+	def is_trusted_client_origin(self, url):
+		'''	Determine whether `url` is served from an origin the platform trusts as one of its
+			own application endpoints.
+		'''
+		requested = urlparse.urlparse(url)
+		if requested.scheme not in ('http', 'https') or not requested.netloc:
+			return False
+
+		for scheme, netloc in self.get_trusted_client_origins():
+			if scheme != requested.scheme:
+				continue
+			if netloc == requested.netloc:
+				return True
+
+			# Wildcard subdomain form ("https://*.example.com"), matching how Django reads a
+			# wildcard origin. The bare domain is intentionally not covered.
+			if netloc.startswith('*.') and requested.netloc.endswith(netloc[1:]):
+				return True
+
+		return False
+
+	def get_trusted_client_origins(self):
+		'''	Origins (scheme, netloc) taken from the Callback URLs registered against the
+			platform's authorization servers.
+
+			The Callback URL list is the operator's record of which endpoints belong to the
+			application, so it is the single source of truth here -- a viewer hosted somewhere
+			other than Sonador is authorized by registering it there, not in site settings.
+			Registering a client's callback declares that origin as part of the application, so
+			the sign-out page served from the same origin is covered by the same entry.
+
+			Relative and malformed entries are ignored.
+		'''
+		origins = set()
+
+		for authserver in self.get_auth_servers():
+			for entry in (authserver.callback_url or '').splitlines():
+				registered = urlparse.urlparse((entry or '').strip())
+				if registered.scheme in ('http', 'https') and registered.netloc:
+					origins.add((registered.scheme, registered.netloc))
+
+		return origins
+
+
+class LogoutSuccessView(TemplateView):
+	'''	Server rendered sign-out confirmation.
+
+		The viewer renders its own sign-out page at the `post_logout_redirect_uri` (see
+		`OhifSignedOutViewer`), which is where users normally land. This page is the fallback for
+		everything that does not come back through the viewer: a direct hit on the logout URL, a
+		relying party that sends no `post_logout_redirect_uri`, or a client that asks for one
+		Sonador will not redirect to.
+
+		The site's configurable farewell message is deliberately *not* rendered here: it is
+		authored as markdown for the viewer's `ReactMarkdown` renderer, and Sonador carries no
+		server side markdown dependency to render it with. This page states the outcome plainly
+		instead.
+	'''
+	template_name = 'content/logout.html'
+
+	def get_context_data(self, **kwargs):
+		context = super(LogoutSuccessView, self).get_context_data(**kwargs)
+
+		# Site branding, so the notice matches the viewer the user just left
+		site = get_current_site(self.request)
+		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+
+		context['site'] = ssite if ssite else site
+		context['logo'] = ssite.logo.url if (ssite and ssite.logo) else static('images/sonador-logo.ng.svg')
+
+		return context
 
 
 class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):

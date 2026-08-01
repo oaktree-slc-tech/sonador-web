@@ -43,6 +43,9 @@
   <!-- Empty State Message -->
   {% if empty_state %}<script id="empty-state-message" type="text/template">{{ empty_state }}</script>{% endif %}
 
+  <!-- Farewell Message (sign-out confirmation page) -->
+  {% if farewell %}<script id="farewell-message" type="text/template">{{ farewell }}</script>{% endif %}
+
 
   <!-- Configure User Interface Messages -->
   <script>
@@ -59,6 +62,16 @@
     if (emptystate_element && !window.sonador.home) {
       window.sonador.home = {
         message: emptystate_element.innerHTML,
+      };
+    }
+  }
+
+  // Populate the sign-out confirmation message
+  if (!window.sonador.signedout) {
+    var farewell_element = document.getElementById('farewell-message');
+    if (farewell_element) {
+      window.sonador.signedout = {
+        message: farewell_element.innerHTML,
       };
     }
   }
@@ -97,7 +110,10 @@
             });
           },
           emptyStateMessageFn: function(React) {
-            return window.config?.branding?.empty_state || window.sonador.home.message;
+            return window.config?.branding?.empty_state || window.sonador.home?.message;
+          },
+          signedOutMessageFn: function(React) {
+            return window.config?.branding?.farewell || window.sonador.signedout?.message;
           }
         }
 

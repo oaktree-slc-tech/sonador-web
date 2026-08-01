@@ -302,6 +302,9 @@ CSRF_TRUSTED_ORIGINS = siteconfig_site.get('CSRF_TRUSTED_ORIGINS', [])
 siteconfig_viewer = siteconfig.get('Viewer', {})
 VIEWER_EMPTY_STATE_MESSAGE = siteconfig_viewer.get('VIEWER_EMPTY_STATE_MESSAGE',
     'Your user account is not associated with any imaging servers. Please contact your system administrator.')
+VIEWER_FAREWELL_MESSAGE = siteconfig_viewer.get('VIEWER_FAREWELL_MESSAGE',
+    '# Signed Out\n\nYou have been logged out of Sonador successfully. Your session has ended and '
+    'the imaging data on this device is no longer accessible.')
 
 
 

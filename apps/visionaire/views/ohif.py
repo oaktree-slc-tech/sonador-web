@@ -49,6 +49,22 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 			context['empty_state'] = ssite.welcome
 		else: context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
 
+		# Add farewell message, shown by the viewer's sign-out confirmation page
+		if ssite and ssite.farewell:
+			context['farewell'] = ssite.farewell
+		else: context['farewell'] = gsetting('VIEWER_FAREWELL_MESSAGE')
+
+		# Post logout destination, emitted root relative on purpose. The viewer resolves it against
+		# its own origin (never its `routerBasename`, which is server specific), so each deployment
+		# lands on the sign-out page it actually serves: Sonador for the integrated viewer, and its
+		# own host for a standalone/PWA build. A fully qualified Sonador URL here would drag a
+		# standalone viewer off its origin on logout.
+		context['post_logout_redirect_url'] = reverse('logout-redirect')
+
+		# End session endpoint, used by the viewer's logout fallback. Fully qualified because it is
+		# always Sonador that owns the session, whatever origin the viewer is served from.
+		context['end_session_url'] = site_fullurl(reverse('logout'))
+
 		# If enabled, add the authentication endpoint
 		if gsetting('AUTH_ENABLED'):
 
@@ -119,6 +135,11 @@ class OhifDicomViewer(TemplateView):
 			context['empty_state'] = ssite.welcome
 		else: context['empty_state'] = gsetting('VIEWER_EMPTY_STATE_MESSAGE')
 
+		# Farewell message shown by the viewer's sign-out confirmation page
+		if ssite and ssite.farewell:
+			context['farewell'] = ssite.farewell
+		else: context['farewell'] = gsetting('VIEWER_FAREWELL_MESSAGE')
+
 		# Retrieve configuration for a specific image server
 		if self.kwargs.get(self.imageserver_objectid_url_param):
 			try:
@@ -162,4 +183,21 @@ class OhifDicomViewer(TemplateView):
 			return self.model.objects.filter(active=True).filter(
 				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user)).distinct()
 
+		return self.model.objects.none()
+
+
+class OhifSignedOutViewer(OhifDicomViewer):
+	'''	Viewer shell served at the OpenID `post_logout_redirect_uri`, where the viewer renders its
+		sign-out confirmation page.
+
+		Unlike every other viewer route this one is deliberately *not* wrapped in `login_required`.
+		The user arrives here with their session already destroyed, so requiring a login would send
+		them straight back through the OpenID workflow and silently sign them back in -- the
+		"logout does nothing" loop reported in ohif-viewers#31.
+
+		No imaging servers are exposed: the request is anonymous by definition, and the inherited
+		authorization query cannot be evaluated against an unauthenticated user.
+	'''
+
+	def get_imaging_servers(self, *args, **kwargs):
 		return self.model.objects.none()

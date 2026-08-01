@@ -152,3 +152,30 @@ VIEWER_SECTION_DEFAULTS = {
 	'windowLevel': DEFAULT_WINDOW_LEVEL,
 	'viewerMetadata': DEFAULT_VIEWER_METADATA,
 }
+
+
+# -- Authorization server --------------------------------------------------------------
+
+def create_authserver(callback_url='', **kwargs):
+	'''	Create a SocialAuthorizationServer (and the SocialAppProvider it requires) for tests
+		which exercise redirect validation against the registered client callback URLs.
+
+		`get_default_authserver` returns the only row when exactly one exists, so a single call
+		is enough to make this the auth server the logout endpoint validates against.
+	'''
+	from wgtauth.social.models import SocialAppProvider
+	from ..auth.models import SocialAuthorizationServer
+
+	provider = SocialAppProvider.objects.create(
+		name=kwargs.pop('provider_name', 'Test Connect'),
+		hostname='idp.example.com', port=443, scheme='https',
+		login_class='', endpoint_authorization='/o/authorize/', endpoint_token='/o/token/',
+		endpoint_token_revoke='/o/revoke_token/', endpoint_user='/o/introspect/')
+
+	return SocialAuthorizationServer.objects.create(
+		provider=provider,
+		description=kwargs.pop('description', 'Test authorization server'),
+		client_id=kwargs.pop('client_id', 'test-client-id'),
+		client_secret=kwargs.pop('client_secret', 'test-client-secret'),
+		callback_url=callback_url,
+		**kwargs)

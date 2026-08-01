@@ -20,3 +20,7 @@ class VisionaireAppConfig(AppConfig):
 
 		# Enable Visionaire signals
 		from . import signals
+
+		# Enable authentication signals. Connects the receiver which revokes the identity
+		# provider access token when a session ends.
+		from .auth import signals as auth_signals

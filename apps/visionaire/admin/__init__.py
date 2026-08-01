@@ -58,18 +58,24 @@ class SonadorApiAccessAdmin(UserLabelMixin, ApiAccessAdmin):
 # Site Management
 
 
+# Markdown message fields on SonadorSite which are edited with the ACE code editor
+SONADORSITE_MARKDOWN_FIELDS = ('welcome', 'farewell')
+
+
 class SonadorSiteAdminForm(forms.ModelForm):
-	'''	ModelAdmin form which provides an ACE text editor for the site "Welcome" message.
+	'''	ModelAdmin form which provides an ACE text editor for the site's markdown messages
+		("Welcome" and "Farewell").
 	'''
 	class Meta:
 		model = SonadorSite
 		fields = '__all__'
-		widgets = { 'welcome': CodeEditorAdminWidget(code_language='markdown'), }
+		widgets = { field: CodeEditorAdminWidget(code_language='markdown') for field in SONADORSITE_MARKDOWN_FIELDS }
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		self.fields['welcome'].widget.attrs.update({ CodeEditorAdminWidget.code_language_attr: 'markdown' })
+		for field in SONADORSITE_MARKDOWN_FIELDS:
+			self.fields[field].widget.attrs.update({ CodeEditorAdminWidget.code_language_attr: 'markdown' })
 
 
 @admin.register(SonadorSite)
@@ -80,7 +86,7 @@ class SonadorSitesAdmin(admin.ModelAdmin):
 
 	fieldsets = (
 		('Site Properties', { 'fields': ('name', 'domain')}),
-		('Site Branding', { 'fields': ('logo', 'favicon', 'welcome')})
+		('Site Branding', { 'fields': ('logo', 'favicon', 'welcome', 'farewell')})
 	)
 
 	form = SonadorSiteAdminForm
