@@ -46,9 +46,12 @@ RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce && gulp jsBuildMagnificLight
   && yarn install && yarn build:package \
   && cd /srv/www/sonador/sonador/ && gulp deployOHIF
 
-# Install PostgreSQL (for production)
+# Install PostgreSQL (for production). psycopg2 is source-only and the base image
+# ships no compiler or Python headers, so use psycopg2-binary instead; 2.9.11 is
+# the first release with cp314 wheels (Ubuntu 26.04 ships Python 3.14) and the
+# wheel bundles libpq, so no libpq-dev build dependency is required.
 USER 0
-RUN apt-get install -y libpq-dev && pip3 install --timeout 30 psycopg2
+RUN pip3 install --timeout 30 "psycopg2-binary>=2.9.11"
 
 # Install sudo
 RUN apt-get install -y sudo \
