@@ -41,6 +41,12 @@ ORTHANC_RESOURCE_WORKLIST = IMAGING_SERVER_RESOURCE_WORKLIST.lower()
 ORTHANC_RESOURCE_COMMENT = IMAGING_SERVER_RESOURCE_COMMENT.lower()
 ORTHANC_RESOURCE_ARCHIVE = 'archive'
 
+# Resource management namespace. DELETE of a study or series is not part of the DICOMweb
+# standard, so the plugin hangs the operation from a "manage" path component:
+# /dicom-web/{studies|series}/{uid}/manage. Deliberately generic -- later management
+# operations (anonymize, modify, reindex) share the segment.
+ORTHANC_RESOURCE_MANAGE = 'manage'
+
 ORTHANC_LOCALAUTH_RESOURCES = set((
 	ORTHANC_RESOURCE_PATIENT,
 	ORTHANC_RESOURCE_STUDY, 
@@ -149,6 +155,22 @@ ORTHANC_DICOMWEB_ACL_MANAGEMENT_REGEX = re.compile(
 # carries the "acl" action token -- see ORTHANC_DICOMWEB_ACL_MANAGEMENT_REGEX above).
 # Requires a literal "/acl/" segment boundary so it can never match ".../resource-acl".
 ORTHANC_ACL_MANAGEMENT_PATH_REGEX = re.compile(r'/acl/(?:user|group)(?:/|$)')
+
+# DICOMweb resource management routes: /dicom-web/{studies|series}/{uid}/manage. As with
+# the ACL routes above, the plugin's own DICOMweb classification regexes do not recognize
+# this sub-route (only a closed enum of suffixes -- series/metadata/instances/rendered/
+# thumbnail -- is recognized), so the access arrives unclassified as "system" with the raw
+# URI and Sonador must re-derive level/dicom_uid itself (see clean_auth_request). One
+# regex covers both endpoints: ORTHANC_LOCALAUTH_RESOURCES_PLURAL normalizes "studies" to
+# "study" and "series" matches the singular form directly.
+ORTHANC_DICOMWEB_MANAGE_REGEX = re.compile(
+	r'%s/%s/%s/manage' % (ORTHANC_DICOMWEB, ORTHANC_DICOMWEB_RESOURCE_TYPE_REGEX_STR,
+		ORTHANC_DICOMWEB_RESOURCE_REGEX_STR))
+
+# Path-segment check for a resource management leaf. Requires a literal "/manage" segment
+# terminated by the end of the URI, a trailing slash, or a query string, so it matches only
+# the management route itself and never a longer sub-route which merely begins with it.
+ORTHANC_MANAGEMENT_PATH_REGEX = re.compile(r'/manage(?:[/?]|$)')
 
 ORTHANC_DICOMWEB_DISTORTION_FILTER_REGEX = re.compile(
 	r'%s/groups/(?P<group_uid>\d+)/distortion-filter/(?P<uid>(?:\d+\.)*\d+)' % ORTHANC_DICOMWEB)

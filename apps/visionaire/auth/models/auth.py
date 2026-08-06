@@ -10,6 +10,7 @@ from django.contrib.auth.models import User, Group
 from microservices.control import server_controlurl, \
 	server_controloperation_post, server_controloperation_put, server_controloperation_delete
 from microservices.control.jsonapi import server_controloperation_get
+from microservices.errors import MicroserviceResourceNotFound
 
 import guru.apisettings as gapicodes
 from guru.models import GuruTokenModel
@@ -445,14 +446,28 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	def orthanc_resource_info(self, level, orthanc_id):
 		'''	Retrieve the resource details for the provided Orthanc ID
 
-			@returns JSON (dict) with resource details from Orthanc API
+			A resource which is no longer present on the imaging server degrades to an empty
+			result rather than propagating the error. The resource policy stores Orthanc IDs as
+			text (`study={id} series={id}`) and nothing prunes them when a resource is removed,
+			so a stale UID is an expected condition; letting the 404 escape would make removing
+			one study break authorization for every OTHER resource sharing the same group
+			policy, since resource_authscope walks every UID in the policy.
+
+			@returns JSON (dict) with resource details from Orthanc API, or an empty dict when
+				the resource no longer exists
 		'''
 		if not ORTHANC_RESOURCE_URL.get(level.lower()):
-			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, uid))
+			raise ValueError('Unable to create resource authorization scope for level=%s uid=%s. Unsupported resource type.' % (level, orthanc_id))
 
-		return server_controloperation_get(
-			server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)), 
-			headers=self.server.sonador_auth)
+		try:
+			return server_controloperation_get(
+				server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)),
+				headers=self.server.sonador_auth)
+
+		except MicroserviceResourceNotFound:
+			logger.info('Resource level=%s uid=%s referenced by policy=%s is no longer present on server=%s. '
+				'Treating as outside the authorization scope.' % (level, orthanc_id, self.pk, self.server.pk))
+			return {}
 
 	def resource_policy(self, resource=None):
 		'''	Parse resource policy to components: patient, study, series
@@ -493,10 +508,9 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			if s_uid:
 				authscope[orthanc_api.IMAGING_SERVER_RESOURCE_STUDY.lower()] = set([s_uid])
 
-				# Patient
-				_rp = server_controloperation_get(
-					server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL_STUDY, s_uid)),
-					headers=self.server.sonador_auth)
+				# Patient. Routed through orthanc_resource_info so a study which has since been
+				# removed degrades to "no parent patient" instead of raising.
+				_rp = self.orthanc_resource_info(orthanc_api.IMAGING_SERVER_RESOURCE_STUDY, s_uid)
 				p_uid = _rp.get(orthanc_api.IMAGING_SERVER_PARENT_PATIENT)
 				if p_uid:
 					authscope[orthanc_api.IMAGING_SERVER_RESOURCE_PATIENT.lower()] = set([p_uid])

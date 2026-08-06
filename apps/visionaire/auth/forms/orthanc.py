@@ -264,6 +264,20 @@ class OrthancServiceAuthorizationForm(ImagingServerFormMixin, SonadorServiceAuth
 			_dcmweb_resource_perms = orthanc_api.ORTHANC_DICOMWEB_ACL_PERMS_REGEX.match(_resource)
 			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_resource_perms)
 
+		# Check for DICOMweb resource management (removal of a study or series addressed by
+		# DICOM UID). As with the ACL routes above, the plugin's DICOMweb classification
+		# regexes do not recognize this sub-route, so it arrives as an unclassified "system"
+		# access carrying the raw URI; re-derive level/dicom_uid here so the existing
+		# evaluator resolves the "remove" permission at study or series granularity. Checked
+		# after the archive, comments, and ACL branches: a management URI carries none of
+		# their path tokens, so the branches cannot shadow one another in either direction.
+		elif orthanc_api.ORTHANC_DICOMWEB in _resource \
+				and orthanc_api.ORTHANC_MANAGEMENT_PATH_REGEX.search(_resource):
+
+			# Parse DICOM UID and resource level from URI
+			_dcmweb_manage = orthanc_api.ORTHANC_DICOMWEB_MANAGE_REGEX.match(_resource)
+			cleaned_data = self._clean_dcmweb_resource_level(cleaned_data, _dcmweb_manage)
+
 		# Check for DICOMweb series distortion filter
 		elif orthanc_api.ORTHANC_DICOMWEB_GROUPS_ROOT in _resource:
 			
