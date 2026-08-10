@@ -8,6 +8,11 @@ class SonadorSite(Site):
 	''' Subclass model for Site which provides a logo field
 	'''
 	logo = models.FileField(upload_to='sites/branding', null=True, blank=True)
+
+	logo_narrow = models.FileField(upload_to='sites/branding', null=True, blank=True,
+		verbose_name='Narrow Logo',
+		help_text='Square mark shown when the viewer sidebar is collapsed. Recommended 64x64.')
+
 	favicon = models.FileField(upload_to='sites/branding/favicon', null=True, blank=True)
 
 	welcome = MarkupField(verbose_name='Welcome Message', markup_type='markdown', null=True, blank=True,

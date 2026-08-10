@@ -7,8 +7,9 @@
   "servers": { "dicomWeb": null },
   "fuzzyMatching": false,
 
-  {% if logo or empty_state or farewell %}"branding": {
+  {% if logo or logo_narrow or empty_state or farewell %}"branding": {
     {% if logo %}"logo": "{{ logo }}",{% endif %}
+    {% if logo_narrow %}"logo_narrow": "{{ logo_narrow }}",{% endif %}
     "empty_state": {% if empty_state %}"{{ empty_state|escapejs }}"{% else %}""{% endif %},
     "farewell": {% if farewell %}"{{ farewell|escapejs }}"{% else %}""{% endif %}
   },{% endif %}

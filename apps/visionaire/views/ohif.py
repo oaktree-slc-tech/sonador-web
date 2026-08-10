@@ -37,12 +37,29 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		site = get_current_site(self.request)
 		ssite = SonadorSite.objects.filter(pk=site.pk).first()
 
-		# Add logo image
+		# Add logo image.
+		#
+		# Branding URLs are consumed by a viewer that is NOT necessarily served from this origin --
+		# a standalone/PWA build fetches this config cross-origin and resolves any relative URL
+		# against its own host, where /static/... does not exist. Uploaded logos come back from the
+		# media storage already fully qualified, which is why the configured case has always
+		# worked; the static fallbacks are relative, so they are absolutised here.
+		#
+		# ONLY the static fallbacks. site_fullurl rewrites the netloc of any URL whose hostname
+		# matches the site's (see its match_site_netloc branch), so passing an uploaded media URL
+		# through it would rewrite a media host that differs from the site only by port -- exactly
+		# how object storage is deployed here -- and break a URL that works today.
 		context['site'] = ssite if ssite else site
 		if ssite and ssite.logo:
 			context['logo'] = ssite.logo.url
 		else:
-			context['logo'] = static('images/sonador-logo.ng.svg')
+			context['logo'] = site_fullurl(static('images/sonador-logo.ng.svg'), request=self.request)
+
+		# Add narrow (square) mark, shown when the viewer's studylist sidebar is collapsed
+		if ssite and ssite.logo_narrow:
+			context['logo_narrow'] = ssite.logo_narrow.url
+		else:
+			context['logo_narrow'] = site_fullurl(static('images/sonador-mark.svg'), request=self.request)
 
 		# Add welcome message
 		if ssite and ssite.welcome:
@@ -124,11 +141,18 @@ class OhifDicomViewer(TemplateView):
 		# Retrieve currently active site and any associated custom branding
 		site = get_current_site(self.request)
 		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		# See OhifConfigView.get_context_data on why the static fallbacks are absolutised.
 		context['site'] = ssite if ssite else site
 		if ssite and ssite.logo:
 			context['logo'] = ssite.logo.url
 		else:
-			context['logo'] = static('images/sonador-logo.ng.svg')
+			context['logo'] = site_fullurl(static('images/sonador-logo.ng.svg'), request=self.request)
+
+		# Narrow (square) mark, shown when the viewer's studylist sidebar is collapsed
+		if ssite and ssite.logo_narrow:
+			context['logo_narrow'] = ssite.logo_narrow.url
+		else:
+			context['logo_narrow'] = site_fullurl(static('images/sonador-mark.svg'), request=self.request)
 
 		# Empty state (first-run) messageo
 		if ssite and ssite.welcome:

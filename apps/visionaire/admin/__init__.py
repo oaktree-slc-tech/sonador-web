@@ -86,7 +86,7 @@ class SonadorSitesAdmin(admin.ModelAdmin):
 
 	fieldsets = (
 		('Site Properties', { 'fields': ('name', 'domain')}),
-		('Site Branding', { 'fields': ('logo', 'favicon', 'welcome', 'farewell')})
+		('Site Branding', { 'fields': ('logo', 'logo_narrow', 'favicon', 'welcome', 'farewell')})
 	)
 
 	form = SonadorSiteAdminForm
