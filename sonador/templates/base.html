@@ -26,6 +26,21 @@
     background-repeat: no-repeat;
     background-position: left;
   }
+
+  {% if logo_narrow %}
+  /* Square mark shown in place of the wordmark when the viewer's studylist sidebar is
+     collapsed (ohif-viewers#128). Emitted only when the context actually carries a narrow
+     logo: an unguarded `url('')` renders as an empty 28px box, and because the paired
+     whiteLabeling function below would still exist, the viewer's own bundled mark would never
+     get the chance to fill in. */
+  .header-brand-narrow {
+    height: 28px; width: 28px;
+    background-image: url('{{ logo_narrow }}');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  {% endif %}
 </style>
 
 <body id="body">
@@ -106,6 +121,19 @@
               className: 'header-brand',
             });
           },
+          {% if logo_narrow %}
+          // Defined ONLY when the site actually has a narrow logo to point at. App.js hands this
+          // whole object to WhiteLabelingContext.Provider in place of the defaults rather than
+          // merging with them, so defining this unconditionally would shadow the viewer's bundled
+          // Sonador mark with an empty box on every deployment whose context lacks logo_narrow.
+          createNarrowLogoComponentFn: function(React) {
+            return React.createElement('a', {
+              rel: 'noopener noreferrer',
+              className: 'header-brand-narrow',
+              href: '/',
+            });
+          },
+          {% endif %}
           emptyStateMessageFn: function(React) {
             return window.config?.branding?.empty_state || window.sonador.home?.message;
           },
