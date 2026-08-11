@@ -44,6 +44,25 @@ import secure.apisettings as sapicodes
 
 
 
+# Sonador Release Version
+
+# Version of the Sonador web application (backend + bundled API). This is deliberately a source
+# constant rather than a `site.config` value: it identifies the *build* that is deployed, not the
+# way a particular deployment is configured, so a site operator must not be able to change it.
+#
+# Branch convention:
+#   * `master`      -> 'dev' (unreleased; the working trunk)
+#   * `dev/X.Y`     -> a semantic pre-release, bumped as the release is stabilized (e.g. '0.4.0-rc1')
+#   * `release/X.Y` -> the finalized semantic version for the release (e.g. '0.4.0')
+#
+# Reported to the viewer through the OHIF application configuration document
+# (`visionaire.views.ohif.OhifConfigView`, served at `/ohif/config`) as `sonadorVersion`, where it
+# is surfaced in the viewer's Settings > About table as "Sonador API Version" so a user can
+# establish which Sonador web API their frontend is talking to.
+SONADOR_VERSION = 'dev'
+
+
+
 # Site Configuration Settings
 
 # Core site configuration settings
