@@ -15,6 +15,13 @@
   },{% endif %}
   "staticUrl": "{% static 'js' %}",
   {% if SONADOR_URL %}"sonadorUrl": "{{ SONADOR_URL }}",{% endif %}
+  {% comment %}
+  Build version of the Sonador web application answering this request (`settings.SONADOR_VERSION`).
+  Reported in the viewer's About table as "Sonador API Version". Guarded so a deployment running an
+  older settings module -- which has no such setting -- emits a valid document rather than
+  `"sonadorVersion": "None"`.
+  {% endcomment %}
+  {% if SONADOR_VERSION %}"sonadorVersion": "{{ SONADOR_VERSION|escapejs }}",{% endif %}
 
   {% if oauth_endpoint %}
   "oidc": [{

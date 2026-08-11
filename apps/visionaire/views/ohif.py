@@ -124,6 +124,13 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		# Sonador root URL
 		context['SONADOR_URL'] = site_fullurl(request=self.request)
 
+		# Version of the Sonador web application serving this configuration. Emitted alongside the
+		# branding and connection settings so the viewer can report, in its About table, which
+		# Sonador API build the frontend is talking to. Deployments are frequently mixed (a viewer
+		# bundle and a web application released on separate cadences), so the two versions have to
+		# be reported independently.
+		context['SONADOR_VERSION'] = gsetting('SONADOR_VERSION')
+
 		return context
 
 
