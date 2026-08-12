@@ -160,6 +160,19 @@ class PacsImagingServer(BaseServerModel):
 		return False, None
 
 	@property
+	def auditLabel(self):
+		'''	How this server is identified in a HIPAA audit record.
+
+			Recorded on `AuditEvent.entity.detail.ImagingServer`. Kept on the model so the
+			live authorization path and the value replayed from the authorization response
+			cache render identically -- were they to diverge, a cached grant and an uncached
+			grant for the same server would stop grouping together when a reviewer
+			aggregates on this field. Falls back to the primary key so a server with no name
+			is still identifiable rather than blank.
+		'''
+		return str(self.name or self.pk)
+
+	@property
 	def wadoUriRoot(self):
 		return server_controlurl(self, self.wado_root)
 

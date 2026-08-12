@@ -24,3 +24,8 @@ class VisionaireAppConfig(AppConfig):
 		# Enable authentication signals. Connects the receiver which revokes the identity
 		# provider access token when a session ends.
 		from .auth import signals as auth_signals
+
+		# Enable HIPAA audit logging. Connects the receiver which serializes audit events
+		# as FHIR AuditEvent records and publishes them to Kafka. The receiver is inert
+		# unless AUDIT_LOGGING_ENABLED is set in the site config.
+		from . import audit as audit_signals

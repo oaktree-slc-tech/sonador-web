@@ -12,7 +12,20 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # UID 1000 'ubuntu' user, so instead of creating a colliding user we repoint that
 # account to the sonador home directory and rename it (the app runs as UID 1000
 # throughout); the useradd fallback covers any base that doesn't ship the user.
+#
+# Kafka native dependencies, for the HIPAA audit trail (confluent-kafka in
+# requirements.txt). The Orthanc cloud plugin image installs librdkafka-dev for the same
+# reason. Two notes for whoever touches this next:
+#  - librdkafka-dev: the confluent-kafka manylinux wheel statically bundles its own
+#    librdkafka, so the import works without this. It is installed so the platform
+#    library is present if a base image or Python version ever ships without a matching
+#    wheel and pip falls back to building from source.
+#  - libsasl2-modules-gssapi-mit: required at RUNTIME to use sasl.mechanisms = 'GSSAPI'
+#    (Kerberos) against a secured broker. TLS and SASL PLAIN/SCRAM/OAUTHBEARER work with
+#    the bundled build; GSSAPI is the one mechanism that needs a system SASL module, and
+#    its absence surfaces only when a deployment enables it.
 RUN apt-get update && apt-get install -y git python3 python3-pip virtualenv python3-configobj \
+  librdkafka-dev libsasl2-modules-gssapi-mit \
   && mkdir -p /srv/www/sonador \
   && ( usermod -l sonador -d /srv/www/sonador -s /bin/bash ubuntu \
        || useradd -ms /bin/bash -u 1000 -d /srv/www/sonador sonador ) \
