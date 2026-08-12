@@ -20,8 +20,18 @@ nodeenv>=1.9.1
 pydantic>=2.12,<3
 
 
+# HIPAA Audit Logging
+# Access-control decisions and identity events are serialized as FHIR AuditEvent
+# records and published to Kafka. Both resolve to cp314 wheels on the Ubuntu 26.04
+# base image. `fhir.resources` is capped below 9 because the records are built
+# against the R4B subpackage (fhir.resources.R4B.auditevent); the top-level import
+# path targets R5, whose AuditEvent renames type/subtype and restructures outcome.
+confluent-kafka>=2.3.0
+fhir.resources>=8.3,<9
+
+
 # Oak-Tree Libraries
-acorn-base>=0.3
+acorn-base>=0.3.1
 acorn-secure>=0.2.1
 acorn-content>=0.2a1
 acorn-microservices>=0.1.1
