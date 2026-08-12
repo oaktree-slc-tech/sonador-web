@@ -334,3 +334,37 @@ if CACHE_ENABLED:
     CACHES = siteconfig_cache.get('CACHES', {})
     if not CACHES:
         raise ValueError('The Sonador cache backend is enabled, but no cache instances are configured.')
+
+
+# HIPAA Audit Logging / Kafka Export
+#
+# `AUDIT_LOGGING_ENABLED` is the master switch for the audit trail. When it is off --
+# the default -- no producer is constructed and no Kafka library call is made at runtime.
+#
+# The `[[Connection]]` sub-section is handed to `confluent_kafka.Producer(...)` with its
+# keys unchanged, so it accepts any librdkafka client property verbatim (security.protocol,
+# ssl.*, sasl.*). TLS and SASL are therefore a configuration concern, not a code change.
+# Unknown property names are rejected by librdkafka when the producer is constructed.
+siteconfig_kafka = siteconfig.get('Kafka', {})
+AUDIT_LOGGING_ENABLED = config_str2bool(siteconfig_kafka.get('AUDIT_LOGGING_ENABLED', False))
+
+siteconfig_kafka_audit = siteconfig_kafka.get('Audit', {})
+AUDIT_TOPIC = siteconfig_kafka_audit.get('AUDIT_TOPIC', 'sonador-audit-event')
+AUDIT_SOURCE_SITE = siteconfig_kafka_audit.get('AUDIT_SOURCE_SITE', 'sonador')
+
+KAFKA_CONNECTION = siteconfig_kafka.get('Connection', {})
+if AUDIT_LOGGING_ENABLED:
+
+    # A misconfigured audit trail must fail at boot rather than silently record nothing:
+    # the value of the feature is that the record is complete.
+    if not isinstance(KAFKA_CONNECTION, dict):
+        raise TypeError('Invalid Kafka connection configuration (type: %s): %r'
+            % (str(type(KAFKA_CONNECTION)), KAFKA_CONNECTION))
+
+    if not KAFKA_CONNECTION.get('bootstrap.servers'):
+        raise ValueError('HIPAA audit logging is enabled, but no Kafka brokers are configured. '
+            + 'Set "bootstrap.servers" in the [Kafka][[Connection]] section of the site config.')
+
+    if not AUDIT_TOPIC:
+        raise ValueError('HIPAA audit logging is enabled, but no audit topic is configured. '
+            + 'Set "AUDIT_TOPIC" in the [Kafka][[Audit]] section of the site config.')
