@@ -59,7 +59,7 @@ import secure.apisettings as sapicodes
 # (`visionaire.views.ohif.OhifConfigView`, served at `/ohif/config`) as `sonadorVersion`, where it
 # is surfaced in the viewer's Settings > About table as "Sonador API Version" so a user can
 # establish which Sonador web API their frontend is talking to.
-SONADOR_VERSION = 'dev'
+SONADOR_VERSION = '0.4.1'
 
 
 
