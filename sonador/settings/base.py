@@ -328,12 +328,281 @@ VIEWER_FAREWELL_MESSAGE = siteconfig_viewer.get('VIEWER_FAREWELL_MESSAGE',
 
 
 # Django Response Cache
+
+# `site.config` is parsed by ConfigObj, which has no type system: every scalar it reads is a
+# string. Nothing downstream repairs that. Django's `PyMemcacheCache` merges `params['OPTIONS']`
+# verbatim into the `pymemcache.HashClient(...)` keyword arguments, so `max_pool_size = 64`
+# reaches the pool as the string `'64'` and raises deep inside the client at the first cache
+# access -- long after boot, in a request, where it reads as a cache outage rather than as a
+# configuration error.
+#
+# Booleans are the more dangerous half of the problem, because they do not raise at all: every
+# non-empty string is truthy, so `no_delay = False` read literally turns the option *on*. The
+# cache still works, just not the way the operator configured it. That is why the parsing below
+# is strict -- an unrecognized spelling is an error rather than a silent `False`, which is the
+# one thing `config_str2bool` cannot give us.
+#
+# This matters as of 0.4.1: the FastAPI/Uvicorn container serves Sonador from a thread pool
+# under Python 3.14, and a memcached client shared across those threads needs `use_pooling` and
+# `max_pool_size` to hand each thread a connection of its own. Those are precisely the options
+# that have to arrive as a real bool and a real int.
+
+# Cache backends whose `OPTIONS` are validated against `CACHE_PYMEMCACHE_OPTIONS` below. The
+# table describes `pymemcache.client.hash.HashClient` keyword arguments specifically, so it is
+# deliberately not applied to any other backend -- a `pylibmc`, redis, or locmem alias takes a
+# different option vocabulary and its `OPTIONS` are passed through untouched.
+CACHE_PYMEMCACHE_BACKENDS = (
+    'django.core.cache.backends.memcached.PyMemcacheCache',
+)
+
+# `HashClient` keyword arguments that can be expressed as a `site.config` scalar, the type each
+# must be handed to the client as, and the guidance shown when one is wrong. Options whose values
+# are Python objects (`serde`, `serializer`, `deserializer`, `socket_module`, `socket_keepalive`,
+# `tls_context`, `hasher`, `lock_generator`) cannot be written in an INI file at all and are
+# absent on purpose: naming one in `site.config` is a configuration error, not an unsupported knob.
+CACHE_PYMEMCACHE_OPTIONS = {
+
+    # Concurrency. Without these a single connection is shared by every worker thread.
+    'use_pooling': (bool, 'Set "use_pooling = True" so each worker thread checks out its own '
+        + 'connection instead of sharing one.'),
+    'max_pool_size': (int, 'Size the pool to the Uvicorn thread pool and never below it '
+        + '(for example: max_pool_size = 64).'),
+    'pool_idle_timeout': (float, 'Seconds an idle pooled connection is kept before it is '
+        + 'discarded; 0 keeps connections forever (for example: pool_idle_timeout = 60).'),
+    'no_delay': (bool, 'Set "no_delay = True" to disable Nagle buffering on the memcached '
+        + 'sockets.'),
+
+    # Socket timeouts. Unset means "block forever", which stalls a worker thread on a slow node.
+    'connect_timeout': (float, 'Seconds to wait for a memcached connection, as a number '
+        + '(for example: connect_timeout = 1.0).'),
+    'timeout': (float, 'Seconds to wait for a memcached response, as a number '
+        + '(for example: timeout = 1.0).'),
+
+    # Failover behaviour across the nodes named in LOCATION.
+    'retry_attempts': (int, 'Number of times a dead memcached node is retried before it is '
+        + 'removed from the ring (for example: retry_attempts = 2).'),
+    'retry_timeout': (float, 'Seconds between retries of a dead memcached node '
+        + '(for example: retry_timeout = 1.0).'),
+    'dead_timeout': (float, 'Seconds a memcached node stays marked dead before it is retried '
+        + '(for example: dead_timeout = 60).'),
+    'ignore_exc': (bool, 'Set "ignore_exc = True" to treat a memcached failure as a cache miss '
+        + 'rather than raising into the request.'),
+
+    # Protocol and key handling.
+    'default_noreply': (bool, 'Set "default_noreply = False" to wait for memcached to acknowledge '
+        + 'writes. Django sets this itself; override it only deliberately.'),
+    'allow_unicode_keys': (bool, 'Set "allow_unicode_keys = True" to permit non-ASCII cache keys. '
+        + 'Django sets this itself; override it only deliberately.'),
+    'key_prefix': (bytes, 'A string prefixed to every key sent to memcached, used to separate '
+        + 'tenants sharing one server (for example: key_prefix = sonador).'),
+    'encoding': (str, 'Character encoding used for cache keys (for example: encoding = ascii).'),
+}
+
+# Options that carry a quantity, and the smallest value that is meaningful for each. A pool of
+# zero connections and a zero-second socket timeout are not configurations, they are outages, so
+# they are rejected here rather than at the first cache access. Options absent from this map only
+# have to be non-negative; `pool_idle_timeout = 0` and `retry_attempts = 0` are both legitimate.
+CACHE_PYMEMCACHE_OPTION_MINIMUMS = {
+    'max_pool_size': 1,
+    'connect_timeout': 1e-3,
+    'timeout': 1e-3,
+}
+
+# Recognized spellings of a false boolean, mirroring `CONFIG_POSITIVE`.
+CONFIG_NEGATIVE = ('false', 'no', 'negative', 'nope', 'n', '0', 'f')
+
+
+def config_cache_scalar(value, expected):
+    ''' Coerce a single `site.config` scalar to `expected`, raising `ValueError` with a
+        description of the problem -- not of its location, which the caller adds.
+
+        This is intentionally stricter than `config_str2bool`: an unrecognized boolean is an
+        error rather than a `False`, so that "no_delay = Flase" cannot quietly enable the
+        option it was written to disable.
+    '''
+    if expected is bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, six.string_types):
+            spelling = value.strip().lower()
+            if spelling in CONFIG_POSITIVE:
+                return True
+            if spelling in CONFIG_NEGATIVE:
+                return False
+        raise ValueError('expected a true/false value (accepted spellings: %s), got %r'
+            % (', '.join(CONFIG_POSITIVE + CONFIG_NEGATIVE), value))
+
+    if expected in (int, float):
+
+        # bool is a subclass of int, so "max_pool_size = True" would otherwise be read as a
+        # pool of one. The string spellings matter more than the literal: ConfigObj hands
+        # everything over as text, so "True" is what a confused site config actually contains.
+        if isinstance(value, bool) or (isinstance(value, six.string_types)
+                and value.strip().lower() in CONFIG_POSITIVE + CONFIG_NEGATIVE
+                and not value.strip().isdigit()):
+            raise ValueError('expected a number, got the boolean %r' % (value,))
+
+        try:
+            return int(value) if expected is int else float(value)
+        except (TypeError, ValueError):
+            raise ValueError('expected a %s, got %r'
+                % ('whole number' if expected is int else 'number', value))
+
+    if expected is bytes:
+        # pymemcache concatenates `key_prefix` with already-encoded keys, so it has to be bytes.
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, six.string_types):
+            try:
+                return value.encode('ascii')
+            except UnicodeEncodeError:
+                raise ValueError('expected plain ASCII text, got %r' % (value,))
+        raise ValueError('expected text, got %r' % (value,))
+
+    if not isinstance(value, six.string_types):
+        raise ValueError('expected text, got %r' % (value,))
+    return value
+
+
+def coerce_cache_options(alias, options):
+    ''' Validate and type-coerce the `OPTIONS` of one pymemcache cache alias, returning a new
+        dict. Unrecognized option names are rejected here rather than allowed to reach
+        `HashClient`, where they surface as an opaque `TypeError` on the first cache access.
+    '''
+    location = '[Cache][[CACHES]][[[%s]]][[[[OPTIONS]]]]' % alias
+    coerced = {}
+
+    for name, value in options.items():
+
+        if name not in CACHE_PYMEMCACHE_OPTIONS:
+            raise ValueError('Unrecognized memcached option "%s" in %s. pymemcache accepts '
+                % (name, location)
+                + 'the following options from a site config: %s.'
+                % ', '.join(sorted(CACHE_PYMEMCACHE_OPTIONS)))
+
+        expected, guidance = CACHE_PYMEMCACHE_OPTIONS[name]
+
+        if isinstance(value, (dict, list, tuple)):
+            raise ValueError('Invalid value for "%s" in %s: expected a single value, got %r. '
+                % (name, location, value)
+                + guidance)
+
+        try:
+            coerced[name] = config_cache_scalar(value, expected)
+        except ValueError as err:
+            raise ValueError('Invalid value for "%s" in %s: %s. %s'
+                % (name, location, err, guidance))
+
+        if expected in (int, float):
+            minimum = CACHE_PYMEMCACHE_OPTION_MINIMUMS.get(name, 0)
+            if coerced[name] < minimum:
+                raise ValueError('Invalid value for "%s" in %s: %r is below the smallest '
+                    % (name, location, value)
+                    + 'usable value (%s). %s' % (minimum, guidance))
+
+    # A pool size with pooling switched off is the failure this validation exists to catch: it
+    # parses, it boots, and every worker thread still shares one connection. It is a warning
+    # rather than an error because the combination is a valid way to disable pooling temporarily.
+    if 'max_pool_size' in coerced and not coerced.get('use_pooling', False):
+        warnings.warn('%s sets "max_pool_size" but leaves "use_pooling" off, so connection '
+            % location
+            + 'pooling is disabled and every worker thread will share a single memcached '
+            + 'connection. Set "use_pooling = True" to size the pool.')
+
+    return coerced
+
+
+def coerce_cache_config(caches):
+    ''' Validate a `CACHES` mapping read from `site.config` and return an equivalent mapping
+        with its values coerced to the types Django and pymemcache require.
+
+        A misconfigured cache must fail at boot rather than at the first request: an operator
+        reading a stack trace out of a live worker has no way to tell a bad option value from a
+        memcached node that has gone away.
+    '''
+    coerced = {}
+
+    for alias, cache in caches.items():
+
+        if not isinstance(cache, dict):
+            raise TypeError('Invalid cache configuration for "%s" (type: %s): %r. Each cache '
+                % (alias, str(type(cache)), cache)
+                + 'must be a [[[section]]] under [Cache][[CACHES]].')
+
+        cache = dict(cache)
+        backend = cache.get('BACKEND')
+        if not backend:
+            raise ValueError('No BACKEND configured for the "%s" cache. Set BACKEND in '
+                % alias
+                + '[Cache][[CACHES]][[[%s]]], for example: BACKEND = %s'
+                % (alias, CACHE_PYMEMCACHE_BACKENDS[0]))
+
+        # TIMEOUT is the default expiry in seconds. Django coerces it with a bare `int()` and
+        # silently substitutes 300 when that fails, so a typo here yields a cache that works
+        # with the wrong lifetime -- the failure is invisible unless it is caught at boot.
+        if 'TIMEOUT' in cache:
+            timeout = cache['TIMEOUT']
+            if timeout is None or (isinstance(timeout, six.string_types)
+                    and timeout.strip().lower() in ('', 'none')):
+                # Django reads None as "cache entries never expire".
+                cache['TIMEOUT'] = None
+            else:
+                try:
+                    cache['TIMEOUT'] = config_cache_scalar(timeout, int)
+                except ValueError as err:
+                    raise ValueError('Invalid TIMEOUT for the "%s" cache: %s. TIMEOUT is the '
+                        % (alias, err)
+                        + 'default entry lifetime in seconds; use "None" for entries that never '
+                        + 'expire (for example: TIMEOUT = 300).')
+
+                if cache['TIMEOUT'] < 0:
+                    raise ValueError('Invalid TIMEOUT for the "%s" cache: %r is negative. Use 0 '
+                        % (alias, timeout)
+                        + 'to disable caching or "None" for entries that never expire.')
+
+        # VERSION prefixes every key. Django does not coerce it at all, so a string version
+        # poisons key generation and cache.incr_version() fails on a str/int comparison.
+        if 'VERSION' in cache:
+            try:
+                cache['VERSION'] = config_cache_scalar(cache['VERSION'], int)
+            except ValueError as err:
+                raise ValueError('Invalid VERSION for the "%s" cache: %s. VERSION is the whole '
+                    % (alias, err)
+                    + 'number prefixed to every cache key (for example: VERSION = 1).')
+
+        options = cache.get('OPTIONS') or {}
+        if options and not isinstance(options, dict):
+            raise TypeError('Invalid OPTIONS for the "%s" cache (type: %s): %r. OPTIONS must be '
+                % (alias, str(type(options)), options)
+                + 'a [[[[OPTIONS]]]] sub-section.')
+
+        if backend in CACHE_PYMEMCACHE_BACKENDS:
+
+            if not cache.get('LOCATION'):
+                raise ValueError('No LOCATION configured for the "%s" memcached cache. Set '
+                    % alias
+                    + 'LOCATION in [Cache][[CACHES]][[[%s]]] to the memcached host(s), for '
+                    % alias
+                    + 'example: LOCATION = memcached-0:11211, memcached-1:11211')
+
+            # An absent or empty OPTIONS section is a valid configuration -- pymemcache's own
+            # defaults apply -- so there is nothing to coerce and nothing to complain about.
+            if options:
+                cache['OPTIONS'] = coerce_cache_options(alias, options)
+
+        coerced[alias] = cache
+
+    return coerced
+
+
 siteconfig_cache = siteconfig.get('Cache', {})
 CACHE_ENABLED = config_str2bool(siteconfig_cache.get('CACHE_ENABLED', False))
 if CACHE_ENABLED:
     CACHES = siteconfig_cache.get('CACHES', {})
     if not CACHES:
         raise ValueError('The Sonador cache backend is enabled, but no cache instances are configured.')
+
+    CACHES = coerce_cache_config(CACHES)
 
 
 # HIPAA Audit Logging / Kafka Export
