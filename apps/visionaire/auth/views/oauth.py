@@ -33,6 +33,8 @@ from guru.helpers.utils.urls import build_url
 from wgtauth.forms import oAuthTokenAuthorizationForm
 from wgtauth.apisettings import OAUTH_ACCESS_TOKEN, OAUTH_TOKEN_TYPE, OAUTH_TOKEN_TYPE_BEARER, OAUTH_EXPIRATION, \
 	OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_RESPONSE_TYPE_QUERY_PARAM, OAUTH_CODE_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
+from wgtauth.services.redirects import append_response_parameters, \
+	is_registered_redirect_uri, query_parameter_names
 from wgtauth.social.views import OpenIDLoginRedirectAbstractView, \
 	OpenIDLoginCallbackAbstractView
 from wgtauth.registration.views import RegistrationView, RegistrationSuccessView, ConfirmEmailView, \
@@ -49,10 +51,76 @@ from ...models.branding import SonadorSite
 from ..models import SocialAuthorizationServer, SocialUserAccount
 from ..helpers import openid_get_django_user
 from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
+from ..validators import TOKEN_GRANT_RESPONSE_PARAMS
 
 from .base import get_default_authserver, OpenIDAuthServerMixin
 
 logger = logging.getLogger(__name__)
+
+
+def same_site_hosts():
+	'''	Network locations which are this site.
+
+		The canonical site location is added explicitly so a fully qualified site URL is
+		recognised as its own host rather than by resembling one.
+
+		@returns set of str: acceptable network locations
+	'''
+	_hosts = set(gsetting('ALLOWED_HOSTS') or ())
+	_hosts.discard('*')
+
+	_site = urlparse.urlsplit(site_fullurl() or '')
+	if _site.netloc:
+		_hosts.add(_site.netloc)
+
+	return _hosts
+
+
+def is_same_site_destination(destination):
+	'''	Determine whether a destination belongs to the Sonador site itself, in which case the
+		same-site policy applies rather than registration.
+
+		Decided by comparing the parsed network location against the site's own. A destination
+		is never rewritten to reach this answer: editing text out of an untrusted URL can turn
+		one host into a relative path, which would let an unrelated destination inherit the
+		same-site exception.
+
+		@input destination (str): requested redirect destination
+
+		@returns bool: True for a relative or Sonador-hosted destination
+	'''
+	return guru_is_safe_url(destination, allowed_hosts=same_site_hosts())
+
+
+def is_authorized_client_destination(destination, authserver, reserved_params=()):
+	'''	Determine whether a destination may receive an authorization response.
+
+		A destination on this site keeps the same-site policy. Anything else receives
+		credentials, so it has to match one complete registered callback rather than merely
+		resembling one. The login redirect and the token grant share this rule so a request is
+		refused before the identity provider round trip rather than after it.
+
+		@input destination (str): requested redirect destination
+		@input authserver: authorization server whose callbacks are registered
+		@input reserved_params (iterable): names the response will generate, which the
+			destination may therefore not already declare
+
+		@returns bool: True when the destination may be redirected to
+	'''
+	# Malformed authority syntax raises here rather than parsing, so the destination is
+	# refused instead of escaping as a server error. It is never repaired or normalized.
+	try: _parts = urlparse.urlsplit(destination or '')
+	except ValueError:
+		return False
+
+	if query_parameter_names(_parts.query) & set(reserved_params or ()):
+		return False
+
+	if is_same_site_destination(destination):
+		return True
+
+	return bool(authserver) and is_registered_redirect_uri(
+		destination, authserver.callback_url, reserved_params=reserved_params)
 
 
 class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):
@@ -100,29 +168,34 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 		# authorization_code workflow.
 		if not redirect_url and (OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])
 				or OAUTH_CODE_RESPONSE_TYPE in request.GET.get('response_type', [])):
-			logger.debug('Authorization code request components: %r' % request.GET)
 
 			# Retrieve the OHIF parameters provided redirect URL
 			if request.GET.get(self.ohif_redirect_fieldname):
 				ohif_redirect_url = request.GET.get(self.ohif_redirect_fieldname)
 
-				# Ensure that the provided client ID matches that of the auth server
-				if not authserver.client_id in request.GET.get('client_id'):
-					raise PermissionDenied('Client ID provided in the request ("%s") does not match the auth server.'
-						% request.GET.get('client_id'))
+				# The client is an identity boundary, so it is compared exactly
+				if request.GET.get('client_id') != authserver.client_id:
+					raise PermissionDenied('Client ID does not match authserver=%s.' % authserver.pk)
 
-				# Ensure that the external redirect URL is included in the white list approved by the server.
-				if not authserver.is_safe_url(ohif_redirect_url):
-					raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
-						+ 'or part of the Sonador application.') % ohif_redirect_url)
+				# The destination this forwards to is the one which will receive the issued
+				# token, so it is held to the same rule the grant applies. Checking it here
+				# refuses the request before the identity provider round trip.
+				if not is_authorized_client_destination(ohif_redirect_url, authserver,
+						reserved_params=TOKEN_GRANT_RESPONSE_PARAMS):
+					raise PermissionDenied('Redirect URL is not registered with authserver=%s '
+						'or part of the Sonador application.' % authserver.pk)
 
 				# Add the token endpoint for the server and ensure that the parameters are encoded so
-				# they don't interefere with the code workflow.
-				redirect_url = merge_url_querystring(authserver.url_token, request.GET.urlencode())
+				# they don't interefere with the code workflow. The forwarded query carries values
+				# the client compares on return -- its state, client ID, and redirect URI -- so it
+				# is reserialized with its case intact rather than normalized.
+				redirect_url = merge_url_querystring(authserver.url_token, request.GET.urlencode(),
+					query_lowercase=False)
 
 				# Create logic in the token view that also checks the white list for the auth server
 				# before forwarding the authentication parameters.
-				logger.debug('Token endpoint with URL parameters for external authorization code request:\n%s' % redirect_url)
+				logger.debug('Forwarding external authorization code request to the token endpoint '
+					'for authserver=%s' % authserver.pk)
 
 		return redirect_url
 
@@ -264,6 +337,11 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		tform = self.tokenform_class(
 			self.getQueryStringData(request=request, vargs=args, vkwargs=kwargs))
 
+		# A malformed request is answered as a bad request, not as a refusal: the destination
+		# field is a URLField, so syntactically invalid input is rejected here, before there is
+		# an authorization question to ask. A parseable but unauthorized destination is refused
+		# below. Keeping the two distinct avoids reporting an unrelated missing field as a
+		# refusal.
 		if not tform.is_valid():
 			logger.error('Invalid oAuth2 request. Validation errors\n%s'
 				% formerrors2str(json.loads(tform.errors.as_json())))
@@ -271,6 +349,16 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 
 		# Retrieve authserver instance
 		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
+
+		# Authorize the destination before a credential exists. The names the response will
+		# generate are declared alongside the field validator, so the rule enforced here and
+		# the rule the registration was checked against are the same.
+		_destination = tform.cleaned_data.get(self.ohif_redirect_fieldname)
+
+		if not is_authorized_client_destination(_destination, authserver,
+				reserved_params=TOKEN_GRANT_RESPONSE_PARAMS):
+			raise PermissionDenied('Redirect URL is not registered with the authorization server '
+				'or part of the Sonador application, or declares a generated response parameter.')
 
 		# Generate token and redirect
 		rurl_odata = {
@@ -281,21 +369,17 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		}
 		rurl_odata.update(pick(tform.cleaned_data, ('state',)))
 
-		# Check redirect URL using the authorization server for the application
-		if authserver:
-			if not authserver.is_safe_url(
-					tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
-				raise PermissionDenied(('Invalid redirect URL "%s". URL not registered with auth server '
-					+ 'or part of the Sonador application.') % (tform.cleaned_data.get(self.ohif_redirect_fieldname or '')))
+		# Append the response to the destination's own query rather than starting a second
+		# one, so a destination registered with a static query keeps it and the generated
+		# parameters arrive as parameters.
+		rurl = append_response_parameters(_destination, rurl_odata)
 
-		# If an authentication server is not defined, prevent redirects to external endpoints
-		else:
-			if not guru_is_safe_url(tform.cleaned_data.get(self.ohif_redirect_fieldname), allowed_hosts=gsetting('ALLOWED_HOSTS')):
-				raise PermissionDenied('Invalid redirect URL "%s"' % tform.cleaned_data.get(self.ohif_redirect_fieldname))
+		# The response carries the issued token and the destination may carry a query, so
+		# only its origin and path are recorded.
+		_parts = urlparse.urlparse(_destination or '')
+		logger.debug('Issuing token grant redirect to "%s"'
+			% urlparse.urlunparse((_parts.scheme, _parts.netloc, _parts.path, '', '', '')))
 
-		# URL encode the response and redirect
-		rurl = tform.cleaned_data.get(self.ohif_redirect_fieldname)+'?'+urlparse.urlencode(rurl_odata)
-		logger.debug('Redirect URL: %s' % rurl)
 		return redirect(rurl)
 
 

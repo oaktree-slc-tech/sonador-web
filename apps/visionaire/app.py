@@ -29,3 +29,7 @@ class VisionaireAppConfig(AppConfig):
 		# as FHIR AuditEvent records and publishes them to Kafka. The receiver is inert
 		# unless AUDIT_LOGGING_ENABLED is set in the site config.
 		from . import audit as audit_signals
+
+		# Register deployment checks for the session and database guarantees the
+		# authentication workflows depend on.
+		from . import checks

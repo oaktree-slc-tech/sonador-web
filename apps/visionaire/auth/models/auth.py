@@ -34,6 +34,7 @@ from ...apisettings import SONADOR_PERMS, ORTHANC_DICOMWEB_STUDIES, ORTHANC_DICO
 	ORTHANC_INSTANCES, ORTHANC_TOOLS_FIND, ORTHANC_SYSTEM, ORTHANC_IMAGING_RESOURCES, ORTHANC_QUERY_RESOURCES, ORTHANC_COMMENTS, \
 	WILDCARD, ORTHANC_RESOURCE_URL, ORTHANC_RESOURCE_URL_PATIENT, ORTHANC_RESOURCE_URL_STUDY, ORTHANC_RESOURCE_URL_SERIES
 
+from ..validators import validate_authserver_callback_url
 from ..helpers import parse_resource_policy
 from .integrations import DataService
 from .user import SonadorProxyUser, SonadorProxyGroup
@@ -47,7 +48,14 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 	'''
 	default = models.BooleanField(default=False, help_text='Use authentication server as default')
 	callback_url = models.TextField(blank=True, null=True, verbose_name='Callback URL',
-		help_text='Redirect URLs to which the authorization server will forward traffic. Use one line per URI.')
+		validators=[validate_authserver_callback_url],
+		help_text='Redirect URLs to which the authorization server will forward traffic. Use one '
+			+ 'absolute http(s) URI per line. A destination outside this site must match a registered '
+			+ 'entry exactly before it receives an issued token: scheme and hostname compare '
+			+ 'case-insensitively, an omitted port equals the scheme default (80/443), and the port, '
+			+ 'path, and query must otherwise match byte-for-byte. Userinfo, fragments, and entries '
+			+ 'declaring a generated response parameter are not permitted, and a single malformed '
+			+ 'line rejects the whole registration.')
 	enable_idp_token_validation = models.BooleanField(default=False, verbose_name='Validation of IDP Tokens',
 		help_text='Enable validation of remote tokens (if supported by the provider).')
 
