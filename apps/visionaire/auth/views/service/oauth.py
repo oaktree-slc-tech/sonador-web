@@ -5,8 +5,6 @@ import logging
 from django.core.exceptions import PermissionDenied
 
 from guru.helpers.compatability import guru_page_not_found, guru_permission_denied
-from guru.helpers.utils.urls import merge_url_querystring, urlparse, build_url
-from guru.helpers.utils.object import pick
 
 from secure.helpers import server_encrypt_data, server_decrypt_data
 
@@ -58,29 +56,24 @@ class SonadorDataServiceOpenIDLoginRedirectView(
 
 	def get_site_resource(self, request, vargs, vkwargs):
 		'''	Data service requests always forward an associated auth server within Sonador,
-			and need to capture/encode redirect requests.
+			and need to capture/encode redirect requests. Redirect validation happens in the
+			parent view.
 		'''
-		site_resource = super().get_site_resource(request, vargs, vkwargs) \
-			or self.get_dataservice_resource(request, vargs, vkwargs)
+		site_resource = super().get_site_resource(request, vargs, vkwargs)
 
 		# Encode data service code requests to pass to the token endpoint after a successful code workflow
 		if self.has_dataservice_oidc_redirect(request, vargs, vkwargs) and site_resource:
-			logger.warn('Authorization code request components: %r' % request.GET)
 			dataservice = self.get_dataservice(request, vargs, vkwargs)
-
-			# Ensure that the provided client ID matches that of the data service
-			if not dataservice.openid_client_id in request.GET.get('client_id', []):
-				raise PermissionDenied('Client ID provided in the request ("%s") does not match the data service.'
-					% request.GET.get('client_id', '(null)'))
 
 			# Because data service OpenID connect workflows rely upon auth servers to mediate them,
 			# the redirect URL needs to be encoded twice. The callback endpoint for the service
-			# needs to be embedded (with the redirect attached) and then the auth server token 
+			# needs to be embedded (with the redirect attached) and then the auth server token
 			# endpint needs to be placed in front of that value.
-			site_resource = merge_url_querystring(
-				dataservice.url_callback, request.GET.urlencode())
-
-			logger.warn('Data service callback endpoint with URL parameters:\n%s' % site_resource)
+			#
+			# Concatenated rather than merged: merge_url_querystring parses and reserializes the
+			# query, lowercasing it and collapsing repeated values, which would corrupt the
+			# case-sensitive redirect_uri this hop is carrying. url_callback is a bare path.
+			site_resource = '%s?%s' % (dataservice.url_callback, request.GET.urlencode())
 
 		return site_resource
 
@@ -104,37 +97,17 @@ class SonadorDataServiceOpenIDLoginCallbackView(
 		return dataservice.url_callback
 
 	def get_site_resource(self, request, vargs, vkwargs):
-		'''	Retrieve the resource 
+		'''	Retrieve the resource
 		'''
-		# Retrieve site or data service redirect URL
-		resource = super().get_site_resource(request, vargs, vkwargs) \
-			or self.get_dataservice_resource(request, vargs, vkwargs)
-		if resource:
-			logger.debug('Site resource included in authentication request (state parameter):\n%s' % resource)
+		# Retrieve site or data service redirect URL (validated by the parent view)
+		resource = super().get_site_resource(request, vargs, vkwargs)
 
-		# For data service mediated workflows, attach a "code" which will allow the client application to 
+		# For data service mediated workflows, attach a "code" which will allow the client application to
 		# exchange the code for an authorizaton token.
 		if self.has_dataservice_oidc_redirect(request, vargs, vkwargs):
 			resource = self.encode_dataservice_authcode_redirect(resource, request)
 
 		return resource
-
-	def is_safe_url(self, authserver, site_resource):
-		'''	Determine if the provided site resource is safe to redirect to
-		'''
-		# Determine type of redirect and ensure that the redirect is safe. For OIDC resources
-		# (which include a response_type == 'authorization_code' and a redirect_uri), 
-		# check the whitelist defined on the data service. For all other site resources,
-		# the auth server instance is used.
-		if self.has_dataservice_oidc_redirect(self.request, self.args, self.kwargs):
-			dataservice = self.get_dataservice(self.request, self.args, self.kwargs)			
-
-			# Filter query params, params, and fragment for matching against the OpenID callback URL list
-			# so that the direct match only considers scheme, netloc, and path
-			_r = urlparse.urlparse(site_resource)
-			return build_url(**pick(_r, ('scheme', 'netloc', 'path'))) in dataservice.openid_callback_url
-
-		return authserver.is_safe_url(site_resource)
 
 
 class SonadorDataServiceOpenIDTokenAuthorizationView(DataServiceOpenIDTokenAuthorizationView):

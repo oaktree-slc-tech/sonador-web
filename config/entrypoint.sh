@@ -6,4 +6,10 @@ touch $CONFIG_ROOT/dbmigrations{,/{auth,secure,wgtsocial,wgtauth{,/{registration
 
 # Run initialize script for the environment
 python3 $PROJECT_ROOT/sonador/manage.py imaging-env-init
+
+# Refuse to serve traffic when the deployment does not satisfy the registered system checks.
+# Session storage in particular is a configuration guarantee the authentication workflows
+# depend on and cannot verify per request.
+python3 $PROJECT_ROOT/sonador/manage.py check || exit 1
+
 python3 $PROJECT_ROOT/sonador/uvicorn-sonador.py
