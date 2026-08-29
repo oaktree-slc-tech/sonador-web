@@ -56,6 +56,27 @@ class GeneralPrefFormTests(SimpleTestCase):
 		self.assertFalse(form.is_valid())
 		self.assertIn('values', form.errors)
 
+	def test_accepts_offline_archive_transfer_boolean(self):
+		for value in (True, False):
+			form = GeneralPrefForm(section_data({'offlineArchiveTransfer': value}))
+			self.assertTrue(form.is_valid(), form.errors.as_json())
+			self.assertEqual(form.cleaned_data['values'], {'offlineArchiveTransfer': value})
+
+	def test_accepts_offline_archive_transfer_alongside_language(self):
+		values = {'language': 'en-US', 'offlineArchiveTransfer': True}
+		form = GeneralPrefForm(section_data(values))
+		self.assertTrue(form.is_valid(), form.errors.as_json())
+		self.assertEqual(form.cleaned_data['values'], values)
+
+	def test_rejects_non_boolean_offline_archive_transfer(self):
+		# Including the JSON-ish values a client might send for a checkbox. `1` matters: in Python
+		# it is an int, but `isinstance(1, bool)` is False, so a bare truthiness check would let it
+		# through and store a non-boolean in the preference document.
+		for value in ('true', 1, 0, None, [], {}):
+			form = GeneralPrefForm(section_data({'offlineArchiveTransfer': value}))
+			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
+			self.assertIn('values', form.errors)
+
 
 class HotkeysPrefFormTests(SimpleTestCase):
 
