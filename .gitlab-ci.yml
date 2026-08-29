@@ -47,15 +47,34 @@ test:
     POSTGRES_DB: sonador
     SONADOR_SITECONFIG: "/srv/www/sonador/config/sonador.site.config"
     DJANGO_SETTINGS_MODULE: "sonador.settings"
+    # Surface service-container logs; the k8s executor does not health-check services.
+    CI_DEBUG_SERVICES: "true"
 
   services:
   - name: postgres:16
     alias: sonador-db
-  - name: minio
+  # docker.io/library/minio does not exist; the official image is minio/minio and
+  # needs an explicit server command to start.
+  - name: minio/minio:latest
     alias: object-storage
+    command: ["server", "/data"]
 
   script:
   - ln -s /srv/www/sonador/sonador/config/sonador.site.config /srv/www/sonador/config/sonador.site.config
+  # The k8s executor starts services in-pod without waiting for readiness; give
+  # postgres up to 2 minutes to finish initdb before the suite touches it.
+  - |
+    python3 - <<'PY'
+    import socket, sys, time
+    for _ in range(60):
+        try:
+            socket.create_connection(("sonador-db", 5432), timeout=1).close()
+            print("postgres is accepting connections")
+            sys.exit(0)
+        except OSError:
+            time.sleep(2)
+    sys.exit("postgres never became reachable on sonador-db:5432")
+    PY
   - cd /srv/www/sonador/sonador/
   - python3 manage.py test --nomigrations guru secure visionaire
 
@@ -66,14 +85,14 @@ test:
   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 
-# Publish Docker Image to Imaging Environment Registry
+# Publish Docker Image to Imaging Environment Registry.
+# skopeo copies registry-to-registry with no docker daemon; the cluster runners are
+# non-privileged and cannot run docker:dind.
 publish-oaktree:
   stage: deploy
-  image: docker:19.03.8
-  services:
-  - docker:19.03.8-dind
-  variables:
-    DOCKER_TLS_CERTDIR: ""
+  image:
+    name: quay.io/skopeo/stable:latest
+    entrypoint: [""]
 
   only:
     refs:
@@ -83,19 +102,18 @@ publish-oaktree:
     - $DOCKER_PUBLISH_USER
 
   script:
-  - echo "$DOCKER_PUBLISH_PASSWORD" | docker login -u "$DOCKER_PUBLISH_USER" --password-stdin "$CI_REGISTRY"
-  - docker pull $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
-  - docker tag $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA $CI_REGISTRY/oak-tree/medical-imaging/imaging-development-env/sonador:latest
-  - docker push $CI_REGISTRY/oak-tree/medical-imaging/imaging-development-env/sonador:latest
+  - skopeo copy
+    --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD"
+    --dest-creds "$DOCKER_PUBLISH_USER:$DOCKER_PUBLISH_PASSWORD"
+    "docker://$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+    "docker://$CI_REGISTRY/oak-tree/medical-imaging/imaging-development-env/sonador:latest"
 
 #Publish Docker to Docker Hub
 publish-docker:
   stage: deploy
-  image: docker:19.03.8
-  services:
-  - docker:19.03.8-dind
-  variables:    
-    DOCKER_TLS_CERTDIR: ""
+  image:
+    name: quay.io/skopeo/stable:latest
+    entrypoint: [""]
 
   only:
     refs:
@@ -105,7 +123,8 @@ publish-docker:
     - $DOCKER_HUB_SERVICE_USER
 
   script:
-  - echo "$DOCKER_HUB_SERVICE_PASSWORD" | docker login -u "$DOCKER_HUB_SERVICE_USER" --password-stdin
-  - docker pull $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA
-  - docker tag $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA oaktreetech/sonador:latest
-  - docker push oaktreetech/sonador:latest
+  - skopeo copy
+    --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD"
+    --dest-creds "$DOCKER_HUB_SERVICE_USER:$DOCKER_HUB_SERVICE_PASSWORD"
+    "docker://$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+    "docker://docker.io/oaktreetech/sonador:latest"
