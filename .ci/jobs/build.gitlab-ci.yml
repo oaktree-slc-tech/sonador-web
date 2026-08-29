@@ -1,18 +1,48 @@
+# Rootless BuildKit build for the k3s cluster runners (non-privileged, no dind).
+# Replaces auto-build-image + docker:dind, which cannot run on the shared runner
+# ("Cannot connect to the Docker daemon at tcp://localhost:2375").
+# Image naming is unchanged: branch -> $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA,
+# tag -> $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG. The forwarded CI build args
+# (CI_COMMIT_SHA, CI_ENVIRONMENT_NAME, CI_ENVIRONMENT_SLUG) are preserved.
+# Canonical template: memory/autops templates/build-image.gitlab-ci.yml (copied
+# inline here so this repo needs no cross-project include permission).
 .ci:stage:build:
   stage: build
-  image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-build-image:v0.2.2"
+  image:
+    name: moby/buildkit:rootless
+    entrypoint: [""]
   retry: 2
   variables:
-    DOCKER_TLS_CERTDIR: ""
-  services:
-    - docker:19.03.8-dind
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
+    DOCKER_CONFIG: $CI_PROJECT_DIR/.docker
+    # The OHIF webpack build OOMKills at the runner's 4Gi default; the runner allows
+    # per-job overrides up to 8Gi (k3s helm/gitlab-runner-global/values.yaml).
+    KUBERNETES_MEMORY_LIMIT: 8Gi
+    KUBERNETES_MEMORY_REQUEST: 4Gi
   script:
     - |
-      if [[ -z "$CI_COMMIT_TAG" ]]; then
+      if [ -z "$CI_COMMIT_TAG" ]; then
         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
       else
         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
       fi
-    - /build/build.sh
+    - mkdir -p "$DOCKER_CONFIG"
+    - AUTH=$(printf '%s' "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')
+    - printf '{"auths":{"%s":{"auth":"%s"}}}' "$CI_REGISTRY" "$AUTH" > "$DOCKER_CONFIG/config.json"
+    # The Dockerfile sources the auto-devops-build-secrets mount (the file auto-build
+    # used to forward AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES); recreate it.
+    # Kept in /tmp so it never lands in the build context.
+    - printf "export CI_COMMIT_SHA='%s'\nexport CI_ENVIRONMENT_NAME='%s'\nexport CI_ENVIRONMENT_SLUG='%s'\n" "$CI_COMMIT_SHA" "$CI_ENVIRONMENT_NAME" "$CI_ENVIRONMENT_SLUG" > /tmp/auto-devops-build-secrets
+    - |
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 \
+        --local context=. \
+        --local dockerfile=. \
+        --opt filename=Dockerfile \
+        --opt build-arg:CI_COMMIT_SHA="$CI_COMMIT_SHA" \
+        --opt build-arg:CI_ENVIRONMENT_NAME="$CI_ENVIRONMENT_NAME" \
+        --opt build-arg:CI_ENVIRONMENT_SLUG="$CI_ENVIRONMENT_SLUG" \
+        --secret id=auto-devops-build-secrets,src=/tmp/auto-devops-build-secrets \
+        --output type=image,name="$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG",push=true
