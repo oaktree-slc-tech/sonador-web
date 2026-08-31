@@ -61,14 +61,22 @@ class UserPrefSectionForm(GuruCoreDataForm):
 
 
 class GeneralPrefForm(UserPrefSectionForm):
-	'''	General preferences: `{ language?: string, offlineArchiveTransfer?: bool }`.
+	'''	General preferences:
+		`{ language?: string, offlineArchiveTransfer?: bool, offlineRetryAttempts?: int }`.
 
 		The key set is closed: an unrecognised key is a validation error.
 	'''
+	# Per-image attempt budget for offline transfers (ohif-viewers#131 FR-12). Bounded here as
+	# well as in the viewer: the viewer clamps for the user's benefit, this rejects for the
+	# document's -- a stored value outside the range would be applied by no client and read as
+	# a setting by every one of them.
+	OFFLINE_RETRY_ATTEMPTS_MIN = 1
+	OFFLINE_RETRY_ATTEMPTS_MAX = 5
+
 	def clean_values(self):
 		values = super().clean_values()
 
-		unknown = set(values) - {'language', 'offlineArchiveTransfer'}
+		unknown = set(values) - {'language', 'offlineArchiveTransfer', 'offlineRetryAttempts'}
 		if unknown:
 			raise forms.ValidationError('Unknown keys: %s' % ', '.join(sorted(unknown)))
 
@@ -77,6 +85,16 @@ class GeneralPrefForm(UserPrefSectionForm):
 
 		if 'offlineArchiveTransfer' in values and not isinstance(values['offlineArchiveTransfer'], bool):
 			raise forms.ValidationError('`offlineArchiveTransfer` must be a boolean.')
+
+		if 'offlineRetryAttempts' in values:
+			attempts = values['offlineRetryAttempts']
+
+			# `bool` is a subclass of `int`, and `True` is not an attempt count.
+			if isinstance(attempts, bool) or not isinstance(attempts, int):
+				raise forms.ValidationError('`offlineRetryAttempts` must be an integer.')
+			if not self.OFFLINE_RETRY_ATTEMPTS_MIN <= attempts <= self.OFFLINE_RETRY_ATTEMPTS_MAX:
+				raise forms.ValidationError('`offlineRetryAttempts` must be between %d and %d.'
+					% (self.OFFLINE_RETRY_ATTEMPTS_MIN, self.OFFLINE_RETRY_ATTEMPTS_MAX))
 
 		return values
 
