@@ -52,7 +52,6 @@ RUN npm install -g gulp yarn@1.22.19 \
   && npm config set @sonador:registry https://code.oak-tree.tech/api/v4/projects/335/packages/npm/ -g \
   && cd /srv/www/sonador/sonador/ \
   && npm install gulp yarn@1.22.19 && npm install
-
 # Build OHIF and viewer components
 RUN cd /srv/www/sonador/sonador/ && gulp jsBuildAce && gulp jsBuildMagnificLightbox \
   && cd /srv/www/sonador/sonador/apps/visionaire/jslib/ohif \

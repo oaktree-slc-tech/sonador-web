@@ -36,7 +36,7 @@ acorn-secure>=0.2.1
 acorn-content>=0.2a1
 acorn-microservices>=0.1.1
 acorn-sassycss>=0.1.1
-acorn-wgtauth>=0.2.1
+acorn-wgtauth>=0.3.0rc1
 acorn-largefiles>=0.1.1
 
 

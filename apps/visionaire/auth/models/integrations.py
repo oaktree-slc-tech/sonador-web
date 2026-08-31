@@ -25,19 +25,23 @@ class DataService(AbstractDataService):
 
     @property
     def url_login(self):
-        ''' Login redirect endpoint (step 1 in oAuth workflow)
+        ''' Login redirect endpoint (step 1 in oAuth workflow). Blank when the service is
+            inactive or OIDC auth is not enabled.
         '''
-        return reverse('visionaire-api:data-service-openid-login', args=(self.pk,)) if self.openid_allow_auth else ''
+        return reverse('visionaire-api:data-service-openid-login', args=(self.pk,)) \
+            if self.openid_allow_auth and self.active else ''
 
     @property
     def url_callback(self):
         ''' Login callback endpoint (step 2 in oAuth workflow)
         '''
-        return reverse('visionaire-api:data-service-openid-login-callback', args=(self.pk,)) if self.openid_allow_auth else ''
+        return reverse('visionaire-api:data-service-openid-login-callback', args=(self.pk,)) \
+            if self.openid_allow_auth and self.active else ''
 
     @property
     def url_oidc_token_auth(self):
         ''' OIDC token authorization endpoint for oAuth workflows
         '''
-        return reverse('visionaire-api:data-service-openid-token', args=(self.pk,)) if self.openid_allow_auth else ''
+        return reverse('visionaire-api:data-service-openid-token', args=(self.pk,)) \
+            if self.openid_allow_auth and self.active else ''
     

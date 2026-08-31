@@ -109,6 +109,41 @@ class SectionPostTests(SectionViewTestCase):
 		row = UserPref.objects.get(user=self.user)
 		self.assertEqual(row.viewer, {'0.4': {'general': {'language': 'en-US'}}})
 
+	def test_offline_archive_transfer_round_trips_through_the_section_endpoint(self):
+		# The frontend/backend contract this key exists for: both values accepted, persisted, and
+		# handed back by a subsequent GET (ohif-viewers#129 FR-1).
+		for value in (True, False):
+			values = {'language': 'en-US', 'offlineArchiveTransfer': value}
+			response = self.post(GENERAL, '0.4', values)
+			self.assertEqual(response.status_code, 200)
+			self.assertEqual(self.results(response), {'version': '0.4', 'values': values})
+
+			row = UserPref.objects.get(user=self.user)
+			self.assertEqual(row.viewer['0.4']['general'], values)
+			self.assertIs(row.viewer['0.4']['general']['offlineArchiveTransfer'], value)
+
+			self.assertEqual(self.results(self.get(GENERAL, version='0.4')),
+				{'version': '0.4', 'values': values})
+
+	def test_non_boolean_offline_archive_transfer_returns_400_and_writes_nothing(self):
+		stored = {'language': 'en-US', 'offlineArchiveTransfer': True}
+		UserPref.objects.create(user=self.user, viewer={'0.4': {'general': dict(stored)}})
+
+		response = self.post(GENERAL, '0.4', {'offlineArchiveTransfer': 'true'})
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn('errors', json.loads(response.content))
+		row = UserPref.objects.get(user=self.user)
+		self.assertEqual(row.viewer, {'0.4': {'general': stored}})
+
+	def test_unknown_general_key_still_rejected_alongside_the_new_one(self):
+		# The allowlist widened by exactly one key; anything else must still be refused.
+		response = self.post(GENERAL, '0.4', {'offlineArchiveTransfer': True, 'theme': 'dark'})
+
+		self.assertEqual(response.status_code, 400)
+		# A rejected POST writes nothing at all -- not even the get_or_create row a GET would make.
+		self.assertFalse(UserPref.objects.filter(user=self.user).exists())
+
 	def test_field_routing_viewer_vs_studylist(self):
 		self.post(GENERAL, '0.4', fixtures.DEFAULT_GENERAL)
 		row = UserPref.objects.get(user=self.user)

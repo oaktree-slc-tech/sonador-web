@@ -61,17 +61,22 @@ class UserPrefSectionForm(GuruCoreDataForm):
 
 
 class GeneralPrefForm(UserPrefSectionForm):
-	'''	General preferences: `{ language?: string }`.
+	'''	General preferences: `{ language?: string, offlineArchiveTransfer?: bool }`.
+
+		The key set is closed: an unrecognised key is a validation error.
 	'''
 	def clean_values(self):
 		values = super().clean_values()
 
-		unknown = set(values) - {'language'}
+		unknown = set(values) - {'language', 'offlineArchiveTransfer'}
 		if unknown:
 			raise forms.ValidationError('Unknown keys: %s' % ', '.join(sorted(unknown)))
 
 		if 'language' in values and not isinstance(values['language'], str):
 			raise forms.ValidationError('`language` must be a string.')
+
+		if 'offlineArchiveTransfer' in values and not isinstance(values['offlineArchiveTransfer'], bool):
+			raise forms.ValidationError('`offlineArchiveTransfer` must be a boolean.')
 
 		return values
 
