@@ -136,8 +136,31 @@ class SectionPostTests(SectionViewTestCase):
 		row = UserPref.objects.get(user=self.user)
 		self.assertEqual(row.viewer, {'0.4': {'general': stored}})
 
+	def test_offline_retry_attempts_round_trips_through_the_section_endpoint(self):
+		# ohif-viewers#131 FR-12: the viewer POSTs the general section wholesale, so the attempt
+		# budget has to persist alongside the keys that were already there.
+		values = {'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 5}
+		response = self.post(GENERAL, '0.4', values)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(self.results(response), {'version': '0.4', 'values': values})
+		self.assertEqual(UserPref.objects.get(user=self.user).viewer['0.4']['general'], values)
+		self.assertEqual(self.results(self.get(GENERAL, version='0.4')),
+			{'version': '0.4', 'values': values})
+
+	def test_out_of_range_offline_retry_attempts_returns_400_and_writes_nothing(self):
+		stored = {'language': 'en-US', 'offlineRetryAttempts': 3}
+		UserPref.objects.create(user=self.user, viewer={'0.4': {'general': dict(stored)}})
+
+		response = self.post(GENERAL, '0.4', {'offlineRetryAttempts': 9})
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn('errors', json.loads(response.content))
+		row = UserPref.objects.get(user=self.user)
+		self.assertEqual(row.viewer, {'0.4': {'general': stored}})
+
 	def test_unknown_general_key_still_rejected_alongside_the_new_one(self):
-		# The allowlist widened by exactly one key; anything else must still be refused.
+		# The allowlist widened by exactly two keys; anything else must still be refused.
 		response = self.post(GENERAL, '0.4', {'offlineArchiveTransfer': True, 'theme': 'dark'})
 
 		self.assertEqual(response.status_code, 400)

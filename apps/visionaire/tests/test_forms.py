@@ -77,6 +77,27 @@ class GeneralPrefFormTests(SimpleTestCase):
 			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
 			self.assertIn('values', form.errors)
 
+	def test_accepts_offline_retry_attempts_in_range(self):
+		for value in (1, 3, 5):
+			form = GeneralPrefForm(section_data({'offlineRetryAttempts': value}))
+			self.assertTrue(form.is_valid(), form.errors.as_json())
+			self.assertEqual(form.cleaned_data['values'], {'offlineRetryAttempts': value})
+
+	def test_accepts_offline_retry_attempts_alongside_the_other_general_keys(self):
+		# The viewer POSTs the section wholesale, so the three keys have to validate together.
+		values = {'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 4}
+		form = GeneralPrefForm(section_data(values))
+		self.assertTrue(form.is_valid(), form.errors.as_json())
+		self.assertEqual(form.cleaned_data['values'], values)
+
+	def test_rejects_out_of_range_or_non_integer_offline_retry_attempts(self):
+		# `True` is in the list deliberately: bool is a subclass of int, so an isinstance check on
+		# its own would store `True` as an attempt count.
+		for value in (0, 6, -1, '3', 3.5, True, None, [], {}):
+			form = GeneralPrefForm(section_data({'offlineRetryAttempts': value}))
+			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
+			self.assertIn('values', form.errors)
+
 
 class HotkeysPrefFormTests(SimpleTestCase):
 
