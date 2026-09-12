@@ -17,6 +17,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
+from wgtauth.social.oidc import SESSION_LOGIN_TRANSACTION_KEY
+
 from ..auth.models import SocialAuthorizationServer
 from ..auth.validators import TOKEN_GRANT_RESPONSE_PARAMS
 from ..auth.views.oauth import is_authorized_client_destination
@@ -92,7 +94,8 @@ class AuthorizationCodeHandoffTests(TestCase):
 	def test_the_forwarded_request_keeps_its_case(self):
 		'''	The client compares the state it generated when the response returns, and the
 			redirect URI path is compared exactly, so normalising the forwarded query would
-			break both.
+			break both. The forwarded request is recorded as the destination of the login
+			the identity provider round trip is started for.
 		'''
 		destination = '%s/Callback' % ORIGIN
 
@@ -108,7 +111,10 @@ class AuthorizationCodeHandoffTests(TestCase):
 				})
 
 		self.assertTrue(create_url.called, 'the request was not forwarded')
-		forwarded = create_url.call_args[0][1]
+		sent_state = create_url.call_args[0][1]
+		self.assertNotEqual(sent_state, self.MIXED_CASE_STATE)
+
+		forwarded = self.client.session[SESSION_LOGIN_TRANSACTION_KEY][sent_state]['destination']
 		params = parse_qs(urlsplit(forwarded).query)
 
 		self.assertEqual(params.get('state'), [self.MIXED_CASE_STATE])
