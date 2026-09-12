@@ -512,7 +512,7 @@ class DataServiceLoginCallbackTests(DataServiceOAuthTestCase):
 		'''
 		self.initiate()
 
-		with mock.patch('wgtauth.services.transactions.time.time',
+		with mock.patch('wgtauth.transactions.time.time',
 				return_value=time.time() + TRANSACTION_MAX_AGE + 60):
 			response = self.client.get(self.dataservice.url_callback, self.login_params())
 
@@ -523,7 +523,7 @@ class DataServiceLoginCallbackTests(DataServiceOAuthTestCase):
 		'''
 		self.initiate()
 
-		with mock.patch('wgtauth.services.transactions.time.time',
+		with mock.patch('wgtauth.transactions.time.time',
 				return_value=time.time() + 30):
 			response = self.client.get(self.dataservice.url_callback, self.login_params())
 
