@@ -109,7 +109,12 @@ def login_protection_errors(strict=False):
 
 	from .auth.views.base import get_default_authserver
 
-	try: authserver = get_default_authserver()
+	# The provider is a lazily fetched relation, and its query selects every column of the
+	# provider table, so the read that fails on an unmigrated schema is that fetch rather
+	# than the authorization server lookup. Both stay inside the guard.
+	try:
+		authserver = get_default_authserver()
+		provider = authserver.provider if authserver is not None else None
 	except DatabaseError:
 		if strict:
 			raise
@@ -119,13 +124,13 @@ def login_protection_errors(strict=False):
 		return []
 
 	relaxed = [reason for field, reason in LOGIN_PROTECTION_FIELDS
-		if not getattr(authserver.provider, field, None)]
+		if not getattr(provider, field, None)]
 	if not relaxed:
 		return []
 
 	return [Error(
 		'Identity provider "%s" behind the default authorization server "%s" relaxes login '
-		'protections: %s.' % (authserver.provider.name, authserver.description, '; '.join(relaxed)),
+		'protections: %s.' % (provider.name, authserver.description, '; '.join(relaxed)),
 		hint='Enable the protection on the identity provider record. The Acorn provider supports '
 			'all of them: request the openid scope in the authorization URL parameters, set the '
 			'issuer to the Acorn OpenID issuer (its /o/.well-known/openid-configuration names it), '

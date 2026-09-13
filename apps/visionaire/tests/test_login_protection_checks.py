@@ -136,6 +136,18 @@ class VerifyLoginProtectionsCommandTests(TestCase):
 			with self.assertRaises(CommandError):
 				call_command('verify-login-protections', verbosity=0)
 
+	def test_an_unmigrated_provider_table_fails(self):
+		'''	The provider is fetched lazily and its query names every provider column, so a
+			schema without the new columns fails on that fetch, after the server lookup.
+		'''
+		authserver = mock.Mock()
+		type(authserver).provider = mock.PropertyMock(
+			side_effect=DatabaseError('column endpoint_jwks does not exist'))
+		with mock.patch('visionaire.auth.views.base.get_default_authserver', return_value=authserver):
+			with self.assertRaises(CommandError):
+				call_command('verify-login-protections', verbosity=0)
+			self.assertEqual(login_protection_errors(strict=False), [])
+
 	def test_the_system_check_tolerates_what_the_command_does_not(self):
 		'''	`migrate` runs the system check before applying anything, so an unreadable table
 			reports nothing there; the strict read raises.
