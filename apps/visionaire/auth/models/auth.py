@@ -444,7 +444,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			if _val is not None:			
 				_rdata[f.replace('_', '-')] = _val		
 
-		_acl_rdata = server_controloperation_post(self.server, _rdata, resource='system/acl/resource', 
+		_acl_rdata = server_controloperation_post(self.server.control, _rdata, resource='system/acl/resource', 
 			headers=self.server.sonador_auth)
 		logger.debug('<---  Sonador -> Orthanc Resource Authorization Request/Response group="%s" group-name="%s" level="%s"  --->\nrequest: %s\nresponse: %s\n<--- --->' % (
 			self.group.pk, self.group.name, level, _rdata, _acl_rdata
@@ -469,7 +469,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 		try:
 			return server_controloperation_get(
-				server_controlurl(self.server, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)),
+				server_controlurl(self.server.control, posixpath.join(ORTHANC_RESOURCE_URL.get(level.lower()), orthanc_id)),
 				headers=self.server.sonador_auth)
 
 		except MicroserviceResourceNotFound:
