@@ -51,10 +51,14 @@ class ControlServer(object):
 	'''	Helper object used to route requests to imaging servers which may be located
 		within a cluster or firewall.
 	'''
-	def __init__(self, hostname, port, scheme):
+	def __init__(self, hostname, port, scheme, name=None):
 		self.hostname = hostname
 		self.port = port
 		self.scheme = scheme
+		self.name = name
+
+	def __str__(self, *args, **kwargs):
+		return '%s (%s://%s:%s)' % (self.name, self.scheme, self.hostname, self.port)
 
 
 # PACS Imaging Models
@@ -246,7 +250,8 @@ class PacsImagingServer(BaseServerModel):
 		return ControlServer(
 			self.internal_hostname if self.internal_hostname else self.hostname,
 			self.internal_port if self.internal_port else self.port,
-			self.internal_scheme if self.internal_scheme else self.scheme)
+			self.internal_scheme if self.internal_scheme else self.scheme,
+			name=self.name)
 
 	@property
 	def json(self):
