@@ -252,6 +252,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		# User is a member of the group, check server permissions
 		elif self.group.user_set.filter(username=user.username).exists():
 			_server_auth = OrthancServerAuthorization(**pick(self, SONADOR_PERMS))
+			comment_edit_denied_locally = False
 
 			# System and scoped resources
 			if _acl_scoped_resource := _server_auth.acl_scoped_resource(resource, method) is not None:
@@ -311,11 +312,21 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 					# even when the action token is absent (mirroring the action-independent comment
 					# read enforcement in ResourceAuthorization.resource_perm). The check still
 					# requires a non-empty leaf `resource`, so non-comment requests are unaffected.
+					#
+					# A comment DELETE has two independent arms (see ResourceAuthorization
+					# .comment_remove_perm): comment management, which the local deny does veto, and
+					# the resource `remove` grant, which stays additive like every other resource
+					# permission. A local CommentEdit deny therefore masks the comment-management arm
+					# for the rest of this evaluation instead of ending it, so a global `remove` grant
+					# can still admit the request below.
 					if resource and (action == orthanc_api.ORTHANC_ACTION_COMMENT \
 							or orthanc_api.ORTHANC_COMMENTS in resource):
 						if method.lower() == gapicodes.HTTP_GET.lower():
 							if _auth.comment_view is not None:
 								return _auth.comment_view
+						elif method.lower() == gapicodes.HTTP_DELETE.lower():
+							if _auth.comment_edit is False:
+								comment_edit_denied_locally = True
 						elif _auth.comment_edit is not None:
 							return _auth.comment_edit
 
@@ -362,6 +373,12 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 
 				# Check resource request against the policy permissions
 				_auth = OrthancResourceAuthorization(**pick(self, SONADOR_PERMS))
+
+				# A local comment-management deny stands over the global comment grant; only the
+				# resource `remove` arm of a comment DELETE remains open here.
+				if comment_edit_denied_locally:
+					_auth.comment_edit = False
+
 				if _auth.resource_perm(resource, orthanc_id, method, level, dicom_uid=dicom_uid, action=action):
 					return True
 
