@@ -127,6 +127,20 @@ class ResourceAuthorization:
 		self.remove_traverse = remove if remove_traverse is None else remove_traverse
 		self.acl_traverse = acl if acl_traverse is None else acl_traverse
 
+	def comment_remove_perm(self):
+		'''	Permission admitting a comment DELETE: `remove` on the resource, or `comment_edit`. The
+			comment endpoint enforces that a `comment_edit` holder removes only their own comments.
+
+			@returns bool or None when neither permission is set (no decision at this level)
+		'''
+		if self.remove or self.comment_edit:
+			return True
+
+		if self.remove is None and self.comment_edit is None:
+			return None
+
+		return False
+
 	def resource_perm(self, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Evaluate the resource request and return the appropriate permision.
 
@@ -152,10 +166,15 @@ class ResourceAuthorization:
 			elif (orthanc_api.ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_GET.lower()):
 				return self.comment_view
 
-			# Check add/edit/remove permissions
+			# Check add/edit permissions
 			elif (orthanc_api.ORTHANC_COMMENTS in resource \
-				and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower())):
+				and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower())):
 				return self.comment_edit
+
+			# Comment removal: comment managers remove their own comments (ownership is enforced by
+			# the comment endpoint); `remove` on the resource removes any comment.
+			elif orthanc_api.ORTHANC_COMMENTS in resource and method.lower() == gapicodes.HTTP_DELETE.lower():
+				return self.comment_remove_perm()
 
 		# Check worklist permission: require worklist and view. Worklist provides permission to interact with
 		# worklist endpoint and view providers permission to interact with the resource.
@@ -205,9 +224,13 @@ class ResourceAuthorization:
 			if not resource:
 				return self.view
 
-			# Leaf level: read comments with comment_view, write them with comment_edit
+			# Leaf level: read comments with comment_view, add/edit them with comment_edit, remove
+			# them with comment_edit (own comments, enforced by the endpoint) or `remove` (any)
 			if method.lower() == gapicodes.HTTP_GET.lower():
 				return self.comment_view
+
+			if method.lower() == gapicodes.HTTP_DELETE.lower():
+				return self.comment_remove_perm()
 
 			return self.comment_edit
 
@@ -313,15 +336,14 @@ class ResourceAuthorization:
 			if not resource:
 				return self.remove_traverse
 
-			# Comment deletes are an edit of the comment, not a delete of the resource.
-			# The standard API arrives here with action="comment" (handled above), but the
-			# DICOMweb comment item route (/dicom-web/<type>/<uid>/comments/<id>) is sent by
-			# the plugin as a "system" access with no action; Sonador re-derives its level to
-			# the imaging resource in clean_auth_request() but cannot back-fill the action.
-			# Mirror the POST/PUT comment handling so a comment delete maps to comment_edit
-			# instead of falling through to the resource-level remove permission.
+			# Comment deletes. The standard API arrives here with action="comment" (handled
+			# above), but the DICOMweb comment item route (/dicom-web/<type>/<uid>/comments/<id>)
+			# is sent by the plugin as a "system" access with no action; Sonador re-derives its
+			# level to the imaging resource in clean_auth_request() but cannot back-fill the
+			# action. Same rule as the action branch: comment_edit (own comments, enforced by the
+			# endpoint) or `remove` (any comment).
 			if resource and orthanc_api.ORTHANC_COMMENTS in resource:
-				return self.comment_edit
+				return self.comment_remove_perm()
 
 			return self.remove
 
