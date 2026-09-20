@@ -613,7 +613,24 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 						.filter(**self._get_AND_filter_params(_mlabel))
 						.distinct())
 
-		return results
+		return self._unique_principals(results)
+
+	@staticmethod
+	def _unique_principals(results):
+		'''	Return the results with each user and each group present once, keeping the entry
+			with the highest rank when a principal was matched more than once.
+
+			The response is consumed as a pick-list of parties to grant access to, so a principal
+			must appear exactly once whatever the query path (relevance search or fallback)
+			produced.
+		'''
+		best = {}
+		for _r in results:
+			key = (type(_r), _r.pk)
+			if key not in best or getattr(_r, 'rank', 0) > getattr(best[key], 'rank', 0):
+				best[key] = _r
+
+		return list(best.values())
 
 
 class PacsImagingUnifiedAuthModelSearchView(PacsImagingServerFormMixin, SonadorUnifiedSearchView):

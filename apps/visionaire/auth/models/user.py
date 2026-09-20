@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User, Group
-from django.db.models import Manager as DjangoModelManager
+from django.db.models import Manager as DjangoModelManager, Max
 
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 
@@ -19,10 +19,13 @@ class SonadorUserSearchManager(DjangoModelManager):
 		_vector = SearchVector('username', weight='A') + SearchVector('email', weight='A') \
 			+ SearchVector('first_name', weight='B') + SearchVector('last_name', weight='B') \
 			+ SearchVector('groups__name', weight='C')
-		
-		# Execute search, filter by the manager search relevance, and return distinct entities
-		return qs.annotate(rank=SearchRank(_vector, SearchQuery(query, search_type=search_type))) \
-			.filter(rank__gte=self.search_relevance).distinct()
+
+		# The group-name vector joins one row per group membership (and one per server authorization
+		# of that group when the caller filters on it), each ranked against its own group name. Rank
+		# is aggregated per user so that a user matched through several groups, or through both a
+		# profile field and a group, is returned once with the best of those ranks.
+		return qs.annotate(rank=Max(SearchRank(_vector, SearchQuery(query, search_type=search_type)))) \
+			.filter(rank__gte=self.search_relevance)
 
 
 class SonadorProxyUser(User):
@@ -50,11 +53,12 @@ class SonadorGroupSearchManager(DjangoModelManager):
 	def search(self, query, qs=None, search_type='websearch'):
 		qs = qs or self.get_queryset()
 
-		# Search across group name
+		# Search across group name; rank is aggregated per group so a caller's join (for example
+		# on server authorizations) cannot repeat a group in the results
 		_vector = SearchVector('name', weight='A')
 
-		return qs.annotate(rank=SearchRank(_vector, SearchQuery(query, search_type=search_type))) \
-			.filter(rank__gte=self.search_relevance).distinct()
+		return qs.annotate(rank=Max(SearchRank(_vector, SearchQuery(query, search_type=search_type)))) \
+			.filter(rank__gte=self.search_relevance)
 
 
 class SonadorProxyGroup(Group):
