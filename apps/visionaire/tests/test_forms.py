@@ -77,6 +77,18 @@ class GeneralPrefFormTests(SimpleTestCase):
 			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
 			self.assertIn('values', form.errors)
 
+	def test_accepts_locked_models_warning_boolean(self):
+		for value in (True, False):
+			form = GeneralPrefForm(section_data({'warnLockedModelsOnOpenAsSegmentation': value}))
+			self.assertTrue(form.is_valid(), form.errors.as_json())
+			self.assertEqual(form.cleaned_data['values'], {'warnLockedModelsOnOpenAsSegmentation': value})
+
+	def test_rejects_non_boolean_locked_models_warning(self):
+		for value in ('false', 1, 0, None, [], {}):
+			form = GeneralPrefForm(section_data({'warnLockedModelsOnOpenAsSegmentation': value}))
+			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
+			self.assertIn('values', form.errors)
+
 	def test_accepts_offline_retry_attempts_in_range(self):
 		for value in (1, 3, 5):
 			form = GeneralPrefForm(section_data({'offlineRetryAttempts': value}))
@@ -84,8 +96,11 @@ class GeneralPrefFormTests(SimpleTestCase):
 			self.assertEqual(form.cleaned_data['values'], {'offlineRetryAttempts': value})
 
 	def test_accepts_offline_retry_attempts_alongside_the_other_general_keys(self):
-		# The viewer POSTs the section wholesale, so the three keys have to validate together.
-		values = {'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 4}
+		# The viewer POSTs the section wholesale, so every key has to validate together.
+		values = {
+			'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 4,
+			'warnLockedModelsOnOpenAsSegmentation': False,
+		}
 		form = GeneralPrefForm(section_data(values))
 		self.assertTrue(form.is_valid(), form.errors.as_json())
 		self.assertEqual(form.cleaned_data['values'], values)
