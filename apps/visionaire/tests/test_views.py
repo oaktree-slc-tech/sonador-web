@@ -139,7 +139,10 @@ class SectionPostTests(SectionViewTestCase):
 	def test_offline_retry_attempts_round_trips_through_the_section_endpoint(self):
 		# ohif-viewers#131 FR-12: the viewer POSTs the general section wholesale, so the attempt
 		# budget has to persist alongside the keys that were already there.
-		values = {'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 5}
+		values = {
+			'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 5,
+			'warnLockedModelsOnOpenAsSegmentation': False,
+		}
 		response = self.post(GENERAL, '0.4', values)
 
 		self.assertEqual(response.status_code, 200)

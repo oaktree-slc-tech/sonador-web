@@ -62,10 +62,15 @@ class UserPrefSectionForm(GuruCoreDataForm):
 
 class GeneralPrefForm(UserPrefSectionForm):
 	'''	General preferences:
-		`{ language?: string, offlineArchiveTransfer?: bool, offlineRetryAttempts?: int }`.
+		`{ language?: string, offlineArchiveTransfer?: bool, offlineRetryAttempts?: int,
+		   warnLockedModelsOnOpenAsSegmentation?: bool }`.
 
 		The key set is closed: an unrecognised key is a validation error.
 	'''
+	# Boolean keys, each validated the same way. `warnLockedModelsOnOpenAsSegmentation`: whether
+	# the viewer's Open as Segmentation says which locked models it leaves out (ohif-viewers!92).
+	BOOLEAN_KEYS = ('offlineArchiveTransfer', 'warnLockedModelsOnOpenAsSegmentation')
+
 	# Per-image attempt budget for offline transfers (ohif-viewers#131 FR-12). Bounded here as
 	# well as in the viewer: the viewer clamps for the user's benefit, this rejects for the
 	# document's -- a stored value outside the range would be applied by no client and read as
@@ -76,15 +81,16 @@ class GeneralPrefForm(UserPrefSectionForm):
 	def clean_values(self):
 		values = super().clean_values()
 
-		unknown = set(values) - {'language', 'offlineArchiveTransfer', 'offlineRetryAttempts'}
+		unknown = set(values) - {'language', 'offlineRetryAttempts'} - set(self.BOOLEAN_KEYS)
 		if unknown:
 			raise forms.ValidationError('Unknown keys: %s' % ', '.join(sorted(unknown)))
 
 		if 'language' in values and not isinstance(values['language'], str):
 			raise forms.ValidationError('`language` must be a string.')
 
-		if 'offlineArchiveTransfer' in values and not isinstance(values['offlineArchiveTransfer'], bool):
-			raise forms.ValidationError('`offlineArchiveTransfer` must be a boolean.')
+		for key in self.BOOLEAN_KEYS:
+			if key in values and not isinstance(values[key], bool):
+				raise forms.ValidationError('`%s` must be a boolean.' % key)
 
 		if 'offlineRetryAttempts' in values:
 			attempts = values['offlineRetryAttempts']
