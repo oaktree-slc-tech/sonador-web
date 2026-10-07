@@ -2,6 +2,7 @@
     the provided settings, and makes them available for the instance.
 """
 
+import importlib.util
 import os, sys, mimetypes, six, datetime, warnings
 from configobj import ConfigObj
 from datetime import date
@@ -251,11 +252,24 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sonador.wsgi.application'
 
 
-# SCSS Resource Paths
-SCSS_RESOURCE_PATHS = (
-    os.path.join(PROJECT_ROOT, 'lib', 'guru', 'styles'),
-    os.path.join(PROJECT_ROOT, 'lib', 'content', 'styles'),
-)
+# SCSS Resource Paths: the master stylesheets `manage.py compile-scss` (sassycss) turns into
+# SCSS_STATIC_ROOT/*.css. The Acorn packages ship their styles inside the package, so their
+# directories are resolved from wherever the package is importable from (the lib/ checkout on a
+# development machine, site-packages in the container); Sonador's own overrides live in the app.
+def _package_styles(package):
+    spec = importlib.util.find_spec(package)
+    if spec and spec.submodule_search_locations:
+        styles = os.path.join(list(spec.submodule_search_locations)[0], 'styles')
+        if os.path.isdir(styles):
+            return styles
+
+    return None
+
+SCSS_RESOURCE_PATHS = tuple(path for path in (
+    _package_styles('guru'),
+    _package_styles('content'),
+    os.path.join(PROJECT_ROOT, 'apps', 'visionaire', 'styles'),
+) if path)
 SCSS_STATIC_ROOT = os.path.join(PROJECT_CONFIGURATION_ROOT, 'static', 'css')
 if not os.path.exists(SCSS_STATIC_ROOT):
     os.makedirs(SCSS_STATIC_ROOT)
