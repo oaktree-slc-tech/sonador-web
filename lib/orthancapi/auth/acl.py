@@ -23,12 +23,17 @@ class ServerAuthorization:
 		'''	Determine if the requested resource matches a scoped resource within Orthanc.
 
 			* /cache/dcm-tags (all users): dictionary of tags stored by the Sonador resource cache
+			* /display-attributes (all users): display attributes of the groups the caller belongs to
 			* /tools/secure-find (ACL mediated): scoped search endpoint
 			* /dicom-web/studies (ACL mediated): scoped DICOMweb query endpoint
 			* /tools/bulk-content (ACL mediated): scoped by filter endpoint
 		'''
 		# Server DICOM tags
 		if method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_CACHE_TAGS:			
+			return True
+
+		# Display Attributes aggregate (all users; the plugin scopes the response to the caller's groups)
+		elif method.lower() == gapicodes.HTTP_GET.lower() and resource == orthanc_api.ORTHANC_DISPLAY_ATTRS_AGGREGATE:
 			return True
 
 		# DICOMmweb study endpoint (ACL mediated)

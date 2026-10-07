@@ -1,0 +1,5 @@
+// Sonador admin overrides. Compiled by `manage.py compile-scss` (sassycss) into
+// sonador/static/css/sonador.admin.css and attached to the admin pages that need it through
+// the ModelAdmin `Media` declaration (see apps/visionaire/admin/servers.py).
+
+@import "sonador/sonador.admin.policies";

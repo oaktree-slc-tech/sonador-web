@@ -43,6 +43,9 @@ class PacsImagingServerAdmin(admin.ModelAdmin):
 	
 	inlines = (PacsImagingServerGroupAuthorizationInline, DicomModalityAdminInline, RemoteDICOMWebServerAdminInline)
 
+	class Media:
+		css = { 'all': ('css/sonador.admin.css',) }
+
 	@admin.display(description='Server ID')
 	def server_id(self, obj):
 		return obj.pk

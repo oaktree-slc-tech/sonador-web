@@ -34,6 +34,7 @@ DEFAULT_HOTKEYS = {
 	'scaleDownViewport': {'label': 'Zoom Out', 'keys': ['-']},
 	'fitViewportToWindow': {'label': 'Zoom to Fit', 'keys': ['=']},
 	'resetViewport': {'label': 'Reset', 'keys': ['space']},
+	'toggleOverlay': {'label': 'Toggle Viewport Display', 'keys': ['shift', 'space']},
 	'nextImage': {'label': 'Next Image', 'keys': ['down']},
 	'previousImage': {'label': 'Previous Image', 'keys': ['up']},
 	'previousViewportDisplaySet': {'label': 'Previous Series', 'keys': ['pagedown']},

@@ -6,6 +6,7 @@ from django.shortcuts import reverse
 
 from django.contrib.auth.models import User, Group
 
+import guru.apisettings as gapicodes
 from guru.helpers import classproperty, gsetting
 from guru.helpers.utils.object import pick
 
@@ -17,7 +18,7 @@ from microservices.control import server_controlurl
 from orthancapi import apisettings as orthanc_api
 
 from ..apisettings import SONADOR_PERMS, SONADOR_SERVER_PERMS, SONADOR_RESOURCE_PERMS, \
-	SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW
+	SONADOR_PERM_QUERY, SONADOR_PERM_UPLOAD, SONADOR_PERM_VIEW, SONADOR_PERM_DISPLAY_ATTR, SONADOR_PERM_DISPLAY_ATTR_MODIFY
 from ..helpers import API_ACCESS_SERVER_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -130,7 +131,32 @@ class PacsImagingServer(BaseServerModel):
 			# TODO: Add resource modifiers so that the scope of a grant can be narrowed.
 			perms[perm] = any(get_perm(auth, perm) for auth in self.group_authorizations.filter(group__user=user))
 
+		# Superusers and staff curate the display attributes of every enabled group on the server
+		if user.is_superuser or self.staff_curates_display_attrs(user):
+			perms[SONADOR_PERM_DISPLAY_ATTR] = True
+			perms[SONADOR_PERM_DISPLAY_ATTR_MODIFY] = True
+
 		return perms
+
+	@staticmethod
+	def staff_curates_display_attrs(user):
+		return bool(getattr(user, 'is_staff', False) and getattr(user, 'is_active', False))
+
+	def staff_display_attr_policy(self, user):
+		'''	The group policy that puts the server in scope for staff curation of display attributes:
+			the enabled policy with the shortest grant duration, or None. Staff who belong to no
+			policy group still need the server for the profile, the aggregate, the tag catalogue and
+			the per-group collections of enabled policies; nothing else opens up for them. Grants
+			carry that policy's duration so a disabled policy takes effect within the same window
+			as a member's grant.
+		'''
+		if not self.staff_curates_display_attrs(user):
+			return None
+
+		return self.group_authorizations.filter(display_attr=True).order_by('duration', 'pk').first()
+
+	def staff_display_attr_scope(self, user):
+		return self.staff_display_attr_policy(user) is not None
 
 	def user_has_access(self, user):
 		'''	Determine if the provided user has access to the server in any capacity
@@ -145,7 +171,7 @@ class PacsImagingServer(BaseServerModel):
 		access = user.is_superuser or (
 			len(self.user_authorizations.filter(user=user)) > 0 or len(self.group_authorizations.filter(group__user=user)) > 0)
 
-		return user.is_active and access
+		return user.is_active and (access or self.staff_display_attr_scope(user))
 
 	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Determine if the provided user has the needed permissions to perform the requested action.
@@ -155,6 +181,22 @@ class PacsImagingServer(BaseServerModel):
 		# Administrative or superuser
 		if user.is_superuser:
 			return True, None
+
+		# Staff manage the display attributes of any group whose policy enables them, member or not
+		if level == orthanc_api.ORTHANC_RESOURCE_GROUP and self.staff_curates_display_attrs(user) \
+				and orthanc_api.ORTHANC_GROUP_DISPLAY_ATTRS_REGEX.match(resource or '') \
+				and method and method.lower() in (gapicodes.HTTP_GET.lower(), gapicodes.HTTP_POST.lower(),
+					gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower()):
+			_group_auth = self.group_authorizations.filter(group__pk=orthanc_id, display_attr=True).first()
+			if _group_auth is not None:
+				return True, _group_auth.duration
+
+		# Staff read the aggregate of every enabled policy and the tag catalogue it is curated from, member or not
+		if resource in (orthanc_api.ORTHANC_DISPLAY_ATTRS_AGGREGATE, orthanc_api.ORTHANC_CACHE_TAGS) and method \
+				and method.lower() == gapicodes.HTTP_GET.lower():
+			_scope_policy = self.staff_display_attr_policy(user)
+			if _scope_policy is not None:
+				return True, _scope_policy.duration
 
 		# Determine if the user is part of a group that has the requested permissions
 		for auth in self.group_authorizations.filter(group__user=user):
