@@ -1,0 +1,117 @@
+/* Tabular inlines on the PACS Imaging Server change page: Server Group Permissions, DICOM
+   Modalities */
+
+// Horizontal inset shared by the column headings, the first data column and the row label, so a
+// row's label, its first control and its heading share one left edge.
+$inline-inset: 6px;
+
+// Space between the group picker and its related-object icons, and after the icons.
+$picker-icon-gap: 12px;
+$picker-block-gap: 24px;
+
+/* Layout of every tabular inline on the page:
+
+     +-----------------------------------------------------------------------------------+
+     | <row label>                                                      <- own line       |
+     | [ first control ] [icons]  [ ] col  [ ] col  [ ] col ...        <- one line        |
+     +-----------------------------------------------------------------------------------+
+
+   Django positions the row label absolutely from the `original` cell's content top, so that cell
+   keeps its top alignment and the row its top padding; everything else sits on one line and the
+   table scrolls horizontally inside the fieldset instead of wrapping or stretching the page. */
+
+#pacsimagingserver_form .inline-group .tabular {
+	overflow: visible;
+}
+
+#pacsimagingserver_form .inline-group .tabular fieldset.module {
+	overflow: hidden;
+}
+
+/* The table is the scroll container (its heading stays put). A block-level table keeps its row
+   layout in an anonymous table box, which is what makes it scrollable at all. */
+#pacsimagingserver_form .inline-group .tabular fieldset.module table {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+#pacsimagingserver_form .inline-group .tabular th,
+#pacsimagingserver_form .inline-group .tabular td {
+	white-space: nowrap;
+}
+
+/* Headroom for the label line above each saved row: Django's own 2em */
+#pacsimagingserver_form .inline-group .tabular tr.has_original td {
+	padding-top: 2em;
+}
+
+/* The original cell is the label's positioning reference, so the label's left edge is the
+   table's left edge. The column itself stays at zero width: any padding on its heading would
+   widen it and push the first control out from under the label. */
+#pacsimagingserver_form .inline-group .tabular tr.has_original td.original {
+	position: relative;
+	padding-top: 2px;
+}
+
+#pacsimagingserver_form .inline-group .tabular th.original {
+	width: 0;
+	padding: 0;
+}
+
+/* The label runs the full width of the row on its own line, however long it is, starting at the
+   shared inset */
+#pacsimagingserver_form .inline-group .tabular td.original p {
+	left: 0;
+	padding-left: $inline-inset;
+	white-space: nowrap;
+	width: max-content;
+	max-width: none;
+	height: 1.1em;
+	line-height: 1.1;
+}
+
+/* Headings at the narrow widths the checkbox columns allow, with the shared inset */
+#pacsimagingserver_form .inline-group .tabular th:not(.original) {
+	font-size: 11px;
+	line-height: 1.2;
+	padding-left: $inline-inset;
+	padding-right: $inline-inset;
+}
+
+/* The first data column shares the inset, so its control sits under the label and its heading */
+#pacsimagingserver_form .inline-group .tabular td.original + td {
+	padding-left: $inline-inset;
+}
+
+/* Server Group Permissions: the group picker, its related-object icons, and the block of space
+   that separates the group controls from the permission checkboxes */
+
+#group_authorizations-group .tabular th.column-group,
+#group_authorizations-group .tabular td.field-group {
+	padding-right: $picker-block-gap;
+}
+
+#group_authorizations-group .tabular .related-widget-wrapper {
+	display: inline-flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 0 $picker-icon-gap;
+	white-space: nowrap;
+}
+
+#group_authorizations-group .tabular .related-widget-wrapper > select.admin-autocomplete,
+#group_authorizations-group .tabular .related-widget-wrapper > .select2-container {
+	flex: 0 0 18em;
+	width: 18em;
+}
+
+#group_authorizations-group .tabular .related-widget-wrapper > .related-widget-wrapper-link {
+	flex: 0 0 auto;
+}
+
+#group_authorizations-group .tabular .related-widget-wrapper > .related-widget-wrapper-link + .related-widget-wrapper-link {
+	margin-left: -4px;
+}

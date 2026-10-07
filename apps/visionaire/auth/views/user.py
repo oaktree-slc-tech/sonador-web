@@ -328,6 +328,8 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 	worklist = forms.NullBooleanField(required=False)
 	tag = forms.NullBooleanField(required=False)
 	devices_list = forms.NullBooleanField(required=False)
+	display_attr = forms.NullBooleanField(required=False)
+	display_attr_modify = forms.NullBooleanField(required=False)
 
 	filtermodel = Group
 
@@ -336,6 +338,8 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		'worklist': 'server_authorizations__worklist',
 		'tag': 'server_authorizations__tag',
 		'devices_list': 'server_authorizations__devices_list',
+		'display_attr': 'server_authorizations__display_attr',
+		'display_attr_modify': 'server_authorizations__display_attr_modify',
 	}
  
 	def __init__(self, *args, server=None, user=None, **kwargs):
@@ -354,8 +358,11 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		'''
 		_groups = super().getObjectManager().filter(server_authorizations__server=self.server)
 
-		# Filter response by group membership
-		if not self.user.is_superuser:
+		# Filter response by group membership. Staff searching for groups with display attributes
+		# enabled see every such group, because they curate the collections of groups they do not belong to.
+		_filters = getattr(self, 'cleaned_data', None) or {}
+		_staff_display_attrs = self.user.is_staff and (_filters.get('display_attr') or _filters.get('display_attr_modify'))
+		if not (self.user.is_superuser or _staff_display_attrs):
 			_groups = _groups.filter(user=self.user)
 
 		return _groups.distinct()

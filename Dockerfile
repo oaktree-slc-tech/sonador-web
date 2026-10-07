@@ -75,8 +75,12 @@ RUN apt-get install -y sudo \
 EXPOSE 8070
 USER 1000
 
-# Collect static assets
+# Compile the project stylesheets (sassycss `compile-scss`, Dart Sass from node_modules), then
+# collect static assets
 RUN cd /srv/www/sonador/sonador/ \
+  && SONADOR_SITECONFIG=/srv/www/sonador/sonador/config/sonador.site.config \
+    DJANGO_SETTINGS_MODULE=sonador.settings \
+    python3 manage.py compile-scss \
   && SONADOR_SITECONFIG=/srv/www/sonador/sonador/config/sonador.site.config \
     DJANGO_SETTINGS_MODULE=sonador.settings \
     python3 manage.py collectstatic

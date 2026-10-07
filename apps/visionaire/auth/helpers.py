@@ -257,8 +257,13 @@ def api_permission_imageserver_user_has_access(user, request, vargs, vkwargs,
 	if user.is_active and user.is_authenticated and user.is_superuser:
 		return True
 
-	return imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).filter(
-		Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0
+	servers = imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param))
+	if servers.filter(Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0:
+		return True
+
+	# Staff curating display attributes reach the server without being a member
+	server = servers.first()
+	return server is not None and server.user_has_access(user)
 
 
 def api_permission_group_member(user, request, vargs, vkwargs, group_url_param='groupid'):

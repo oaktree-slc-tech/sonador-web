@@ -194,18 +194,30 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 	group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='server_authorizations')
 
 	# Server permissions
-	query = models.BooleanField(default=False, help_text='Submit global DICOM resource queries to the server')
-	upload = models.BooleanField(default=False, help_text='Upload DICOM files and attachments to the server')
+	query = models.BooleanField(verbose_name='Query', default=False,
+		help_text='Members can search every DICOM resource on the server, not only the ones shared with them.')
+	upload = models.BooleanField(verbose_name='Upload', default=False,
+		help_text='Members can upload DICOM files and attachments to the server.')
 	worklist = models.BooleanField(
-		verbose_name='Worklist', default=False, help_text='Allow members of the group to create worklist items.')
+		verbose_name='Worklist', default=False, help_text='Members can create worklist items.')
 	tag = models.BooleanField(
-		verbose_name='Tags', default=False, help_text='Allow members of the group to view tags.')
+		verbose_name='Series Tags', default=False,
+		help_text='Members can see the group\'s series tags and apply them to series during review.')
 	tag_modify = models.BooleanField(
-		verbose_name='Manage Tags', default=False, help_text='Allow members of the group to manage tags.')
+		verbose_name='Manage Series Tags', default=False,
+		help_text='Members can add, edit, and remove the group\'s series tags.')
 	devices_list = models.BooleanField(
-		verbose_name='Device List', default=False, help_text='Allow members of the group to run distortion filter and device tests.')
+		verbose_name='Device Registry', default=False,
+		help_text='Members can run distortion filter checks against the group\'s device registry.')
 	devices_list_modify = models.BooleanField(
-		verbose_name='Manage Device List', default=False, help_text='Allow members of the group to manage the device list.')
+		verbose_name='Manage Device Registry', default=False,
+		help_text='Members can add, edit, and remove devices in the group\'s registry.')
+	display_attr = models.BooleanField(
+		verbose_name='Display Attributes', default=False,
+		help_text='Members can add the group\'s display attributes to their viewer overlay.')
+	display_attr_modify = models.BooleanField(
+		verbose_name='Manage Display Attributes', default=False,
+		help_text='Members can add, relabel, and remove the group\'s display attributes. Staff manage every group\'s attributes.')
 
 	# Resource permissions
 	resource = models.CharField(max_length=2048, default='*',
@@ -333,8 +345,20 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 			# Group API requests
 			elif level == orthanc_api.ORTHANC_RESOURCE_GROUP:
 
+				# Display Attributes request. Checked before the tags request because that branch matches
+				# "tag" as a substring of the URI.
+				if orthanc_api.ORTHANC_GROUP_DISPLAY_ATTRS_REGEX.match(resource or '') and orthanc_id == self.group.pk:
+
+					# Read the group's display attributes
+					if method and method.lower() == gapicodes.HTTP_GET.lower():
+						return self.display_attr
+
+					# Add, change, or remove the group's display attributes
+					elif method and method.lower() in (gapicodes.HTTP_POST.lower(), gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower()):
+						return self.display_attr_modify
+
 				# Tags request
-				if orthanc_api.ORTHANC_RESOURCE_TAG in resource and orthanc_id == self.group.pk:
+				elif orthanc_api.ORTHANC_RESOURCE_TAG in resource and orthanc_id == self.group.pk:
 
 					# Read tags
 					if method and method.lower() in (gapicodes.HTTP_GET.lower()):
@@ -569,6 +593,7 @@ class PacsImagingServerGroupAuthorization(GuruTokenModel):
 		_json = {
 			'token': self.pk, 'server': self.server.pk, 'group': self.group.pk,
 			**pick(self, ('query', 'upload', 'tag', 'tag_modify', 'devices_list', 'devices_list_modify',
+				'display_attr', 'display_attr_modify',
 				'resource', 'view', 'remove', 'comment_view', 'comment_edit', 'acl', 'duration', 'worklist'))
 		}
 		return _json
