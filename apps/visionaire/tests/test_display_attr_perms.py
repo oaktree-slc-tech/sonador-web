@@ -187,6 +187,47 @@ class DisplayAttrPermissionTests(TestCase):
 		self.assertEqual(self._search(self.staff), [])
 		self.assertEqual(self._search(self.staff, tag=True), [])
 
+	def test_group_search_only_counts_the_policy_on_this_server(self):
+		'''	A flag enabled on another server's policy must not qualify a group here. The two
+			conditions have to hold for the same policy row, not for any two policies of the group.
+		'''
+		other = PacsImagingServer.objects.create(name='display-attr-other-server')
+		PacsImagingServerGroupAuthorization.objects.create(server=self.server, group=self.unattached, tag=True)
+		PacsImagingServerGroupAuthorization.objects.create(server=other, group=self.unattached, display_attr=True, display_attr_modify=True)
+		superuser = User.objects.create_superuser('display-attr-admin', 'admin@example.org', 'x')
+		self.curator.groups.add(self.unattached)
+
+		for user in (superuser, self.staff):
+			self.assertEqual(self._search(user, display_attr=True), ['curators', 'readers'], user.username)
+			self.assertEqual(self._search(user, display_attr_modify=True), ['curators'], user.username)
+		# The curator belongs to curators and unattached; only curators qualifies here
+		self.assertEqual(self._search(self.curator, display_attr=True), ['curators'])
+		self.assertEqual(self._search(self.curator, display_attr_modify=True), ['curators'])
+
+		# The reverse: enabled here, not elsewhere, is listed here only
+		form = PacsImagingServerFrontendGroupFilterForm(data={ 'name': '', 'display_attr': True }, server=other, user=superuser)
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(sorted(g.name for g in form.execute_filter()), ['unattached'])
+
+	def test_group_search_single_enabled_group_yields_one_result(self):
+		'''	Two groups on the server, one with display attributes: every kind of user gets one
+			result, including a member of both.
+		'''
+		self.curators_policy.display_attr = False
+		self.curators_policy.display_attr_modify = False
+		self.curators_policy.save()
+		superuser = User.objects.create_superuser('display-attr-admin2', 'admin2@example.org', 'x')
+		self.curator.groups.add(self.readers)
+
+		for user in (superuser, self.staff, self.curator):
+			self.assertEqual(self._search(user, display_attr=True), ['readers'], user.username)
+		self.assertEqual(self._search(superuser), ['curators', 'readers'])
+
+	def test_group_search_flags_combine_on_one_policy(self):
+		self.assertEqual(self._search(self.staff, display_attr=True, tag=True), ['curators'])
+		self.assertEqual(self._search(self.staff, display_attr=True, tag=False), ['readers'])
+		self.assertEqual(self._search(self.curator, display_attr=True, name='cur'), ['curators'])
+
 	def test_route_regex_is_anchored(self):
 		regex = orthanc_api.ORTHANC_GROUP_DISPLAY_ATTRS_REGEX
 		self.assertTrue(regex.match('/groups/7/display-attributes'))

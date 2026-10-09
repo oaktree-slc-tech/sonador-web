@@ -90,7 +90,7 @@ def permission2json(permission):
 
 
 def group2json(group, json_data=None, include_group_permissions=False):
-	'''	Convert the provided group instance to 
+	'''	Convert the provided group instance to
 	'''
 	json_data = json_data or (model_to_dict(group) if group else {})
 
@@ -197,7 +197,7 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 	'''
 	filtermodel = get_user_model()
 
-	filterkey_transforms = {		
+	filterkey_transforms = {
 		'first_name': 'first_name__icontains',
 		'last_name': 'last_name__icontains',
 		'email': 'email__icontains',
@@ -211,7 +211,7 @@ class PacsImagingServerFrontendUserFilterForm(UserFilterBaseForm):
 		super().__init__(*args, **kwargs)
 
 	def getObjectManager(self):
-		'''	Filter user list to only those which have access to the server 
+		'''	Filter user list to only those which have access to the server
 		'''
 		return super().getObjectManager().filter(groups__server_authorizations__server=self.server).distinct()
 
@@ -225,7 +225,7 @@ class PacsImagingServerUserFilterView(OrthancServiceImagingServerMixin, UserApiM
 		'''	Add imaging server reference to filter form parameters
 		'''
 		fparams = super().getFilterFormParams(request=request, vargs=vargs, vkwargs=vkwargs)
-		fparams['server'] = self.getImagingServer()		
+		fparams['server'] = self.getImagingServer()
 
 		return fparams
 
@@ -258,7 +258,7 @@ class SonadorUserLookupView(UserApiMixin, LookupViewFormMixin, JSONFormApiView):
 	'''
 	formclass = SonadorUserLookupForm
 	form_lookup_field = 'users'
-	
+
 	# User JSON serialization options
 	include_groups = True
 	include_permissions = True
@@ -322,7 +322,13 @@ class GroupRestView(SonadorApiRestView):
 
 class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 	''' Filter form for frontend API views to search and filter Sonador groups.
-		
+
+		The policy flags (`worklist`, `tag`, `devices_list`, `display_attr`, `display_attr_modify`)
+		select groups by the permission policy they hold ON THIS SERVER. They are applied together
+		with the server constraint in a single filter call: `server_authorizations` is a
+		multi-valued relation, and two separate filter calls on it would accept a group whose
+		policy on this server lacks the flag as long as some policy on another server has it.
+
 		@field worklist (Boolean/Null): filter groups by worklist permission.
 	'''
 	worklist = forms.NullBooleanField(required=False)
@@ -333,15 +339,15 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 
 	filtermodel = Group
 
+	policy_fields = ('worklist', 'tag', 'devices_list', 'display_attr', 'display_attr_modify')
+
+	# The policy flags are applied by getObjectManager, not by the generic filter step
+	omit_fields = policy_fields
+
 	filterkey_transforms = {
 		'name': 'name__icontains',
-		'worklist': 'server_authorizations__worklist',
-		'tag': 'server_authorizations__tag',
-		'devices_list': 'server_authorizations__devices_list',
-		'display_attr': 'server_authorizations__display_attr',
-		'display_attr_modify': 'server_authorizations__display_attr_modify',
 	}
- 
+
 	def __init__(self, *args, server=None, user=None, **kwargs):
 		self.server = server
 		if not server:
@@ -350,23 +356,32 @@ class PacsImagingServerFrontendGroupFilterForm(GroupFilterBaseForm):
 		self.user = user
 		if not user:
 			raise ValueError('Unable to intiialize group filter form, invalid user instance')
-			
+
 		super().__init__(*args, **kwargs)
 
-	def getObjectManager(self):
-		'''	Filter user list to only those which have access to ther server
+	def policy_filters(self):
+		'''	Policy flag filters from the cleaned data, as lookups on the policy relation
 		'''
-		_groups = super().getObjectManager().filter(server_authorizations__server=self.server)
-
-		# Filter response by group membership. Staff searching for groups with display attributes
-		# enabled see every such group, because they curate the collections of groups they do not belong to.
 		_filters = getattr(self, 'cleaned_data', None) or {}
-		_staff_display_attrs = self.user.is_staff and (_filters.get('display_attr') or _filters.get('display_attr_modify'))
+		return dict(('server_authorizations__%s' % key, _filters[key])
+			for key in self.policy_fields if _filters.get(key) is not None)
+
+	def getObjectManager(self):
+		'''	Groups holding a policy on the server that carries every requested flag, limited to
+			the user's own groups unless the user is a superuser, or staff searching for groups
+			whose policy enables display attributes (staff curate those collections without
+			being members).
+		'''
+		_policy = self.policy_filters()
+		_groups = super().getObjectManager().filter(server_authorizations__server=self.server, **_policy)
+
+		_staff_display_attrs = self.user.is_staff and (
+			_policy.get('server_authorizations__display_attr') or _policy.get('server_authorizations__display_attr_modify'))
 		if not (self.user.is_superuser or _staff_display_attrs):
 			_groups = _groups.filter(user=self.user)
 
 		return _groups.distinct()
-		
+
 
 class PacsImagingServerGroupFilterView(OrthancServiceImagingServerMixin, GuruFilterView):
 	'''	Sonador API view which can be used to search/filter Sonador groups. Only groups which the user
@@ -516,7 +531,7 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 		'group.name': 'name__icontains',
 	}
 
-	# For searches that return no results, use the following fields to execute a 
+	# For searches that return no results, use the following fields to execute a
 	# second search using the global term and the filterkey transforms to improve
 	# the initial search results.
 	fallback_user_match_fields = ('username', 'first_name', 'last_name', 'email')
@@ -538,7 +553,7 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 		'''	Retrieve filter parameters that should be attached to queries using an AND condition.
 		'''
 		fparams = fparams or {}
-		
+
 		# Add imaging server to the query filter parameters
 		if mlabel == 'user':
 			fparams['groups__server_authorizations__server'] = self.server
@@ -553,7 +568,7 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 			@input merge_AND_params (bool, default=True): toggles whether query AND parameters
 				should be included in the filter dictionary. The form is able to execute
 				two searches: an "AND" search that uses full-text search and relevance
-				matching and an "OR" fallback search. When True, the AND criteria for 
+				matching and an "OR" fallback search. When True, the AND criteria for
 				the model instance will be included in the results. When false, only OR criteria
 				will be added to the dictionary.
 
@@ -603,7 +618,7 @@ class PacsImagingUnifiedAuthModelSearchForm(SonadorUnifiedSearchForm):
 		results = super().execute_search(results=results)
 
 		# If there aren't any results returned by the results, execute a second query utilizing
-		# an __icontains mapping to try and retrieve useful initial results. When executing in 
+		# an __icontains mapping to try and retrieve useful initial results. When executing in
 		# this mode, results should be limited to groups to which the request user user is
 		# a member and users with which there is common membership in a group.
 		# IMPORTANT: Super admin users are able to search across all users associated with
