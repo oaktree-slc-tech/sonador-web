@@ -225,6 +225,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'visionaire.auth.middleware.RegisteredClientOriginMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
 
