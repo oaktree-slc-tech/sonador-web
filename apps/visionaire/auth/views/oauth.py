@@ -16,7 +16,13 @@ from django.contrib.sites.shortcuts import get_current_site
 
 from django.contrib import auth
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.views import redirect_to_login
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 
+from guru.apisettings import HTTP_AUTHORIZATION_HEADER
 from guru.helpers import gsetting, create_token, site_fullurl
 from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request,\
 	guru_is_safe_url
@@ -50,12 +56,17 @@ from ...models.branding import SonadorSite
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
 from ..helpers import openid_get_django_user
+from ..origins import is_registered_client_origin
 from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
+from ..forms.credential_providers.sonador import SonadorCredentialProvider
 from ..validators import TOKEN_GRANT_RESPONSE_PARAMS
 
 from .base import get_default_authserver, OpenIDAuthServerMixin
 
 logger = logging.getLogger(__name__)
+
+# Parameters a `prompt=none` error response may generate, in addition to those of a token grant
+LOGIN_REQUIRED_RESPONSE_PARAMS = TOKEN_GRANT_RESPONSE_PARAMS + ('error',)
 
 
 def same_site_hosts():
@@ -223,7 +234,35 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 				# Redirect to token view for the server
 				return redirect(authserver.url_token+'?'+request.GET.urlencode())
 
+			if not request.user.is_authenticated and self.is_prompt_none(request):
+				return self.login_required_response(request, authserver)
+
 		return super(OpenIDLoginRedirectView, self).get(request, *args, **kwargs)
+
+	def is_prompt_none(self, request):
+		'''	Determine whether the client asked for authentication without user interaction
+		'''
+		return 'none' in (request.GET.get('prompt') or '').split()
+
+	def login_required_response(self, request, authserver):
+		'''	Answer a `prompt=none` request that cannot be satisfied without interaction
+			(OpenID Connect Core 1.0, section 3.1.2.6). The error is returned to the client's
+			destination instead of forwarding to the identity provider, whose login page cannot
+			be completed inside the client's hidden frame.
+		'''
+		if request.GET.get('client_id') != authserver.client_id:
+			raise PermissionDenied('Client ID does not match authserver=%s.' % authserver.pk)
+
+		destination = request.GET.get(self.ohif_redirect_fieldname)
+		if not is_authorized_client_destination(destination, authserver,
+				reserved_params=LOGIN_REQUIRED_RESPONSE_PARAMS):
+			raise PermissionDenied('Redirect URL is not registered with authserver=%s '
+				'or part of the Sonador application.' % authserver.pk)
+
+		return redirect(append_response_parameters(destination, {
+			'error': 'login_required',
+			'state': request.GET.get('state'),
+		}))
 
 
 class OpenIDLoginCallbackView(OpenIDViewPropertiesMixin, OpenIDLoginCallbackAbstractView):
@@ -383,23 +422,73 @@ class oAuth2TokenAuthorizationView(OpenIDAuthServerMixin, GuruQueryParamMixin, V
 		return redirect(rurl)
 
 
+@method_decorator(never_cache, name='dispatch')
 class oAuth2TokenRefreshView(GuruQueryParamMixin, View):
-	'''	oAuthAuthorization endpoint that renews a signed session token
+	'''	oAuthAuthorization endpoint that renews a signed session token.
+
+		The session is identified by the session cookie or, for clients which do not share
+		Sonador's site and so never receive the cookie, by a session bearer token in the
+		Authorization header. Renewal reissues a token for the same session; it does not extend
+		the session.
 	'''
 	session_salt = SESSION_SALT
+	credential_provider_class = SonadorCredentialProvider
 
 	def get(self, request, *args, **kwargs):
 
-		# Ensure user is authenticated to the application
-		if not hasattr(request, 'user') or not getattr(request.user, 'is_authenticated', False):
-			return guru_permission_denied(request)
+		if request.headers.get(HTTP_AUTHORIZATION_HEADER):
+			session = self.get_bearer_session(request)
+			if session is None:
+				return guru_permission_denied(request)
+
+		elif getattr(getattr(request, 'user', None), 'is_authenticated', False):
+			session = request.session
+
+		else: return redirect_to_login(request.get_full_path())
 
 		return operation_results({
-			'id_token': request.session.session_key,
-			OAUTH_ACCESS_TOKEN: signing.dumps(request.session.session_key, salt=self.session_salt),
+			'id_token': session.session_key,
+			OAUTH_ACCESS_TOKEN: signing.dumps(session.session_key, salt=self.session_salt),
 			OAUTH_TOKEN_TYPE: OAUTH_TOKEN_TYPE_BEARER,
-			OAUTH_EXPIRATION: request.session.get_expiry_age(),
+			OAUTH_EXPIRATION: self.session_expires_in(session),
 		})
+
+	def session_expires_in(self, session):
+		'''	Seconds until the stored session expires. `get_expiry_age()` reports the full cookie
+			age for a session without a custom expiry, regardless of when it was created.
+		'''
+		expire_date = Session.objects.filter(session_key=session.session_key) \
+			.values_list('expire_date', flat=True).first()
+		if expire_date is None:
+			return session.get_expiry_age()
+
+		return max(0, int((expire_date - timezone.now()).total_seconds()))
+
+	def get_bearer_session(self, request):
+		'''	Session identified by a Sonador session bearer token, provided its user is active.
+			Other credential types are not renewable here.
+
+			@returns SessionStore or None
+		'''
+		authorization = request.headers.get(HTTP_AUTHORIZATION_HEADER) or ''
+		if not authorization.startswith(OAUTH_TOKEN_TYPE_BEARER + ' '):
+			return None
+
+		provider = self.credential_provider_class({
+			'token_key': HTTP_AUTHORIZATION_HEADER,
+			'token_value': authorization,
+		})
+
+		try: provider.clean()
+		except Exception:
+			logger.debug('Unable to decode a bearer token presented for renewal', exc_info=True)
+			return None
+
+		if provider.session is None or not getattr(provider.user, 'is_authenticated', False) \
+				or not provider.session.session_key:
+			return None
+
+		return provider.session
 
 
 
@@ -526,47 +615,11 @@ class OpenIDEndSessionView(OpenIDAuthServerMixin, View):
 		return self.authserver_model.objects.all()
 
 	def is_trusted_client_origin(self, url):
-		'''	Determine whether `url` is served from an origin the platform trusts as one of its
-			own application endpoints.
+		'''	Determine whether `url` is served from an origin registered with any of the
+			platform's authorization servers. The sign-out page served from a registered
+			client's origin is covered by that client's callback registration.
 		'''
-		requested = urlparse.urlparse(url)
-		if requested.scheme not in ('http', 'https') or not requested.netloc:
-			return False
-
-		for scheme, netloc in self.get_trusted_client_origins():
-			if scheme != requested.scheme:
-				continue
-			if netloc == requested.netloc:
-				return True
-
-			# Wildcard subdomain form ("https://*.example.com"), matching how Django reads a
-			# wildcard origin. The bare domain is intentionally not covered.
-			if netloc.startswith('*.') and requested.netloc.endswith(netloc[1:]):
-				return True
-
-		return False
-
-	def get_trusted_client_origins(self):
-		'''	Origins (scheme, netloc) taken from the Callback URLs registered against the
-			platform's authorization servers.
-
-			The Callback URL list is the operator's record of which endpoints belong to the
-			application, so it is the single source of truth here -- a viewer hosted somewhere
-			other than Sonador is authorized by registering it there, not in site settings.
-			Registering a client's callback declares that origin as part of the application, so
-			the sign-out page served from the same origin is covered by the same entry.
-
-			Relative and malformed entries are ignored.
-		'''
-		origins = set()
-
-		for authserver in self.get_auth_servers():
-			for entry in (authserver.callback_url or '').splitlines():
-				registered = urlparse.urlparse((entry or '').strip())
-				if registered.scheme in ('http', 'https') and registered.netloc:
-					origins.add((registered.scheme, registered.netloc))
-
-		return origins
+		return is_registered_client_origin(url, self.get_auth_servers())
 
 
 class LogoutSuccessView(TemplateView):

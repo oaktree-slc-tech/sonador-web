@@ -69,7 +69,7 @@ urlpatterns.extend([
 urlpatterns.extend([
 
 	# OHIF: Session Renew Endpoint
-    re_path(r'^silent-refresh.html$', login_required(oAuth2TokenRefreshView.as_view()), name='silent-refresh'),
+    re_path(r'^silent-refresh.html$', oAuth2TokenRefreshView.as_view(), name='silent-refresh'),
 
     # Sonador Root Configuration
     re_path(r'^ohif/config/?$', OhifConfigView.as_view(content_type=gapicodes.HTTP_CONTENT_TYPE_JSON), name='ohif-config'),
