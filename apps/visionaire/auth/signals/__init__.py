@@ -4,4 +4,4 @@
 	`ready()`. It was previously empty, which left `events.revoke_openid_access_token` written but
 	never registered.
 '''
-from . import events
+from . import cors, events
