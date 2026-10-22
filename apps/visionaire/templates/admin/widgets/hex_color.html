@@ -1,0 +1,3 @@
+{% include "django/forms/widgets/input.html" %}
+<input type="color" value="{{ widget.value|default:'#000000' }}" aria-label="Pick color" style="vertical-align: middle; margin-left: 6px;"
+	oninput="this.previousElementSibling.value = this.value.toUpperCase();">
