@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.contrib.sites.shortcuts import get_current_site
 
 from guru.views import GuruApiDetailsMixin, GuruApiCreateView
 from guru.helpers import operation_results
@@ -6,8 +7,13 @@ from guru.helpers import operation_results
 from core.views import JSONFormApiView
 
 from ..models.userpref import UserPref, CURRENT_PREF_VERSION
+from ..models.branding import SonadorSite
+from ..apisettings.display_attrs import site_display_attributes
 from ..forms.userpref import UserPrefForm
 
+
+# Read-only key of the whole-document response which carries the current site's defaults
+SITE_FIELD = 'site'
 
 # Model JSON fields the section endpoints write into (AR-4 `field` selector).
 VIEWER_FIELD = 'viewer'
@@ -40,6 +46,15 @@ class UserPrefApiManagementView(GuruApiDetailsMixin, GuruApiCreateView):
 
 	def get(self, request, *args, **kwargs):
 		return super().get(request, *args, objectid=None, **kwargs)
+
+	def getModelJsonData(self, instance, request, vargs=None, vkwargs=None):
+		'''	Preference document plus the read-only `site` defaults of the current site. `site` is
+			not a model field, so a whole-document POST cannot write it.
+		'''
+		data = super().getModelJsonData(instance, request, vargs=vargs, vkwargs=vkwargs)
+		ssite = SonadorSite.objects.filter(pk=get_current_site(request).pk).first()
+		data[SITE_FIELD] = { 'displayAttributes': site_display_attributes(ssite) }
+		return data
 
 	def getObjectForm(self, request, request_data, instance=None, vargs=None, vkwargs=None):
 		'''	Bind the whole-document write to the caller's own record (AR-6).

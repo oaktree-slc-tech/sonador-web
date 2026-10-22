@@ -15,6 +15,8 @@ from ..auth.models import SocialAuthorizationServer, PacsImagingServerUserAuthor
 	DataService
 from ..models import PacsImagingServer, DicomImagingModality, RemoteDICOMwebServer 
 from ..models.branding import SonadorSite
+from ..apisettings.display_attrs import SERIES_TAG_TOOL, DISPLAY_ATTRIBUTE_COLOR, DISPLAY_COLOR_ROLES, \
+	site_display_attributes, normalize_hex_color
 
 from .auth import SonadorApiAccess, SonadorApiAccessToken, ProxySecureSocialAuthorizationServer, \
 	SocialAuthorizationServerSearchAdmin, SocialAuthorizationServerAdmin, \
@@ -62,13 +64,42 @@ class SonadorApiAccessAdmin(UserLabelMixin, ApiAccessAdmin):
 SONADORSITE_MARKDOWN_FIELDS = ('welcome', 'farewell')
 
 
+# Series Tag color fields on the site form: (form field, color role)
+SONADORSITE_SERIES_TAG_COLOR_FIELDS = tuple(('series_tag_color_%s' % role.lower(), role) for role in DISPLAY_COLOR_ROLES)
+
+SERIES_TAG_COLOR_HELP = {
+	'Background': 'Fill behind the tag. Leave blank for no fill.',
+	'Border': 'Outline of the tag. Leave blank to use the built-in default (white).',
+	'Value': 'Text color of the coded concept value. Leave blank to use the built-in default.',
+	'Meaning': 'Text color of the code meaning. Leave blank to use the built-in default.',
+}
+
+
+class HexColorWidget(forms.TextInput):
+	'''	Text input for a `#RRGGBB` color with a native color picker alongside it
+	'''
+	template_name = 'admin/widgets/hex_color.html'
+
+	def __init__(self, attrs=None):
+		super().__init__(attrs={ 'placeholder': '#RRGGBB', 'size': 9, 'maxlength': 7, **(attrs or {}) })
+
+
 class SonadorSiteAdminForm(forms.ModelForm):
 	'''	ModelAdmin form which provides an ACE text editor for the site's markdown messages
-		("Welcome" and "Farewell").
+		("Welcome" and "Farewell") and color fields for the Series Tag display attribute defaults.
 	'''
+	series_tag_color_background = forms.CharField(label='Background Color', required=False, widget=HexColorWidget(),
+		help_text=SERIES_TAG_COLOR_HELP['Background'])
+	series_tag_color_border = forms.CharField(label='Border Color', required=False, widget=HexColorWidget(),
+		help_text=SERIES_TAG_COLOR_HELP['Border'])
+	series_tag_color_value = forms.CharField(label='Value Color', required=False, widget=HexColorWidget(),
+		help_text=SERIES_TAG_COLOR_HELP['Value'])
+	series_tag_color_meaning = forms.CharField(label='Meaning Color', required=False, widget=HexColorWidget(),
+		help_text=SERIES_TAG_COLOR_HELP['Meaning'])
+
 	class Meta:
 		model = SonadorSite
-		fields = '__all__'
+		exclude = ('display_attributes',)
 		widgets = { field: CodeEditorAdminWidget(code_language='markdown') for field in SONADORSITE_MARKDOWN_FIELDS }
 
 	def __init__(self, *args, **kwargs):
@@ -76,6 +107,26 @@ class SonadorSiteAdminForm(forms.ModelForm):
 
 		for field in SONADORSITE_MARKDOWN_FIELDS:
 			self.fields[field].widget.attrs.update({ CodeEditorAdminWidget.code_language_attr: 'markdown' })
+
+		color = site_display_attributes(self.instance).get(SERIES_TAG_TOOL, {}).get(DISPLAY_ATTRIBUTE_COLOR, {})
+		for field, role in SONADORSITE_SERIES_TAG_COLOR_FIELDS:
+			self.initial.setdefault(field, color.get(role) or '')
+
+	def clean(self):
+		cleaned_data = super().clean()
+		for field, role in SONADORSITE_SERIES_TAG_COLOR_FIELDS:
+			try:
+				cleaned_data[field] = normalize_hex_color(cleaned_data.get(field))
+			except forms.ValidationError as err:
+				self.add_error(field, err)
+		return cleaned_data
+
+	def save(self, commit=True):
+		display_attributes = site_display_attributes(self.instance)
+		display_attributes[SERIES_TAG_TOOL] = { DISPLAY_ATTRIBUTE_COLOR: {
+			role: self.cleaned_data.get(field) for field, role in SONADORSITE_SERIES_TAG_COLOR_FIELDS } }
+		self.instance.display_attributes = display_attributes
+		return super().save(commit=commit)
 
 
 @admin.register(SonadorSite)
@@ -86,7 +137,11 @@ class SonadorSitesAdmin(admin.ModelAdmin):
 
 	fieldsets = (
 		('Site Properties', { 'fields': ('name', 'domain')}),
-		('Site Branding', { 'fields': ('logo', 'logo_narrow', 'favicon', 'welcome', 'farewell')})
+		('Site Branding', { 'fields': ('logo', 'logo_narrow', 'favicon', 'welcome', 'farewell')}),
+		('Display Attributes: Series Tags', {
+			'fields': tuple(field for field, role in SONADORSITE_SERIES_TAG_COLOR_FIELDS),
+			'description': 'Default colors of Series Tags rendered in the viewer. A tag\'s own display attributes take precedence.',
+		}),
 	)
 
 	form = SonadorSiteAdminForm
