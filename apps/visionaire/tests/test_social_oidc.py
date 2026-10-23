@@ -10,7 +10,7 @@
 	The identity provider is not contacted: the token exchange and the user lookup are the
 	package's own request helpers, patched to answer as a provider would.
 '''
-import time
+import logging, time
 
 from unittest import mock
 from urllib.parse import urlsplit, parse_qs
@@ -19,12 +19,16 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.shortcuts import resolve_url
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
+from guru.helpers import gsetting
 
 from wgtauth.social.models import SocialAppProvider, SocialAuthorizationToken, \
 	OPENID_OVERIDE_GLOBALENV
-from wgtauth.social.oidc import SESSION_LOGIN_TRANSACTION_KEY, code_challenge
+from wgtauth.social.oidc import SESSION_LOGIN_TRANSACTION_KEY, STATE_DESTINATION_PREFIX, \
+	code_challenge, encode_state_destination, decode_state_destination
 from wgtauth.transactions import TRANSACTION_MAX_AGE
 
 from ..auth.models import SocialAuthorizationServer, SocialUserAccount, DataService
@@ -34,6 +38,10 @@ from .test_dataservice_redirects import REGISTERED
 
 
 IDP_AUTHORIZE = 'https://idp.example.com:443/o/authorize/'
+REGISTERED_MIXED_CASE = 'https://viewer.example.com:8443/OAuth/Callback'
+
+# Synthetic stand-in for a client's state, used to show it is never logged
+SYNTHETIC_STATE = 'Synthetic-Client-State-7f3a'
 ISSUER = 'https://idp.example.com/o'
 
 # Key pair standing in for the provider's signing key; the public half is what the key set
@@ -99,6 +107,10 @@ class SocialLoginTestCase(TestCase):
 		for patcher in patches:
 			patcher.start()
 			self.addCleanup(patcher.stop)
+
+	@property
+	def login_redirect(self):
+		return resolve_url(gsetting('LOGIN_REDIRECT_URL'))
 
 	def set_policy(self, **flags):
 		for name, value in flags.items():
@@ -597,7 +609,8 @@ class IdTokenSignatureTests(SocialLoginTestCase):
 
 class LegacyStateTransportTests(SocialLoginTestCase):
 	'''	A provider with state verification off keeps the older behaviour: the destination
-		travels as the state and is read back from it.
+		travels as the state and is read back from it. It is sent encoded only once
+		WGTAUTH_ENCODE_STATE_DESTINATION is on; the callback reads either form.
 	'''
 	def setUp(self):
 		super(LegacyStateTransportTests, self).setUp()
@@ -612,6 +625,108 @@ class LegacyStateTransportTests(SocialLoginTestCase):
 		response = self.callback(None)
 		self.assertEqual(response.status_code, 302)
 		self.assertTrue(self.client.session.get('_auth_user_id'))
+
+	def test_the_destination_is_sent_plain_until_encoding_is_turned_on(self):
+		self.assertEqual(self.initiate(next='/studylist')['state'], '/studylist')
+
+	@override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True)
+	def test_with_encoding_on_the_destination_is_sent_encoded(self):
+		state = self.initiate(next='/studylist')['state']
+		self.assertTrue(state.startswith(STATE_DESTINATION_PREFIX))
+		self.assertEqual(decode_state_destination(state), '/studylist')
+
+	@override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True)
+	def test_an_encoded_destination_is_restored_with_its_query(self):
+		destination = '/studylist?search=OAI%209&state=Synthetic-Inner-State'
+		sent = self.initiate(next=destination)
+		self.assertLoggedIn(self.callback(sent['state']), destination)
+
+	def test_a_state_which_is_not_a_url_lands_on_the_login_redirect(self):
+		'''	A provider which returns the state decoded splits a plain destination with its own
+			query across the callback's parameters, leaving the inner state as the value read.
+			That is not a URL or a view name, so the signed-in user lands on the login redirect
+			rather than on a server error.
+		'''
+		self.assertLoggedIn(self.callback(SYNTHETIC_STATE), self.login_redirect)
+
+	def test_an_undecodable_destination_lands_on_the_login_redirect(self):
+		self.assertLoggedIn(self.callback(STATE_DESTINATION_PREFIX + 'A'), self.login_redirect)
+
+	def test_a_destination_with_control_characters_lands_on_the_login_redirect(self):
+		state = encode_state_destination('/studylist\r\nX-Injected: 1', enabled=True)
+		self.assertLoggedIn(self.callback(state), self.login_redirect)
+
+
+class FallbackLoggingTests(SocialLoginTestCase):
+	'''	Records emitted while a destination is refused carry a fixed reason and the server
+		identifier, never the state, the destination, or the values nested in it.
+	'''
+	def setUp(self):
+		super(FallbackLoggingTests, self).setUp()
+		self.set_policy(oidc_state=False)
+
+	def assertNothingLogged(self, markers, request, reason):
+		'''	Every record the package emits during the request, exception text included, is
+			free of the markers and carries the expected reason. The package's records are
+			captured at its own logger: deployments may stop them propagating to the root.
+		'''
+		with self.assertLogs('wgtauth', level='DEBUG') as captured:
+			response = request()
+
+		formatter = logging.Formatter('%(name)s %(message)s')
+		output = '\n'.join(formatter.format(record) for record in captured.records)
+		for marker in markers:
+			self.assertNotIn(marker, output)
+		self.assertIn(reason, output)
+		return response
+
+	def test_the_unresolvable_destination_fallback(self):
+		response = self.assertNothingLogged([SYNTHETIC_STATE],
+			lambda: self.callback(SYNTHETIC_STATE), 'is not a URL or view name')
+
+		self.assertLoggedIn(response, self.login_redirect)
+
+	def test_a_split_data_service_destination(self):
+		query = ('code=idp-code&state=/synthetic/callback?response_type=code&client_id=Synthetic-Client'
+			'&state=%s&nonce=Synthetic-Nonce' % SYNTHETIC_STATE)
+		self.assertNothingLogged([SYNTHETIC_STATE, 'Synthetic-Client', 'Synthetic-Nonce', '/synthetic/callback'],
+			lambda: self.client.get('%s?%s' % (self.callback_url(), query)), 'is not a URL or view name')
+
+	def test_a_malformed_encoded_state(self):
+		state = STATE_DESTINATION_PREFIX + 'SyntheticMarkerXX'
+		self.assertNothingLogged([state, 'SyntheticMarkerXX'],
+			lambda: self.callback(state), 'Unable to decode the destination')
+
+	def test_a_destination_with_control_characters(self):
+		state = encode_state_destination('/Synthetic-Destination\r\nX-Synthetic: Synthetic-Header\x00',
+			enabled=True)
+		self.assertNothingLogged([state, 'Synthetic-Destination', 'Synthetic-Header'],
+			lambda: self.callback(state), 'contains control characters')
+
+
+class StateDestinationEncodingTests(TestCase):
+	'''	The destination carried as the state when state verification is off
+	'''
+	def test_the_destination_round_trips(self):
+		for destination in ('/studylist', '/a?b=c&state=d&next=%2Fe', 'https://viewer.example.com/x?y=é'):
+			state = encode_state_destination(destination, enabled=True)
+			self.assertEqual(decode_state_destination(state), destination)
+
+	def test_the_encoded_state_needs_no_escaping(self):
+		state = encode_state_destination('/a?b=c&state=d#f', enabled=True)
+		self.assertRegex(state, r'^[A-Za-z0-9_.-]+$')
+
+	def test_encoding_is_off_unless_the_setting_is_on(self):
+		self.assertEqual(encode_state_destination('/studylist'), '/studylist')
+		with override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True):
+			self.assertTrue(encode_state_destination('/studylist').startswith(STATE_DESTINATION_PREFIX))
+
+	def test_a_state_without_the_prefix_is_read_as_given(self):
+		self.assertEqual(decode_state_destination('/studylist'), '/studylist')
+
+	def test_an_empty_destination_is_left_empty(self):
+		self.assertEqual(encode_state_destination('', enabled=True), '')
+		self.assertIsNone(decode_state_destination(None))
 
 
 class ProviderOverrideCompatibilityTests(SocialLoginTestCase):
@@ -715,6 +830,135 @@ class DataServiceChainTests(SocialLoginTestCase):
 		self.assertTrue(params.get('code'))
 		self.assertEqual(params.get('state'), ['client-state'])
 		self.assertEqual(params.get('nonce'), ['client-nonce'])
+
+
+class LegacyDataServiceChainTests(DataServiceChainTests):
+	'''	The data service chain against a provider with state verification off, where the
+		forwarded client request travels through the provider as the state. The provider
+		may return that state escaped or decoded (Cognito's hosted sign-in was seen doing
+		both). Every completed login ends at the client's registered callback with a code the
+		token endpoint redeems, and the client's mixed-case values unchanged.
+	'''
+	def setUp(self):
+		super(LegacyDataServiceChainTests, self).setUp()
+		self.set_policy(oidc_state=False)
+
+		self.dataservice.openid_callback_url = REGISTERED_MIXED_CASE
+		self.dataservice.save()
+		self.client_request.update({ 'redirect_uri': REGISTERED_MIXED_CASE,
+			'state': 'Client-State-MiXeD', 'nonce': 'Client-Nonce-MiXeD' })
+
+		self.api_client = Client()
+		self.api_client.force_login(User.objects.create_user('ines.baptista', password='x',
+			is_staff=True, is_superuser=True))
+
+	def begin(self):
+		response = self.client.get(self.dataservice.url_login, self.client_request)
+		self.assertEqual(response.status_code, 302)
+		return { key: val[0] for key, val in parse_qs(urlsplit(response['Location']).query).items() }['state']
+
+	def return_escaped(self, state):
+		return self.client.get(self.callback_url(), {'code': 'idp-code', 'state': state})
+
+	def return_decoded(self, state):
+		'''	Callback as a provider which decodes the state would send it: the state's value
+			placed in the query unescaped.
+		'''
+		return self.client.get('%s?code=idp-code&state=%s' % (self.callback_url(), state))
+
+	def assertCompletesAtTheClient(self, landing):
+		'''	The auth server callback forwards to the data service callback, which issues a
+			code to the registered callback; the code is then redeemed.
+		'''
+		self.assertEqual(landing.status_code, 302)
+		self.assertTrue(landing['Location'].startswith(self.dataservice.url_callback + '?'), landing['Location'])
+
+		issued = self.client.get(landing['Location'])
+		self.assertEqual(issued.status_code, 302)
+		base, _, query = issued['Location'].partition('?')
+		self.assertEqual(base, REGISTERED_MIXED_CASE)
+
+		params = parse_qs(query)
+		self.assertTrue(params.get('code') and params['code'][0])
+		self.assertEqual(params.get('state'), ['Client-State-MiXeD'])
+		self.assertEqual(params.get('nonce'), ['Client-Nonce-MiXeD'])
+
+		exchanged = self.api_client.post(
+			reverse('visionaire-api:data-service-openid-token', args=(self.dataservice.pk,)),
+			{ 'client_id': self.dataservice.openid_client_id, 'scope': 'openid',
+				'code': params['code'][0], 'redirect_uri': REGISTERED_MIXED_CASE },
+			content_type='application/json')
+		self.assertEqual(exchanged.status_code, 200)
+		self.assertIn(b'token', exchanged.content)
+
+	def test_the_forwarded_request_is_the_recorded_destination(self):
+		'''	With encoding off the destination is sent plain, as an older callback expects.
+		'''
+		state = self.begin()
+		self.assertFalse(state.startswith(STATE_DESTINATION_PREFIX))
+
+		base, _, query = state.partition('?')
+		self.assertEqual(base, self.dataservice.url_callback)
+		self.assertEqual(parse_qs(query), { key: [val] for key, val in self.client_request.items() })
+
+	def test_the_chain_issues_a_code_to_the_registered_callback(self):
+		'''	Plain writer, decoding reader, provider returning the state escaped
+		'''
+		self.assertCompletesAtTheClient(self.return_escaped(self.begin()))
+
+	@override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True)
+	def test_an_encoded_state_returned_escaped_completes(self):
+		self.assertCompletesAtTheClient(self.return_escaped(self.begin()))
+
+	@override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True)
+	def test_an_encoded_state_returned_decoded_completes(self):
+		state = self.begin()
+		self.assertTrue(state.startswith(STATE_DESTINATION_PREFIX))
+		self.assertCompletesAtTheClient(self.return_decoded(state))
+
+	def test_an_older_callback_can_only_follow_a_plain_state(self):
+		'''	Why encoding waits for the setting: a callback without the decoder follows an
+			encoded state as a relative URL, so the login never reaches the client. With the
+			setting off the same callback completes.
+		'''
+		older_callback = mock.patch('wgtauth.social.views.decode_state_destination', side_effect=lambda state: state)
+
+		with override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True):
+			state = self.begin()
+		with older_callback:
+			landing = self.return_escaped(state)
+		self.assertEqual(landing.status_code, 302)
+		self.assertFalse(landing['Location'].startswith(self.dataservice.url_callback))
+
+		self.client.logout()
+		state = self.begin()
+		with older_callback:
+			landing = self.return_escaped(state)
+		self.assertCompletesAtTheClient(landing)
+
+	def test_a_login_started_with_encoding_on_completes_after_it_is_turned_off(self):
+		'''	Rollback, first step: the setting goes off while an encoded login is with the
+			provider; the decoder still completes it.
+		'''
+		with override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True):
+			state = self.begin()
+		self.assertTrue(state.startswith(STATE_DESTINATION_PREFIX))
+		self.assertCompletesAtTheClient(self.return_decoded(state))
+
+	def test_a_login_started_with_encoding_off_completes_after_it_is_turned_on(self):
+		state = self.begin()
+		with override_settings(WGTAUTH_ENCODE_STATE_DESTINATION=True):
+			self.assertCompletesAtTheClient(self.return_escaped(state))
+
+	def test_a_plain_state_returned_decoded_needs_a_fresh_client_login(self):
+		'''	A plain destination the provider has split cannot be recovered. The user is signed
+			in to Sonador and lands on the login redirect; no code reaches the client, which
+			has to start its login again.
+		'''
+		landing = self.return_decoded(self.begin())
+
+		self.assertLoggedIn(landing, self.login_redirect)
+		self.assertNotIn('code=', landing['Location'])
 
 
 class ProviderImportDefaultsTests(TestCase):
