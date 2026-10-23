@@ -319,6 +319,12 @@ AUTH_CREDENTIALS_CACHE_MAX_AGE = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE
 AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS', 16))
 AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH', 42))
 
+# Identity providers with state verification off send the post-login destination as the state.
+# When on, it is sent encoded so a provider which returns the state decoded cannot split it.
+# Turn on only once every Sonador worker runs a Wagtail Auth release which decodes it.
+WGTAUTH_ENCODE_STATE_DESTINATION = config_str2bool(
+    siteconfig_auth.get('WGTAUTH_ENCODE_STATE_DESTINATION', False))
+
 
 # Site Redirect Settings
 LOGIN_REDIRECT_URL = siteconfig_auth.get('LOGIN_REDIRECT_URL', '/')
