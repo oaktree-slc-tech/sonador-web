@@ -206,11 +206,7 @@ class OhifDicomViewer(TemplateView):
 		'''
 		if getattr(getattr(self, 'request', None), 'user', None):
 
-			# For administrative users, return all active servers
-			if self.request.user and self.request.user.is_superuser:
-				return self.model.objects.filter(active=True)
-
-			# Retrieve servers for which a specific user is authorized
+			# Retrieve servers for which a specific user is authorized, superusers included
 			return self.model.objects.filter(active=True).filter(
 				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user)).distinct()
 

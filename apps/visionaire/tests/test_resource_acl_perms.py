@@ -1,8 +1,8 @@
 """	Resource permission lookup (`resource-acl`) for superusers and policy members.
 
-	The Orthanc comment endpoint reads `remove` from this lookup to decide whether a user may remove
-	another user's comment, so the lookup must agree with the authorization decision in front of it:
-	a superuser holds every resource permission there, and must hold every one here.
+	Superusers bypass group and local resource policies on the servers they are attached to. The
+	Orthanc comment endpoint reads `remove` from this lookup, so it must agree with the authorization
+	decision in front of it.
 """
 from types import SimpleNamespace
 from unittest import mock
@@ -44,7 +44,7 @@ class ResourceAclPermissionLookupTests(TestCase):
 				return_value=local or {}) as local_lookup:
 			adata = view.get_authorization_response({})
 
-		return adata['perms'], local_lookup
+		return adata.get('perms'), local_lookup
 
 	def test_superuser_holds_every_resource_permission(self):
 		perms, local_lookup = self._lookup(self.admin)
@@ -52,11 +52,20 @@ class ResourceAclPermissionLookupTests(TestCase):
 		self.assertEqual(perms, dict((_rp, True) for _rp in orthanc_api.SONADOR_RESOURCE_PERMS))
 		local_lookup.assert_not_called()
 
-	def test_superuser_outside_every_group_holds_every_resource_permission(self):
+	def test_unattached_superuser_gets_no_answer(self):
 		self.admin.groups.clear()
 		perms, _ = self._lookup(self.admin)
 
-		self.assertTrue(all(perms.values()))
+		self.assertIsNone(perms)
+
+	def test_display_attr_policy_does_not_admit_an_unattached_staff_superuser(self):
+		curators = Group.objects.create(name='curators')
+		PacsImagingServerGroupAuthorization.objects.create(server=self.server, group=curators, display_attr=True)
+		self.admin.groups.clear()
+
+		perms, _ = self._lookup(self.admin)
+
+		self.assertIsNone(perms)
 
 	def test_member_gets_only_what_policies_grant(self):
 		perms, _ = self._lookup(self.member)

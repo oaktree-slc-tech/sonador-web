@@ -176,10 +176,12 @@ def orthancserver_basicauth(required_permission,
 				except ValueError as err:
 					logger.error('Unable to decode user credentials from authentication string')
 
-			# Check that PAI user has access to requested resource
+			# Check that PAI user has access to requested resource. A superuser calling these routes is
+			# a service account acting for the server; the user it asks about is authorized separately.
 			if getattr(request, 'user', None):
 
-				try: upass = server.user_has_access(request.user) and check_userperms(request.user)
+				try: upass = ((request.user.is_superuser and request.user.is_active) or server.user_has_access(request.user)) \
+					and check_userperms(request.user)
 				except ObjectDoesNotExist as err:
 					return guru_page_not_found(required_permission, err)
 
@@ -253,16 +255,8 @@ def api_permission_imageserver_user_has_access(user, request, vargs, vkwargs,
 	'''	Permissions helper for api_request which allows access to imaging server instances
 		for which a user is authorized.
 	'''
-	# Authorize all admin access requests
-	if user.is_active and user.is_authenticated and user.is_superuser:
-		return True
-
-	servers = imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param))
-	if servers.filter(Q(user_authorizations__user=user) | Q(group_authorizations__group__user=user)).count() > 0:
-		return True
-
-	# Staff curating display attributes reach the server without being a member
-	server = servers.first()
+	# Every user, superusers and staff included, reaches the active servers they are attached to
+	server = imageserver_model.objects.filter(active=True).filter(pk=vkwargs.get(server_url_param)).first()
 	return server is not None and server.user_has_access(user)
 
 
