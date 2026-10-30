@@ -64,6 +64,14 @@ class OrthancResourceAclIntrospectionView(OrthancServiceAuthorizationView):
 			user = user or self.form.user
 			adata['user'] = user2json(user, include_groups=True, include_permissions=False)
 
+			# A superuser holds every resource permission, matching the authorization decision
+			# (PacsImagingServerGroupAuthorization.user_has_perm) and the server grants the viewer
+			# reads (PacsImagingServer.server_perms). Without this, a permission lookup would
+			# refuse what the authorization request in front of it has already admitted.
+			if getattr(user, 'is_superuser', False):
+				adata['perms'] = dict((_rp, True) for _rp in orthanc_api.SONADOR_RESOURCE_PERMS)
+				return adata
+
 			# Start with a policy set with all permissions set to False
 			_perms = dict((_rp, False) for _rp in orthanc_api.SONADOR_RESOURCE_PERMS)
 
