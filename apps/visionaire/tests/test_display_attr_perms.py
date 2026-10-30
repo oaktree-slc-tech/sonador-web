@@ -1,5 +1,8 @@
 '''	Display Attributes permissions: the `display_attr` / `display_attr_modify` policy flags, the
 	staff curation rule, the group search, and the display-attributes aggregate route allow-list.
+
+	Staff curate display attributes only on the servers they are attached to (named by a user or
+	group policy); the staff users here are attached by a user policy so they belong to no group.
 '''
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
@@ -7,7 +10,7 @@ from django.test import TestCase
 from orthancapi import apisettings as orthanc_api
 from orthancapi.auth.acl import ServerAuthorization
 
-from ..auth.models.auth import PacsImagingServerGroupAuthorization
+from ..auth.models.auth import PacsImagingServerGroupAuthorization, PacsImagingServerUserAuthorization
 from ..auth.views.user import PacsImagingServerFrontendGroupFilterForm
 from ..models import PacsImagingServer
 
@@ -36,6 +39,8 @@ class DisplayAttrPermissionTests(TestCase):
 
 		self.staff = User.objects.create_user('staff', 'staff@example.org', is_staff=True)
 		self.inactive_staff = User.objects.create_user('staff-inactive', 'inactive@example.org', is_staff=True, is_active=False)
+		for user in (self.staff, self.inactive_staff):
+			PacsImagingServerUserAuthorization.objects.create(server=self.server, user=user)
 
 	def _perm(self, user, resource, method, orthanc_id=None, level=GROUP):
 		granted, _ = self.server.user_has_perm(user, resource, orthanc_id, method, level)
@@ -109,6 +114,7 @@ class DisplayAttrPermissionTests(TestCase):
 
 	def test_superuser_without_memberships_is_reported_as_a_manager(self):
 		admin = User.objects.create_superuser('da-admin', 'admin@example.org', 'pw')
+		PacsImagingServerUserAuthorization.objects.create(server=self.server, user=admin)
 		perms = self.server.server_perms(admin)
 
 		self.assertTrue(perms['display_attr'])
@@ -122,6 +128,17 @@ class DisplayAttrPermissionTests(TestCase):
 
 	def test_inactive_staff_are_denied(self):
 		self.assertFalse(self._perm(self.inactive_staff, self._collection(self.readers), 'GET', self.readers.pk))
+
+	def test_unattached_staff_and_superusers_are_denied(self):
+		staff = User.objects.create_user('staff-unattached', 'unattached@example.org', is_staff=True)
+		admin = User.objects.create_superuser('da-unattached-admin', 'unattached-admin@example.org', 'pw')
+
+		for user in (staff, admin):
+			for method in ('GET', 'POST'):
+				self.assertFalse(self._perm(user, self._collection(self.readers), method, self.readers.pk), (user.username, method))
+			perms = self.server.server_perms(user)
+			self.assertFalse(perms['display_attr'], user.username)
+			self.assertFalse(perms['display_attr_modify'], user.username)
 
 	# Reported permissions
 
@@ -239,9 +256,10 @@ class DisplayAttrPermissionTests(TestCase):
 
 
 class StaffNonMemberAccessTests(TestCase):
-	'''	An active staff user who belongs to none of a server's groups reaches the server for
-		display attribute curation: the profile and authorization endpoints answer, the aggregate
-		and the enabled collections are granted, and nothing else is.
+	'''	An active staff user attached to a server by a user policy, but in none of its groups,
+		reaches the server for display attribute curation: the profile and authorization endpoints
+		answer, the aggregate and the enabled collections are granted, and nothing else is. Staff
+		who are not attached get none of it.
 	'''
 	def setUp(self):
 		from secure.models import ApiAccessToken
@@ -256,6 +274,7 @@ class StaffNonMemberAccessTests(TestCase):
 
 		self.staff = User.objects.create_user('staff-nonmember', 'staff-nonmember@example.org', is_staff=True)
 		self.staff_token = ApiAccessToken.objects.create(user=self.staff)
+		self.staff_policy = PacsImagingServerUserAuthorization.objects.create(server=self.server, user=self.staff)
 
 		# The Orthanc plugin authenticates to these endpoints as a superuser (basic auth, token as password)
 		self.plugin = User.objects.create_user('plugin-account', 'plugin@example.org', is_superuser=True, is_staff=True)
@@ -280,16 +299,25 @@ class StaffNonMemberAccessTests(TestCase):
 
 	# Model
 
-	def test_staff_has_access_when_a_policy_enables_display_attributes(self):
+	def test_attached_staff_have_access(self):
 		self.assertTrue(self.server.user_has_access(self.staff))
 
-	def test_staff_has_no_access_without_an_enabled_policy(self):
-		self.readers_policy.display_attr = False
-		self.readers_policy.save()
+	def test_unattached_staff_have_no_access(self):
+		# An enabled display attribute policy no longer brings staff onto a server they are not attached to
+		self.staff_policy.delete()
 		self.assertFalse(self.server.user_has_access(self.staff))
 
 		other = PacsImagingServer.objects.create(name='staff-access-other')
 		self.assertFalse(other.user_has_access(self.staff))
+
+	def test_unattached_staff_get_neither_aggregate_nor_collection(self):
+		self.staff_policy.delete()
+		for resource, orthanc_id, level in (
+				(orthanc_api.ORTHANC_DISPLAY_ATTRS_AGGREGATE, None, orthanc_api.ORTHANC_SYSTEM),
+				(orthanc_api.ORTHANC_CACHE_TAGS, None, orthanc_api.ORTHANC_SYSTEM),
+				('/groups/%d/display-attributes' % self.readers.pk, self.readers.pk, GROUP)):
+			granted, _ = self.server.user_has_perm(self.staff, resource, orthanc_id, 'GET', level)
+			self.assertFalse(granted, resource)
 
 	def test_inactive_staff_has_no_access(self):
 		self.staff.is_active = False
@@ -386,11 +414,10 @@ class StaffNonMemberAccessTests(TestCase):
 		self.assertNotIn('all', body['permissions'])
 		self.assertNotIn('*', body['authorized-labels'])
 
-	def test_profiles_still_refuse_staff_without_an_enabled_policy(self):
+	def test_profiles_refuse_unattached_staff(self):
 		import json
 
-		self.readers_policy.display_attr = False
-		self.readers_policy.save()
+		self.staff_policy.delete()
 
 		response, body = self._introspect()
 		self.assertNotIn('user', body, response.content)
@@ -450,9 +477,8 @@ class StaffNonMemberAccessTests(TestCase):
 		names = sorted(g['name'] for g in json.loads(response.content)['results'])
 		self.assertEqual(names, [self.readers.name])
 
-	def test_group_search_refuses_staff_without_an_enabled_policy(self):
-		self.readers_policy.display_attr = False
-		self.readers_policy.save()
+	def test_group_search_refuses_unattached_staff(self):
+		self.staff_policy.delete()
 
 		response = self._search_groups(self.staff, display_attr='true')
 

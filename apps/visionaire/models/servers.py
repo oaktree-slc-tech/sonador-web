@@ -124,15 +124,20 @@ class PacsImagingServer(BaseServerModel):
 
 			return False
 
+		# Superusers and staff hold their extra permissions on the servers they are attached to, and only there
+		attached = (user.is_superuser or user.is_staff) and self.user_is_attached(user)
+		superuser_attached = user.is_superuser and attached
+
 		# Determine permissions based on group membership
 		for perm in SONADOR_PERMS:
 
 			# User is granted a permission if they are a superuser or a part of a group with the provided permission.
 			# TODO: Add resource modifiers so that the scope of a grant can be narrowed.
-			perms[perm] = any(get_perm(auth, perm) for auth in self.group_authorizations.filter(group__user=user))
+			perms[perm] = superuser_attached \
+				or any(get_perm(auth, perm) for auth in self.group_authorizations.filter(group__user=user))
 
-		# Superusers and staff curate the display attributes of every enabled group on the server
-		if user.is_superuser or self.staff_curates_display_attrs(user):
+		# Attached superusers and staff curate the display attributes of every enabled group on the server
+		if attached and (user.is_superuser or self.staff_curates_display_attrs(user)):
 			perms[SONADOR_PERM_DISPLAY_ATTR] = True
 			perms[SONADOR_PERM_DISPLAY_ATTR_MODIFY] = True
 
@@ -143,20 +148,16 @@ class PacsImagingServer(BaseServerModel):
 		return bool(getattr(user, 'is_staff', False) and getattr(user, 'is_active', False))
 
 	def staff_display_attr_policy(self, user):
-		'''	The group policy that puts the server in scope for staff curation of display attributes:
-			the enabled policy with the shortest grant duration, or None. Staff who belong to no
-			policy group still need the server for the profile, the aggregate, the tag catalogue and
-			the per-group collections of enabled policies; nothing else opens up for them. Grants
-			carry that policy's duration so a disabled policy takes effect within the same window
-			as a member's grant.
+		'''	The group policy that scopes staff curation of display attributes on the server: the
+			enabled policy with the shortest grant duration, or None. Staff attached to the server
+			curate the aggregate, the tag catalogue and the collections of every enabled group,
+			member or not; staff who are not attached get nothing here. Grants carry that policy's
+			duration so a disabled policy takes effect within the same window as a member's grant.
 		'''
-		if not self.staff_curates_display_attrs(user):
+		if not (self.staff_curates_display_attrs(user) and self.user_is_attached(user)):
 			return None
 
 		return self.group_authorizations.filter(display_attr=True).order_by('duration', 'pk').first()
-
-	def staff_display_attr_scope(self, user):
-		return self.staff_display_attr_policy(user) is not None
 
 	def user_has_access(self, user):
 		'''	Determine if the provided user has access to the server in any capacity
@@ -167,23 +168,32 @@ class PacsImagingServer(BaseServerModel):
 		if isinstance(user, str) and user == 'sonador':
 			return True
 
-		# Check if the user is a super-user or part of a group affiliated with the server		
-		access = user.is_superuser or (
-			len(self.user_authorizations.filter(user=user)) > 0 or len(self.group_authorizations.filter(group__user=user)) > 0)
+		# Superusers and staff are held to the same rule as everyone else: a user or group policy
+		# on the server must name them.
+		return user.is_active and self.user_is_attached(user)
 
-		return user.is_active and (access or self.staff_display_attr_scope(user))
+	def user_is_attached(self, user):
+		'''	Determine if a user policy or a group policy on the server names the user
+
+			@returns bool: True if the user is attached to the server, False otherwise
+		'''
+		return self.user_authorizations.filter(user=user).exists() \
+			or self.group_authorizations.filter(group__user=user).exists()
 
 	def user_has_perm(self, user, resource, orthanc_id, method, level, dicom_uid=None, action=None):
 		'''	Determine if the provided user has the needed permissions to perform the requested action.
 
 			@returns bool: True if the user has the permission, False otherwise
 		'''
-		# Administrative or superuser
-		if user.is_superuser:
+		# Superusers and staff hold their extra permissions only on the servers they are attached to
+		attached = (user.is_superuser or user.is_staff) and self.user_is_attached(user)
+
+		# Superusers hold every permission on the servers they are attached to
+		if user.is_superuser and attached:
 			return True, None
 
-		# Staff manage the display attributes of any group whose policy enables them, member or not
-		if level == orthanc_api.ORTHANC_RESOURCE_GROUP and self.staff_curates_display_attrs(user) \
+		# Attached staff manage the display attributes of any group whose policy enables them, member or not
+		if level == orthanc_api.ORTHANC_RESOURCE_GROUP and attached and self.staff_curates_display_attrs(user) \
 				and orthanc_api.ORTHANC_GROUP_DISPLAY_ATTRS_REGEX.match(resource or '') \
 				and method and method.lower() in (gapicodes.HTTP_GET.lower(), gapicodes.HTTP_POST.lower(),
 					gapicodes.HTTP_PUT.lower(), gapicodes.HTTP_DELETE.lower()):
@@ -191,7 +201,7 @@ class PacsImagingServer(BaseServerModel):
 			if _group_auth is not None:
 				return True, _group_auth.duration
 
-		# Staff read the aggregate of every enabled policy and the tag catalogue it is curated from, member or not
+		# Attached staff read the aggregate of every enabled policy and the tag catalogue it is curated from, member or not
 		if resource in (orthanc_api.ORTHANC_DISPLAY_ATTRS_AGGREGATE, orthanc_api.ORTHANC_CACHE_TAGS) and method \
 				and method.lower() == gapicodes.HTTP_GET.lower():
 			_scope_policy = self.staff_display_attr_policy(user)

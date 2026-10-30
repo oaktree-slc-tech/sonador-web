@@ -44,7 +44,9 @@ class UnifiedAuthSearchTests(TestCase):
 		self.research = self._group('oaktree.tech-research')
 		self.consult = self._group('oaktree-tech.consult')
 
+		# Superusers reach only the servers they are attached to
 		self.admin = User.objects.create_superuser('search-admin', 'admin@example.org', 'search-admin-pw')
+		self.admin.groups.add(self._group('administrators'))
 
 		# Matched through the username AND through one of two authorized groups
 		self.user = User.objects.create_user('research-user', 'research@example.org')

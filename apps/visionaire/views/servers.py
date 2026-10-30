@@ -43,18 +43,13 @@ class PacsImagingServerApiManagementView(OhifApiObjectMixin, SonadorApiObjectMan
 	modelform = PacsImagingServerForm
 
 	def getQueryset(self, *args, **kwargs):
-		'''	Retrieve the list of servers to which the user has access. For administrative
-			users, retrieve all imaging servers registered with Sonador. For non-admin users
-			only include servers to which they have been granted a user or group based authorization.
+		'''	Retrieve the list of servers to which the user has access: the active servers on which
+			a user or group policy names them. Superusers and staff are held to the same rule.
 		'''
 		# Base queryset
 		queryset = super(PacsImagingServerApiManagementView, self).getQueryset(*args, **kwargs)
 		if getattr(getattr(self, 'request', None), 'user', None):
 
-			# For administrative users, return all active servers
-			if self.request.user and (self.request.user.is_superuser or self.request.user.is_staff):
-				return queryset
-			
 			# Retrieve servers for which a specific user is authorized
 			return self.model.objects.filter(active=True).filter(
 				Q(user_authorizations__user=self.request.user) | Q(group_authorizations__group__user=self.request.user)).distinct()
