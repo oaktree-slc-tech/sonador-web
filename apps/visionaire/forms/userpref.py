@@ -63,25 +63,36 @@ class UserPrefSectionForm(GuruCoreDataForm):
 class GeneralPrefForm(UserPrefSectionForm):
 	'''	General preferences:
 		`{ language?: string, offlineArchiveTransfer?: bool, offlineRetryAttempts?: int,
-		   warnLockedModelsOnOpenAsSegmentation?: bool }`.
+		   warnLockedModelsOnOpenAsSegmentation?: bool, uploadAttempts?: int,
+		   studyArchiveLoading?: bool }`.
 
 		The key set is closed: an unrecognised key is a validation error.
 	'''
 	# Boolean keys, each validated the same way. `warnLockedModelsOnOpenAsSegmentation`: whether
 	# the viewer's Open as Segmentation says which locked models it leaves out (ohif-viewers!92).
-	BOOLEAN_KEYS = ('offlineArchiveTransfer', 'warnLockedModelsOnOpenAsSegmentation')
+	# `studyArchiveLoading`: whether the viewer opens a study by fetching each series as one
+	# archive into its local cache (imaging-development-env#103).
+	BOOLEAN_KEYS = ('offlineArchiveTransfer', 'warnLockedModelsOnOpenAsSegmentation', 'studyArchiveLoading')
 
-	# Per-image attempt budget for offline transfers (ohif-viewers#131 FR-12). Bounded here as
-	# well as in the viewer: the viewer clamps for the user's benefit, this rejects for the
-	# document's -- a stored value outside the range would be applied by no client and read as
-	# a setting by every one of them.
+	# Bounded integer keys: `key -> (min, max)`. Bounded here as well as in the viewer: the viewer
+	# clamps for the user's benefit, this rejects for the document's -- a stored value outside the
+	# range would be applied by no client and read as a setting by every one of them.
+	# `offlineRetryAttempts`: per-image attempt budget for offline transfers (ohif-viewers#131
+	# FR-12). `uploadAttempts`: per-file attempt budget of the Uploads page
+	# (imaging-development-env#103).
 	OFFLINE_RETRY_ATTEMPTS_MIN = 1
 	OFFLINE_RETRY_ATTEMPTS_MAX = 5
+	UPLOAD_ATTEMPTS_MIN = 1
+	UPLOAD_ATTEMPTS_MAX = 20
+	INTEGER_KEYS = {
+		'offlineRetryAttempts': (OFFLINE_RETRY_ATTEMPTS_MIN, OFFLINE_RETRY_ATTEMPTS_MAX),
+		'uploadAttempts': (UPLOAD_ATTEMPTS_MIN, UPLOAD_ATTEMPTS_MAX),
+	}
 
 	def clean_values(self):
 		values = super().clean_values()
 
-		unknown = set(values) - {'language', 'offlineRetryAttempts'} - set(self.BOOLEAN_KEYS)
+		unknown = set(values) - {'language'} - set(self.INTEGER_KEYS) - set(self.BOOLEAN_KEYS)
 		if unknown:
 			raise forms.ValidationError('Unknown keys: %s' % ', '.join(sorted(unknown)))
 
@@ -92,15 +103,16 @@ class GeneralPrefForm(UserPrefSectionForm):
 			if key in values and not isinstance(values[key], bool):
 				raise forms.ValidationError('`%s` must be a boolean.' % key)
 
-		if 'offlineRetryAttempts' in values:
-			attempts = values['offlineRetryAttempts']
+		for key, (lower, upper) in self.INTEGER_KEYS.items():
+			if key not in values:
+				continue
+			attempts = values[key]
 
 			# `bool` is a subclass of `int`, and `True` is not an attempt count.
 			if isinstance(attempts, bool) or not isinstance(attempts, int):
-				raise forms.ValidationError('`offlineRetryAttempts` must be an integer.')
-			if not self.OFFLINE_RETRY_ATTEMPTS_MIN <= attempts <= self.OFFLINE_RETRY_ATTEMPTS_MAX:
-				raise forms.ValidationError('`offlineRetryAttempts` must be between %d and %d.'
-					% (self.OFFLINE_RETRY_ATTEMPTS_MIN, self.OFFLINE_RETRY_ATTEMPTS_MAX))
+				raise forms.ValidationError('`%s` must be an integer.' % key)
+			if not lower <= attempts <= upper:
+				raise forms.ValidationError('`%s` must be between %d and %d.' % (key, lower, upper))
 
 		return values
 

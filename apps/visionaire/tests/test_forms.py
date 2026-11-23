@@ -99,7 +99,8 @@ class GeneralPrefFormTests(SimpleTestCase):
 		# The viewer POSTs the section wholesale, so every key has to validate together.
 		values = {
 			'language': 'en-US', 'offlineArchiveTransfer': True, 'offlineRetryAttempts': 4,
-			'warnLockedModelsOnOpenAsSegmentation': False,
+			'warnLockedModelsOnOpenAsSegmentation': False, 'uploadAttempts': 10,
+			'studyArchiveLoading': True,
 		}
 		form = GeneralPrefForm(section_data(values))
 		self.assertTrue(form.is_valid(), form.errors.as_json())
@@ -110,6 +111,31 @@ class GeneralPrefFormTests(SimpleTestCase):
 		# its own would store `True` as an attempt count.
 		for value in (0, 6, -1, '3', 3.5, True, None, [], {}):
 			form = GeneralPrefForm(section_data({'offlineRetryAttempts': value}))
+			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
+			self.assertIn('values', form.errors)
+
+
+	def test_accepts_upload_attempts_in_range(self):
+		for value in (1, 10, 20):
+			form = GeneralPrefForm(section_data({'uploadAttempts': value}))
+			self.assertTrue(form.is_valid(), form.errors.as_json())
+			self.assertEqual(form.cleaned_data['values'], {'uploadAttempts': value})
+
+	def test_rejects_out_of_range_or_non_integer_upload_attempts(self):
+		for value in (0, 21, -1, '10', 10.5, True, None, [], {}):
+			form = GeneralPrefForm(section_data({'uploadAttempts': value}))
+			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
+			self.assertIn('values', form.errors)
+
+	def test_accepts_study_archive_loading_boolean(self):
+		for value in (True, False):
+			form = GeneralPrefForm(section_data({'studyArchiveLoading': value}))
+			self.assertTrue(form.is_valid(), form.errors.as_json())
+			self.assertEqual(form.cleaned_data['values'], {'studyArchiveLoading': value})
+
+	def test_rejects_non_boolean_study_archive_loading(self):
+		for value in ('true', 1, 0, None, [], {}):
+			form = GeneralPrefForm(section_data({'studyArchiveLoading': value}))
 			self.assertFalse(form.is_valid(), 'accepted %r' % (value,))
 			self.assertIn('values', form.errors)
 
