@@ -37,6 +37,11 @@ acorn-content>=0.2a1
 acorn-microservices>=0.1.1
 acorn-sassycss>=0.1.1
 acorn-wgtauth>=0.3.2
+# nameparser is an unpinned dependency of acorn-wgtauth, whose social models import
+# `from nameparser import HumanName`. nameparser 3.0 (2026-11-08) dropped HumanName, so
+# fresh builds fail as soon as Django loads the app registry. Cap below 3 until
+# acorn-wgtauth moves to the 3.x API.
+nameparser<3
 acorn-largefiles>=0.1.1
 
 
