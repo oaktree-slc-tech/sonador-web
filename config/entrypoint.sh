@@ -9,7 +9,8 @@ python3 $PROJECT_ROOT/sonador/manage.py imaging-env-init || exit 1
 
 # Refuse to serve traffic when the deployment does not satisfy the registered system checks.
 # Session storage in particular is a configuration guarantee the authentication workflows
-# depend on and cannot verify per request.
+# depend on and cannot verify per request. Identity provider login protections are reported as
+# warnings unless AUTH_ENFORCE_LOGIN_PROTECTIONS is on.
 python3 $PROJECT_ROOT/sonador/manage.py check --database default || exit 1
 python3 $PROJECT_ROOT/sonador/manage.py verify-login-protections || exit 1
 

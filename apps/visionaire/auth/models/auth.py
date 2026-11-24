@@ -14,13 +14,13 @@ from microservices.errors import MicroserviceResourceNotFound
 
 import guru.apisettings as gapicodes
 from guru.models import GuruTokenModel
-from guru.helpers import site_fullurl
 from guru.helpers.compatability import guru_is_safe_url
 from guru.helpers.utils.object import pick, omit
 
 from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_TYPE, \
 	OAUTH_CODE_RESPONSE_TYPE
 
+from wgtauth.services.redirects import is_registered_redirect_uri
 from wgtauth.social.models import SocialAuthorizationBaseServer, OPENID_RESPONSE_TYPE_CODE
 
 from orthancapi import apisettings as orthanc_api
@@ -96,28 +96,20 @@ class SocialAuthorizationServer(SocialAuthorizationBaseServer):
 		return super(SocialAuthorizationServer, self).save(*args, **kwargs)
 
 	def is_safe_url(self, site_resource, allowed_hosts=None):
-		'''	Determine if the provided callback URL is safe.
-	
-			1. Is it part of the Sonador website
-				a. Absolute URLs including full domain name for the site
-				b. Relative URLs that only include the resource path
-			2. Is the redirect URL explicitly included in the url_callback list
-				for the authentication server.
+		'''	Determine whether the destination recorded for a login may be redirected to after it
+			completes. The destination is judged as given, never rewritten:
+
+			1.	a relative URL, or an absolute URL on a Sonador site's configured address
+				(`visionaire.sites.same_site_hosts`) or one of `allowed_hosts`
+			2.	an absolute URL which exactly matches one of the callback URLs registered
+				for the authentication server
 		'''
-		# Check full resource against Sonador configuration
-		usafe = super(SocialAuthorizationServer, self).is_safe_url(
-			site_resource, allowed_hosts=allowed_hosts)
+		from ...sites import same_site_hosts
 
-		# Complete URLs may cause the is_safe_url from wgtauth to fail.
-		# If the fully qualified domain for the site is causing the request to fail,
-		# remove the scheme and hostname and check the resource a second time.
-		if not usafe:
-			usafe = super(SocialAuthorizationServer, self).is_safe_url(
-				(site_resource or '').replace(site_fullurl(), ''))
+		if guru_is_safe_url(site_resource, allowed_hosts=same_site_hosts() | set(allowed_hosts or ())):
+			return True
 
-		# If the full URL check and resource check fail, check against the white list
-		# for the authentication server.
-		return usafe or ((site_resource or '') in (self.callback_url or ''))
+		return is_registered_redirect_uri(site_resource, self.callback_url, reserved_params=())
 
 	def __str__(self):
 		return self.description

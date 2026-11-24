@@ -68,7 +68,16 @@ SONADOR_VERSION = 'dev'
 
 # Core site configuration settings
 siteconfig_site = siteconfig.get('Site-Config', {})
-SITE_ID = int(siteconfig_site.get('SITE_ID', 0))
+
+# Leaving SITE_ID out of the site config selects the site from the request host
+# (`visionaire.sites`), so each site domain keeps its own branding and URLs. It is left undefined
+# rather than 0: Django creates its default site with `pk=SITE_ID` on a fresh database, and 0 is
+# not a valid sequence value. DEFAULT_SITE_ID is the site used for hosts that match none, and
+# where there is no request; the first site when it is not set.
+if siteconfig_site.get('SITE_ID'):
+    SITE_ID = int(siteconfig_site.get('SITE_ID'))
+DEFAULT_SITE_ID = int(siteconfig_site.get('DEFAULT_SITE_ID') or siteconfig_site.get('SITE_ID') or 0) or None
+
 SITE_NAME = siteconfig_site.get('SITE_NAME')
 SITE_URL = SITE_NAME
 SECRET_KEY = siteconfig_site.get('SECRET_KEY')
@@ -221,6 +230,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'visionaire.sites.SonadorSiteMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -318,6 +328,12 @@ AUTH_CREDENTIALS_CACHE = config_str2bool(siteconfig_auth.get('AUTH_CREDENTIALS_C
 AUTH_CREDENTIALS_CACHE_MAX_AGE = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_MAX_AGE', 180))
 AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_KEY_ITERATIONS', 16))
 AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH = int(siteconfig_auth.get('AUTH_CREDENTIALS_CACHE_SESSION_KEY_LENGTH', 42))
+
+# Identity provider login protections (state, PKCE, nonce, ID token, issuer, JWKS). A relaxed
+# protection is reported as a warning (`visionaire.W004`); when enforced it is an error
+# (`visionaire.E004`) which stops `migrate`, `check --database default` and the container
+# entrypoint. Plain `check` does not read the provider record.
+AUTH_ENFORCE_LOGIN_PROTECTIONS = config_str2bool(siteconfig_auth.get('AUTH_ENFORCE_LOGIN_PROTECTIONS', False))
 
 # Identity providers with state verification off send the post-login destination as the state.
 # When on, it is sent encoded so a provider which returns the state decoded cannot split it.

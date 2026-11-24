@@ -12,8 +12,6 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.base import View, TemplateView
 
-from django.contrib.sites.shortcuts import get_current_site
-
 from django.contrib import auth
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.views import redirect_to_login
@@ -23,10 +21,10 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
 from guru.apisettings import HTTP_AUTHORIZATION_HEADER
-from guru.helpers import gsetting, create_token, site_fullurl
+from guru.helpers import gsetting, create_token
 from guru.helpers.compatability import guru_permission_denied, guru_page_not_found, guru_bad_request,\
 	guru_is_safe_url
-from guru.helpers import operation_results, site_fullurl
+from guru.helpers import operation_results
 from guru.helpers.user import user_displayname
 from guru.helpers.utils.object import pick, omit
 from guru.helpers.utils.urls import merge_url_querystring
@@ -52,7 +50,7 @@ from ...apisettings import SONADOR_OHIF_CLIENTID, SONAODR_OHIF_REDIRECT_QUERY_PA
 	OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM, OPENID_AUTH_TOKEN_SESSION_PARAM, \
 	OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM, OPENID_AUTH_TOKEN_SCOPE_SESSION_PARAM
 
-from ...models.branding import SonadorSite
+from ...sites import current_site, request_site, same_site_hosts, site_url
 
 from ..models import SocialAuthorizationServer, SocialUserAccount
 from ..helpers import openid_get_django_user
@@ -61,30 +59,12 @@ from ..forms.oidc import SonadorOpenIDConnectTokenAuthorizationForm
 from ..forms.credential_providers.sonador import SonadorCredentialProvider
 from ..validators import TOKEN_GRANT_RESPONSE_PARAMS
 
-from .base import get_default_authserver, OpenIDAuthServerMixin
+from .base import get_default_authserver, OpenIDAuthServerMixin, SiteRedirectUriMixin
 
 logger = logging.getLogger(__name__)
 
 # Parameters a `prompt=none` error response may generate, in addition to those of a token grant
 LOGIN_REQUIRED_RESPONSE_PARAMS = TOKEN_GRANT_RESPONSE_PARAMS + ('error',)
-
-
-def same_site_hosts():
-	'''	Network locations which are this site.
-
-		The canonical site location is added explicitly so a fully qualified site URL is
-		recognised as its own host rather than by resembling one.
-
-		@returns set of str: acceptable network locations
-	'''
-	_hosts = set(gsetting('ALLOWED_HOSTS') or ())
-	_hosts.discard('*')
-
-	_site = urlparse.urlsplit(site_fullurl() or '')
-	if _site.netloc:
-		_hosts.add(_site.netloc)
-
-	return _hosts
 
 
 def is_same_site_destination(destination):
@@ -134,7 +114,7 @@ def is_authorized_client_destination(destination, authserver, reserved_params=()
 		destination, authserver.callback_url, reserved_params=reserved_params)
 
 
-class OpenIDViewPropertiesMixin(OpenIDAuthServerMixin):
+class OpenIDViewPropertiesMixin(SiteRedirectUriMixin, OpenIDAuthServerMixin):
 	'''	View mixin which implements the interface required by OpenID authentication views
 	'''
 	def application_redirect_url(self, request, vargs, vkwargs):
@@ -207,6 +187,12 @@ class OpenIDLoginRedirectView(OpenIDViewPropertiesMixin, OpenIDLoginRedirectAbst
 				# before forwarding the authentication parameters.
 				logger.debug('Forwarding external authorization code request to the token endpoint '
 					'for authserver=%s' % authserver.pk)
+
+		# The callback checks the destination only after signing the user in, so an unsafe one
+		# is refused here, before the identity provider round trip
+		if redirect_url and not authserver.is_safe_url(redirect_url):
+			raise PermissionDenied('Login destination is not part of a Sonador site or registered '
+				'with authserver=%s.' % authserver.pk)
 
 		return redirect_url
 
@@ -323,9 +309,10 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 
 		# OpenID base configuration
 		openid_config.update({
-			'token_endpoint': site_fullurl(
-				reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default')),
-			'end_session_endpoint': site_fullurl(reverse('logout')),
+			'token_endpoint': site_url(
+				reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default'),
+				request=self.request),
+			'end_session_endpoint': site_url(reverse('logout'), request=self.request),
 		})
 
 		# User already authenticated to the application, provide token endpoint
@@ -333,8 +320,9 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 		# (Used by the instance of OHIF integated into Sonador.)
 		if self.request.user.is_authenticated:
 			openid_config.update({
-				'authorization_endpoint': site_fullurl(
-					reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default')),
+				'authorization_endpoint': site_url(
+					reverse('auth:openid-auth-token', args=(authserver_id,)) if authserver_id  else reverse('auth:openid-auth-token-default'),
+					request=self.request),
 				'response_types_supported': [OAUTH_TOKEN_RESPONSE_TYPE,],
 			})
 
@@ -343,7 +331,7 @@ class oAuth2EndpointsView(OpenIDAuthServerMixin, JSONBaseView):
 		# compiled as progressive web applications.
 		else:
 			openid_config.update({
-				'authorization_endpoint': site_fullurl(authserver.url_login),
+				'authorization_endpoint': site_url(authserver.url_login, request=self.request),
 				'response_types_supported': [
 					OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE, OAUTH_CODE_RESPONSE_TYPE,
 				],
@@ -642,10 +630,9 @@ class LogoutSuccessView(TemplateView):
 		context = super(LogoutSuccessView, self).get_context_data(**kwargs)
 
 		# Site branding, so the notice matches the viewer the user just left
-		site = get_current_site(self.request)
-		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		ssite = current_site(self.request)
 
-		context['site'] = ssite if ssite else site
+		context['site'] = ssite or request_site(self.request)
 		context['logo'] = ssite.logo.url if (ssite and ssite.logo) else static('images/sonador-logo.ng.svg')
 
 		return context
@@ -662,8 +649,11 @@ class LoginView(OpenIDAuthServerMixin, auth_views.LoginView):
 
 		# Retrieve authserver instance
 		authserver_id, authserver = self.get_auth_server_or_default(self.request, self.args, self.kwargs)
+		# The destination is carried to the OpenID login so the user returns to it
 		if authserver:
-			return redirect(authserver.url_login)
+			_next = self.request.GET.get(self.redirect_field_name)
+			return redirect(merge_url_querystring(authserver.url_login,
+				{ self.redirect_field_name: _next }, query_lowercase=False) if _next else authserver.url_login)
 
 		return redirect(reverse('admin:login')+'?'+self.request.GET.urlencode())
 

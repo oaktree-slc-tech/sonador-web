@@ -10,14 +10,14 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.contrib.auth.signals import user_logged_out
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
-from guru.helpers import site_fullurl
 
 from ..apisettings import OPENID_AUTH_TOKEN_SESSION_PROVIDER_PARAM, OPENID_AUTH_TOKEN_SESSION_PARAM, \
 	OPENID_AUTH_TOKEN_TYPE_SESSION_PARAM
 from ..auth.models import SocialAuthorizationServer
+from ..sites import site_url
 from ..auth.signals.events import revoke_openid_access_token
 from ..models.branding import SonadorSite
 from . import fixtures
@@ -28,6 +28,13 @@ LOGOUT_SUCCESS_URL = '/accounts/logout/success'
 LOGOUT_REDIRECT_URL = '/logout-redirect.html'
 
 SESSION_USER_KEY = '_auth_user_id'
+
+
+
+def logout_url():
+	'''	Logout endpoint as published to a test client request, on the host it arrives on
+	'''
+	return site_url(reverse('logout'), request=RequestFactory().get('/'))
 
 
 class EndSessionTestCase(TestCase):
@@ -355,7 +362,7 @@ class OpenIDConfigurationTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(
 			json.loads(response.content)['end_session_endpoint'],
-			site_fullurl(reverse('logout')))
+			logout_url())
 
 
 @override_settings(AUTH_ENABLED=True)
@@ -384,7 +391,7 @@ class ViewerConfigurationTests(TestCase):
 	def test_end_session_uri_is_published_for_the_logout_fallback(self):
 		'''	Used by the header when `signoutRedirect()` cannot start the OpenID logout.
 		'''
-		self.assertEqual(self.oidc_config()['end_session_uri'], site_fullurl(reverse('logout')))
+		self.assertEqual(self.oidc_config()['end_session_uri'], logout_url())
 
 
 class FarewellMessageTests(TestCase):
