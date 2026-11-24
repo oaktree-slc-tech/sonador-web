@@ -2,7 +2,7 @@
 	authorization server's identity provider: through the function, through the check
 	framework, and through the management command the container entrypoint runs.
 '''
-import os, subprocess, sys, tempfile, textwrap
+import io, os, subprocess, sys, tempfile, textwrap
 
 from unittest import mock
 
@@ -12,7 +12,7 @@ from django.core.management.base import CommandError, SystemCheckError
 from django.db import DatabaseError
 from django.test import TestCase, SimpleTestCase, override_settings
 
-from ..checks import check_default_authserver_login_protections, login_protection_errors
+from ..checks import check_default_authserver_login_protections, login_protection_messages
 from . import fixtures
 
 
@@ -20,6 +20,7 @@ ENTRYPOINT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.dirname(os.path.abspath(__file__))))), 'config', 'entrypoint.sh')
 
 
+@override_settings(AUTH_ENFORCE_LOGIN_PROTECTIONS=True)
 class LoginProtectionCheckTests(TestCase):
 
 	def protected_authserver(self, **relaxed):
@@ -73,6 +74,7 @@ class LoginProtectionCheckTests(TestCase):
 		self.assertIn('visionaire.E004', ids)
 
 
+@override_settings(AUTH_ENFORCE_LOGIN_PROTECTIONS=True)
 class CheckCommandTests(TestCase):
 	'''	The gate the entrypoint relies on: `manage.py check --database default` exits
 		nonzero for a relaxed default provider and passes for a protected one.
@@ -88,6 +90,13 @@ class CheckCommandTests(TestCase):
 		LoginProtectionCheckTests.protected_authserver(self)
 		call_command('check', databases=['default'], verbosity=0)
 
+	def test_a_relaxed_provider_stops_migrate(self):
+		LoginProtectionCheckTests.protected_authserver(self, oidc_issuer='')
+
+		with self.assertRaises(SystemCheckError) as raised:
+			call_command('migrate', verbosity=0, interactive=False, skip_checks=False)
+		self.assertIn('visionaire.E004', str(raised.exception))
+
 	def test_the_entrypoint_runs_the_database_checks(self):
 		with open(ENTRYPOINT) as f:
 			script = f.read()
@@ -96,6 +105,7 @@ class CheckCommandTests(TestCase):
 		self.assertIn('manage.py verify-login-protections || exit 1', script)
 
 
+@override_settings(AUTH_ENFORCE_LOGIN_PROTECTIONS=True)
 class VerifyLoginProtectionsCommandTests(TestCase):
 	'''	The strict post-initialization read: a relaxed provider and an unreadable provider
 		table both fail the command, so the entrypoint stops in either case.
@@ -146,7 +156,7 @@ class VerifyLoginProtectionsCommandTests(TestCase):
 		with mock.patch('visionaire.auth.views.base.get_default_authserver', return_value=authserver):
 			with self.assertRaises(CommandError):
 				call_command('verify-login-protections', verbosity=0)
-			self.assertEqual(login_protection_errors(strict=False), [])
+			self.assertEqual(login_protection_messages(strict=False), [])
 
 	def test_the_system_check_tolerates_what_the_command_does_not(self):
 		'''	`migrate` runs the system check before applying anything, so an unreadable table
@@ -154,9 +164,52 @@ class VerifyLoginProtectionsCommandTests(TestCase):
 		'''
 		with mock.patch('visionaire.auth.views.base.get_default_authserver',
 				side_effect=DatabaseError('relation does not exist')):
-			self.assertEqual(login_protection_errors(strict=False), [])
+			self.assertEqual(login_protection_messages(strict=False), [])
 			with self.assertRaises(DatabaseError):
-				login_protection_errors(strict=True)
+				login_protection_messages(strict=True)
+
+
+@override_settings(AUTH_ENFORCE_LOGIN_PROTECTIONS=False)
+class AdvisoryLoginProtectionTests(TestCase):
+	'''	By default a relaxed protection is a warning: `migrate`, `check` and the entrypoint's
+		verification carry on, so a deployment whose provider is not configured for every
+		protection still migrates and starts.
+	'''
+	def relaxed_authserver(self):
+		return LoginProtectionCheckTests.protected_authserver(self, oidc_issuer='', endpoint_jwks='')
+
+	def test_a_relaxed_protection_is_a_warning(self):
+		self.relaxed_authserver()
+
+		messages = check_default_authserver_login_protections(None, databases=['default'])
+		self.assertEqual([message.id for message in messages], ['visionaire.W004'])
+		self.assertFalse(messages[0].is_serious())
+
+	def test_the_check_command_passes(self):
+		self.relaxed_authserver()
+		call_command('check', databases=['default'], verbosity=0)
+
+	def test_migrate_is_not_stopped(self):
+		self.relaxed_authserver()
+		call_command('migrate', verbosity=0, interactive=False, skip_checks=False)
+
+	def test_the_verification_command_warns_and_passes(self):
+		self.relaxed_authserver()
+		stderr = io.StringIO()
+
+		call_command('verify-login-protections', verbosity=0, stderr=stderr)
+		self.assertIn('visionaire.W004', stderr.getvalue())
+		self.assertIn('no issuer is configured', stderr.getvalue())
+
+	def test_an_unreadable_provider_table_still_fails(self):
+		'''	An unreadable provider record is an unknown configuration, not a relaxed one, so the
+			post-migration verification fails whatever the enforcement setting.
+		'''
+		with mock.patch('visionaire.auth.views.base.get_default_authserver',
+				side_effect=DatabaseError('relation does not exist')):
+			with self.assertRaises(CommandError) as raised:
+				call_command('verify-login-protections', verbosity=0)
+		self.assertIn('Unable to read the default authorization server', str(raised.exception))
 
 
 class EntrypointTests(SimpleTestCase):

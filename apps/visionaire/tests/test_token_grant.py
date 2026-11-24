@@ -13,8 +13,9 @@ from unittest import mock
 from urllib.parse import urlsplit, parse_qs
 
 from django.contrib.auth.models import User
+from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from wgtauth.social.oidc import SESSION_LOGIN_TRANSACTION_KEY
@@ -325,6 +326,7 @@ class LoginHandoffAuthorizationTests(TestCase):
 			create_url.assert_not_called()
 
 
+@override_settings(SITE_CONNECT_PORT='')
 class SiteClassificationTests(TestCase):
 	'''	Whether a destination is this site is decided structurally, by comparing parsed
 		network locations rather than by editing the destination.
@@ -333,6 +335,7 @@ class SiteClassificationTests(TestCase):
 		self.user = User.objects.create_user('imre.szabo', password='x')
 		self.client.force_login(self.user)
 		self.authserver = fixtures.create_authserver(callback_url='')
+		Site.objects.create(domain=urlsplit(self.SITE).netloc, name='Site')
 
 	def grant(self, redirect_uri):
 		return self.client.get(
@@ -349,15 +352,13 @@ class SiteClassificationTests(TestCase):
 	def test_a_host_extending_the_site_host_is_refused(self):
 		'''	Site membership is a property of the parsed host, not of how the value begins.
 		'''
-		with mock.patch('visionaire.auth.views.oauth.site_fullurl', return_value=self.SITE):
-			response = self.grant('%s.other.example/callback' % self.SITE)
+		response = self.grant('%s.other.example/callback' % self.SITE)
 
 		self.assertEqual(response.status_code, 403)
 		self.assertNotIn('Location', response)
 
 	def test_the_canonical_site_url_is_accepted(self):
-		with mock.patch('visionaire.auth.views.oauth.site_fullurl', return_value=self.SITE):
-			response = self.grant('%s/callback' % self.SITE)
+		response = self.grant('%s/callback' % self.SITE)
 
 		self.assertEqual(response.status_code, 302)
 		self.assertTrue(parse_qs(urlsplit(response['Location']).query).get('access_token'))

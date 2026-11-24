@@ -2,11 +2,14 @@
 '''
 import logging
 
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_save, pre_delete
+
+from django.contrib.sites.models import Site
 
 from wgtauth.social.models import SocialAppProvider
 
 from .auth.models import SocialAuthorizationServer
+from .models.branding import SonadorSite
 
 logger = logging.getLogger(__name__)
 
@@ -43,5 +46,19 @@ def oauth_provider_pre_save(sender, instance, *args, **kwargs):
 
 
 
+def clear_site_lookups(sender, instance, *args, **kwargs):
+	'''	Drop every cached sites framework lookup. Django caches by request host, with its port, so
+		removing only the edited site's id and domain would leave those entries stale. Sonador's
+		own resolution (`visionaire.sites`) reads the database on each request and does not use
+		this cache.
+	'''
+	Site.objects.clear_cache()
+
+
+
 # Connect signals for processing
 pre_save.connect(oauth_provider_pre_save, sender=SocialAppProvider)
+
+# Saving or deleting the subclass does not signal `Site`, whose own receivers clear the cache
+pre_save.connect(clear_site_lookups, sender=SonadorSite)
+pre_delete.connect(clear_site_lookups, sender=SonadorSite)

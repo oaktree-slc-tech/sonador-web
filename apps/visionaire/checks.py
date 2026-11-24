@@ -7,7 +7,7 @@
 	copy. That is a property of the configured storage rather than of the code, so it is
 	asserted at startup instead of assumed.
 '''
-from django.core.checks import Error, register, Tags
+from django.core.checks import Error, Warning, register, Tags
 
 
 # The only session backend which reads session data from the database. `cached_db` writes
@@ -94,16 +94,23 @@ LOGIN_PROTECTION_FIELDS = (
 )
 
 
-def login_protection_errors(strict=False):
-	'''	Errors for a default authorization server whose identity provider relaxes a login
-		round trip protection.
+def enforce_login_protections():
+	'''	Whether a relaxed login protection stops the deployment (`AUTH_ENFORCE_LOGIN_PROTECTIONS`)
+	'''
+	from django.conf import settings
+	return bool(getattr(settings, 'AUTH_ENFORCE_LOGIN_PROTECTIONS', False))
+
+
+def login_protection_messages(strict=False):
+	'''	Check messages for a default authorization server whose identity provider relaxes a
+		login round trip protection: a warning, or an error when the protections are enforced.
 
 		@input strict (bool): raise a database error rather than returning nothing. The
 			system check runs before migrations too (`migrate` checks first), when the
 			provider table may lack the columns read here, so it tolerates the read
 			failing; the post-initialization command does not.
 
-		@returns list of Error
+		@returns list of Warning or Error
 	'''
 	from django.db import DatabaseError
 
@@ -128,24 +135,27 @@ def login_protection_errors(strict=False):
 	if not relaxed:
 		return []
 
-	return [Error(
+	message, check_id = (Error, 'visionaire.E004') if enforce_login_protections() \
+		else (Warning, 'visionaire.W004')
+
+	return [message(
 		'Identity provider "%s" behind the default authorization server "%s" relaxes login '
 		'protections: %s.' % (provider.name, authserver.description, '; '.join(relaxed)),
-		hint='Enable the protection on the identity provider record. The Acorn provider supports '
-			'all of them: request the openid scope in the authorization URL parameters, set the '
-			'issuer to the Acorn OpenID issuer (its /o/.well-known/openid-configuration names it), '
-			'and name /o/.well-known/jwks.json as the JWKS endpoint. A provider which cannot '
-			'support one is accommodated by adding "visionaire.E004" to SILENCED_SYSTEM_CHECKS.',
-		id='visionaire.E004')]
+		hint='Enable the protection on the identity provider record: request the openid scope in '
+			'the authorization URL parameters, and set the issuer and JWKS endpoint the provider '
+			'publishes in its /.well-known/openid-configuration document. Adding "%s" to '
+			'SILENCED_SYSTEM_CHECKS silences this check for every protection, not only the '
+			'relaxed one.' % check_id,
+		id=check_id)]
 
 
 @register(Tags.security, Tags.database)
 def check_default_authserver_login_protections(app_configs, databases=None, **kwargs):
 	'''	The platform login runs through the default authorization server, so its provider
-		must keep every protection of the identity provider round trip on. The Acorn
-		provider supports all of them, so a relaxed one stops the deployment rather than
-		serving a login without it; a deployment which has to relax one for another
-		provider silences `visionaire.E004` deliberately in its settings.
+		should keep every protection of the identity provider round trip on. A relaxed one is
+		a warning, so deployments whose provider record predates the protections still
+		migrate and start; `AUTH_ENFORCE_LOGIN_PROTECTIONS` makes it an error which stops
+		`migrate`, `check --database default` and the container entrypoint instead.
 
 		Reads the provider record, so it runs only when the check framework names the
 		databases it may use: `migrate`, and `check --database default`. `migrate` runs it
@@ -156,4 +166,4 @@ def check_default_authserver_login_protections(app_configs, databases=None, **kw
 	if not databases:
 		return []
 
-	return login_protection_errors(strict=False)
+	return login_protection_messages(strict=False)

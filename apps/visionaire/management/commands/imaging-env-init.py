@@ -183,9 +183,10 @@ class Command(GuruBaseManagementCommand):
                 raise CommandError(f'Unable to initialize imaging environment, an error occurred: {err}')
 
         # Update Sonador site hostname and description from CLI arguments
-        if gsetting('SITE_ID') and options.get('sonador_hostname'):
+        csite_id = gsetting('SITE_ID') or gsetting('DEFAULT_SITE_ID')
+        if csite_id and options.get('sonador_hostname'):
             try:
-                csite = Site.objects.get(pk=int(gsetting('SITE_ID')))
+                csite = Site.objects.get(pk=int(csite_id))
                 csite.domain = options.get('sonador_hostname')
                 csite.name = options.get('sonador_description')
                 csite.save()
@@ -195,7 +196,7 @@ class Command(GuruBaseManagementCommand):
 
             except Exception as err:
                 raise CommandError('Unable to configure Sonador site hostname and description.\nID=%s hostname=%s description="%s"'
-                    % (gsetting('SITE_ID'), options.get('sonador_hostname'), options.get('sonador_description')))
+                    % (csite_id, options.get('sonador_hostname'), options.get('sonador_description')))
 
         # Check on existing OHIF viewer on the directory and if doesn't collectstatic
         if options.get('collectstatic'):
