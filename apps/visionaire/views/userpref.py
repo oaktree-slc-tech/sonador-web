@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.contrib.sites.shortcuts import get_current_site
 
 from guru.views import GuruApiDetailsMixin, GuruApiCreateView
 from guru.helpers import operation_results
@@ -7,7 +6,7 @@ from guru.helpers import operation_results
 from core.views import JSONFormApiView
 
 from ..models.userpref import UserPref, CURRENT_PREF_VERSION
-from ..models.branding import SonadorSite
+from ..sites import current_site
 from ..apisettings.display_attrs import site_display_attributes
 from ..forms.userpref import UserPrefForm
 
@@ -52,7 +51,7 @@ class UserPrefApiManagementView(GuruApiDetailsMixin, GuruApiCreateView):
 			not a model field, so a whole-document POST cannot write it.
 		'''
 		data = super().getModelJsonData(instance, request, vargs=vargs, vkwargs=vkwargs)
-		ssite = SonadorSite.objects.filter(pk=get_current_site(request).pk).first()
+		ssite = current_site(request)
 		data[SITE_FIELD] = { 'displayAttributes': site_display_attributes(ssite) }
 		return data
 

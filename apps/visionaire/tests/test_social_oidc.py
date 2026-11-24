@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from django.contrib.auth.models import User
 from django.shortcuts import resolve_url
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from guru.helpers import gsetting
@@ -33,6 +33,7 @@ from wgtauth.transactions import TRANSACTION_MAX_AGE
 
 from ..auth.models import SocialAuthorizationServer, SocialUserAccount, DataService
 from ..auth.views.oauth import OpenIDLoginCallbackView
+from ..sites import site_url
 from . import fixtures
 from .test_dataservice_redirects import REGISTERED
 
@@ -167,7 +168,8 @@ class LoginRedirectTests(SocialLoginTestCase):
 
 		record = self.pending()[sent['state']]
 		self.assertEqual(record['destination'], '/studylist')
-		self.assertEqual(record['redirect_uri'], 'http://testserver%s' % self.callback_url())
+		self.assertEqual(record['redirect_uri'],
+			site_url(self.callback_url(), request=RequestFactory().get(self.login_url())))
 
 	def test_the_provider_request_carries_nonce_and_pkce(self):
 		sent = self.initiate()

@@ -1,4 +1,5 @@
 from ..models import SocialAuthorizationServer
+from ...sites import site_url
 
 
 def get_default_authserver(authserver_model=SocialAuthorizationServer):
@@ -53,3 +54,12 @@ class OpenIDAuthServerMixin(object):
 			authserver_id = None
 
 		return authserver_id, authserver
+
+
+class SiteRedirectUriMixin(object):
+	'''	Build the redirect URI registered with the provider on the address of the request's site.
+		The inherited construction resolves the site without the request, which fails when
+		`SITE_ID` is not configured and the site URL matching settings are on.
+	'''
+	def get_redirect_url(self, request, vargs, vkwargs):
+		return site_url(self.application_redirect_url(request, vargs, vkwargs), request=request)

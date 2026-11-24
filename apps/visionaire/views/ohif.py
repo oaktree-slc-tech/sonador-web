@@ -4,9 +4,7 @@ from django.views.generic.base import TemplateView
 from django.http import Http404
 from django.templatetags.static import static
 
-from django.contrib.sites.shortcuts import get_current_site
-
-from guru.helpers import gsetting, site_fullurl
+from guru.helpers import gsetting
 from guru.errors import ConfigurationError
 
 from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE
@@ -14,7 +12,7 @@ from wgtauth.apisettings import OAUTH_TOKEN_RESPONSE_TYPE, OAUTH_AUTHORIZATION_C
 from ..auth.models import SocialAuthorizationServer, SocialUserAccount
 from ..auth.views.base import get_default_authserver, OpenIDAuthServerMixin
 from ..models import PacsImagingServer
-from ..models.branding import SonadorSite
+from ..sites import current_site, request_site, site_url
 
 from .base import SONADOR_OHIF_CLIENTID, SONADOR_OHIF_SITE, SONADOR_OHIF_APP, SONADOR_CONFIG_SUPPORTED
 
@@ -34,8 +32,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		context = super(OhifConfigView, self).get_context_data(**kwargs)
 
 		# Retrieve currently active site and any associated custom branding
-		site = get_current_site(self.request)
-		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		ssite = current_site(self.request)
 
 		# Add logo image.
 		#
@@ -49,17 +46,17 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 		# matches the site's (see its match_site_netloc branch), so passing an uploaded media URL
 		# through it would rewrite a media host that differs from the site only by port -- exactly
 		# how object storage is deployed here -- and break a URL that works today.
-		context['site'] = ssite if ssite else site
+		context['site'] = ssite or request_site(self.request)
 		if ssite and ssite.logo:
 			context['logo'] = ssite.logo.url
 		else:
-			context['logo'] = site_fullurl(static('images/sonador-logo.ng.svg'), request=self.request)
+			context['logo'] = site_url(static('images/sonador-logo.ng.svg'), request=self.request)
 
 		# Add narrow (square) mark, shown when the viewer's studylist sidebar is collapsed
 		if ssite and ssite.logo_narrow:
 			context['logo_narrow'] = ssite.logo_narrow.url
 		else:
-			context['logo_narrow'] = site_fullurl(static('images/sonador-mark.svg'), request=self.request)
+			context['logo_narrow'] = site_url(static('images/sonador-mark.svg'), request=self.request)
 
 		# Add welcome message
 		if ssite and ssite.welcome:
@@ -80,7 +77,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 
 		# End session endpoint, used by the viewer's logout fallback. Fully qualified because it is
 		# always Sonador that owns the session, whatever origin the viewer is served from.
-		context['end_session_url'] = site_fullurl(reverse('logout'))
+		context['end_session_url'] = site_url(reverse('logout'), request=self.request)
 
 		# If enabled, add the authentication endpoint
 		if gsetting('AUTH_ENABLED'):
@@ -106,7 +103,8 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 
 			# Authentication configuration
 			context['authserver'] = authserver
-			context['oauth_endpoint'] = site_fullurl(authserver.url_token if authserver_id else reverse('auth:openid-auth-token-default'))
+			context['oauth_endpoint'] = site_url(authserver.url_token if authserver_id else reverse('auth:openid-auth-token-default'),
+				request=self.request)
 			context['oauth_clientid'] = authserver.client_id if authserver else 'sonador'
 			context['oauth_response_type'] = OAUTH_AUTHORIZATION_CODE_RESPONSE_TYPE if ohif_configtype == SONADOR_OHIF_APP \
 				else OAUTH_TOKEN_RESPONSE_TYPE
@@ -122,7 +120,7 @@ class OhifConfigView(OpenIDAuthServerMixin, TemplateView):
 			context['router_base'] = '/'
 
 		# Sonador root URL
-		context['SONADOR_URL'] = site_fullurl(request=self.request)
+		context['SONADOR_URL'] = site_url(request=self.request)
 
 		# Version of the Sonador web application serving this configuration. Emitted alongside the
 		# branding and connection settings so the viewer can report, in its About table, which
@@ -146,20 +144,19 @@ class OhifDicomViewer(TemplateView):
 		context = super(OhifDicomViewer, self).get_context_data(*args, **kwargs)
 
 		# Retrieve currently active site and any associated custom branding
-		site = get_current_site(self.request)
-		ssite = SonadorSite.objects.filter(pk=site.pk).first()
+		ssite = current_site(self.request)
 		# See OhifConfigView.get_context_data on why the static fallbacks are absolutised.
-		context['site'] = ssite if ssite else site
+		context['site'] = ssite or request_site(self.request)
 		if ssite and ssite.logo:
 			context['logo'] = ssite.logo.url
 		else:
-			context['logo'] = site_fullurl(static('images/sonador-logo.ng.svg'), request=self.request)
+			context['logo'] = site_url(static('images/sonador-logo.ng.svg'), request=self.request)
 
 		# Narrow (square) mark, shown when the viewer's studylist sidebar is collapsed
 		if ssite and ssite.logo_narrow:
 			context['logo_narrow'] = ssite.logo_narrow.url
 		else:
-			context['logo_narrow'] = site_fullurl(static('images/sonador-mark.svg'), request=self.request)
+			context['logo_narrow'] = site_url(static('images/sonador-mark.svg'), request=self.request)
 
 		# Empty state (first-run) messageo
 		if ssite and ssite.welcome:
@@ -197,7 +194,7 @@ class OhifDicomViewer(TemplateView):
 			context['pacs_config'] = reverse('ohif-config')
 
 		# Sonador root URL
-		context['SONADOR_URL'] = site_fullurl(request=self.request)
+		context['SONADOR_URL'] = site_url(request=self.request)
 
 		return context
 

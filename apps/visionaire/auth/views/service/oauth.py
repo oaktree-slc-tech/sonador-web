@@ -15,14 +15,14 @@ from wgtauth.services.views.oauth import DataServiceOpenIDLoginRedirectAbstractV
 	DataServiceOpenIDLoginCallbackAbstractView, DataServiceOpenIDTokenAuthorizationView
 from wgtauth.services.helpers import create_session_token
 
-from ..base import get_default_authserver
+from ..base import get_default_authserver, SiteRedirectUriMixin
 from ...models import DataService, SocialAuthorizationServer, SocialUserAccount
 from ...helpers import SESSION_SALT
 
 logger = logging.getLogger(__name__)
 
 
-class SonadorDataServiceOpenIDViewPropertiesMixin:
+class SonadorDataServiceOpenIDViewPropertiesMixin(SiteRedirectUriMixin):
 	'''	Mixin providing methods for interacting with data service associated auth servers.
 	'''
 	authserver_model = SocialAuthorizationServer
